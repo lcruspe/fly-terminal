@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     iptables \
     wget \
+    openssh-client \
     && wget -qO- https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 > /usr/local/bin/ttyd \
     && chmod +x /usr/local/bin/ttyd \
     && curl -fsSL https://tailscale.com/install.sh | sh \
