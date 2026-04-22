@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Terminal</title>
+  <style>
+    :root {
+      --bg: #e9dfca;
+      --panel: rgba(255, 250, 239, 0.86);
+      --ink: #27221d;
+      --muted: #766c60;
+      --accent: #c65f2f;
+      --border: rgba(67, 54, 41, 0.16);
+      --shadow: 0 24px 80px rgba(63, 45, 25, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 12% 12%, rgba(198, 95, 47, 0.18), transparent 34%),
+        radial-gradient(circle at 86% 8%, rgba(63, 111, 159, 0.14), transparent 28%),
+        linear-gradient(135deg, #f8f0dd 0%, #e3d4b9 100%);
+      color: var(--ink);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      height: 100%;
+      padding: 14px;
+    }
+
+    .toolbar {
+      align-items: center;
+      backdrop-filter: blur(20px);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 10px 12px 10px 16px;
+    }
+
+    .brand {
+      min-width: 190px;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 15px;
+      letter-spacing: 0.02em;
+    }
+
+    .brand span {
+      color: var(--muted);
+      display: block;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .controls {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    button,
+    a.button {
+      appearance: none;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--ink);
+      cursor: pointer;
+      font: 700 13px/1 "Avenir Next", "Segoe UI", sans-serif;
+      padding: 10px 13px;
+      text-decoration: none;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    button:hover,
+    a.button:hover {
+      background: rgba(255, 255, 255, 0.78);
+      transform: translateY(-1px);
+    }
+
+    button.active {
+      background: var(--accent);
+      border-color: transparent;
+      color: #fff8eb;
+    }
+
+    .terminal {
+      background: #181511;
+      border: 1px solid rgba(39, 34, 29, 0.28);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    iframe {
+      border: 0;
+      height: 100%;
+      width: 100%;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 760px) {
+      body {
+        overflow: auto;
+      }
+
+      .shell {
+        min-height: 100%;
+      }
+
+      .toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+        border-radius: 18px;
+      }
+
+      .controls {
+        justify-content: flex-start;
+      }
+
+      .terminal {
+        min-height: 70vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="toolbar" aria-label="Terminal settings">
+      <div class="brand">
+        <strong>Fly Terminal</strong>
+        <span id="status">Тема сохраняется в этом браузере</span>
+      </div>
+      <div class="controls">
+        <button type="button" data-theme="paper">Paper</button>
+        <button type="button" data-theme="graphite">Graphite</button>
+        <button type="button" data-theme="amber">Amber</button>
+        <button type="button" id="smaller">A-</button>
+        <button type="button" id="larger">A+</button>
+        <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">В отдельном окне</a>
+      </div>
+    </section>
+
+    <section class="terminal" aria-label="Web terminal">
+      <iframe id="terminalFrame" title="Web terminal"></iframe>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "fly-terminal-preferences-v1";
+    const fontFamily = "JetBrains Mono, Menlo, Monaco, monospace";
+
+    const themes = {
+      paper: {
+        label: "Paper",
+        colors: {
+          background: "#f7f3e8",
+          foreground: "#28231f",
+          cursor: "#c65f2f",
+          selectionBackground: "#e7d6b3",
+          black: "#28231f",
+          red: "#b84d43",
+          green: "#587a45",
+          yellow: "#a9762c",
+          blue: "#3f6f9f",
+          magenta: "#8a5c8f",
+          cyan: "#3f8585",
+          white: "#f4ead8",
+          brightBlack: "#6f665c",
+          brightRed: "#d85f4f",
+          brightGreen: "#6f934f",
+          brightYellow: "#c89136",
+          brightBlue: "#5688bf",
+          brightMagenta: "#a775aa",
+          brightCyan: "#56a0a0",
+          brightWhite: "#fff8eb"
+        }
+      },
+      graphite: {
+        label: "Graphite",
+        colors: {
+          background: "#15171a",
+          foreground: "#e6e0d4",
+          cursor: "#f2b366",
+          selectionBackground: "#343a40",
+          black: "#15171a",
+          red: "#e06c75",
+          green: "#98c379",
+          yellow: "#e5c07b",
+          blue: "#61afef",
+          magenta: "#c678dd",
+          cyan: "#56b6c2",
+          white: "#d7d1c7",
+          brightBlack: "#6b7280",
+          brightRed: "#ff7b86",
+          brightGreen: "#b5e890",
+          brightYellow: "#ffd28a",
+          brightBlue: "#7cc7ff",
+          brightMagenta: "#de8cff",
+          brightCyan: "#71d7e3",
+          brightWhite: "#fff7e8"
+        }
+      },
+      amber: {
+        label: "Amber",
+        colors: {
+          background: "#22170c",
+          foreground: "#f7d79a",
+          cursor: "#ffb547",
+          selectionBackground: "#59401d",
+          black: "#22170c",
+          red: "#d96c52",
+          green: "#9ba66f",
+          yellow: "#d7a34a",
+          blue: "#8da1b9",
+          magenta: "#c08aa6",
+          cyan: "#80aaa0",
+          white: "#efd4a3",
+          brightBlack: "#7d6749",
+          brightRed: "#ef8567",
+          brightGreen: "#bdc989",
+          brightYellow: "#ffc76b",
+          brightBlue: "#a9c0d8",
+          brightMagenta: "#dea3c1",
+          brightCyan: "#9bcac0",
+          brightWhite: "#fff0c9"
+        }
+      }
+    };
+
+    const frame = document.getElementById("terminalFrame");
+    const directLink = document.getElementById("directLink");
+    const status = document.getElementById("status");
+    const buttons = Array.from(document.querySelectorAll("[data-theme]"));
+
+    const readPreferences = () => {
+      try {
+        return { theme: "paper", fontSize: 15, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+      } catch {
+        return { theme: "paper", fontSize: 15 };
+      }
+    };
+
+    let preferences = readPreferences();
+    const preset = new URLSearchParams(window.location.search).get("preset");
+    if (preset && themes[preset]) {
+      preferences.theme = preset;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
+    const buildTerminalUrl = () => {
+      const theme = themes[preferences.theme] || themes.paper;
+      const params = new URLSearchParams();
+      params.set("theme", JSON.stringify(theme.colors));
+      params.set("fontSize", String(preferences.fontSize));
+      params.set("fontFamily", fontFamily);
+      params.set("cursorBlink", "true");
+      params.set("disableLeaveAlert", "true");
+      return `/terminal/?${params.toString()}`;
+    };
+
+    const render = () => {
+      const url = buildTerminalUrl();
+      frame.src = url;
+      directLink.href = url;
+      buttons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.theme === preferences.theme);
+      });
+      status.textContent = `${themes[preferences.theme].label}, ${preferences.fontSize}px. Сохранено для следующей сессии.`;
+    };
+
+    const saveAndRender = () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      render();
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        preferences.theme = button.dataset.theme;
+        saveAndRender();
+      });
+    });
+
+    document.getElementById("smaller").addEventListener("click", () => {
+      preferences.fontSize = Math.max(11, preferences.fontSize - 1);
+      saveAndRender();
+    });
+
+    document.getElementById("larger").addEventListener("click", () => {
+      preferences.fontSize = Math.min(24, preferences.fontSize + 1);
+      saveAndRender();
+    });
+
+    render();
+  </script>
+</body>
+</html>
