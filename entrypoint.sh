@@ -27,6 +27,7 @@ DEFAULT_TERMINAL_THEME='{"background":"#f7f3e8","foreground":"#28231f","cursor":
 : "${TERMINAL_THEME:=$DEFAULT_TERMINAL_THEME}"
 : "${TERMINAL_FONT_SIZE:=15}"
 : "${TERMINAL_FONT_FAMILY:=JetBrains Mono, Menlo, Monaco, monospace}"
+: "${TERMINAL_SCROLLBACK:=10000}"
 : "${TERMINAL_COMMAND:=tmux -u new-session -A -s fly-terminal}"
 
 set -- \
@@ -36,6 +37,7 @@ set -- \
     -t "theme=${TERMINAL_THEME}" \
     -t "fontSize=${TERMINAL_FONT_SIZE}" \
     -t "fontFamily=${TERMINAL_FONT_FAMILY}" \
+    -t "scrollback=${TERMINAL_SCROLLBACK}" \
     -t "cursorBlink=true" \
     -t "disableLeaveAlert=true" \
     -b "$TERMINAL_BASE_PATH"
