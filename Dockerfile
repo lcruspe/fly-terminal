@@ -24,6 +24,10 @@ RUN chmod +x /entrypoint.sh
 
 # Railway использует переменную PORT
 ENV PORT=7681
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV LC_CTYPE=C.UTF-8
+ENV TERM=xterm-256color
 EXPOSE $PORT
 
 ENTRYPOINT ["/entrypoint.sh"]
