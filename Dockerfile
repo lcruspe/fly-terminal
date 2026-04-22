@@ -20,8 +20,10 @@ RUN apt-get update && apt-get install -y \
 COPY entrypoint.sh /entrypoint.sh
 COPY ssh_config /etc/ssh/ssh_config.d/tailscale.conf
 COPY tmux.conf /etc/tmux.conf
+COPY terminal-session.sh /usr/local/bin/terminal-session.sh
 COPY index.html /usr/share/nginx/html/index.html
 RUN chmod +x /entrypoint.sh
+RUN chmod +x /usr/local/bin/terminal-session.sh
 
 # Railway использует переменную PORT
 ENV PORT=7681
