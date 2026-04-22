@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
 # Копируем скрипт запуска, SSH конфиг и веб-оболочку
 COPY entrypoint.sh /entrypoint.sh
 COPY ssh_config /etc/ssh/ssh_config.d/tailscale.conf
+COPY tmux.conf /etc/tmux.conf
 COPY index.html /usr/share/nginx/html/index.html
 RUN chmod +x /entrypoint.sh
 
