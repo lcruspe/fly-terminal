@@ -28,11 +28,11 @@ DEFAULT_TERMINAL_THEME='{"background":"#f7f3e8","foreground":"#28231f","cursor":
 : "${TERMINAL_FONT_SIZE:=15}"
 : "${TERMINAL_FONT_FAMILY:=JetBrains Mono, Menlo, Monaco, monospace}"
 : "${TERMINAL_SCROLLBACK:=10000}"
-: "${TERMINAL_COMMAND:=tmux -u new-session -A -s fly-terminal}"
 
 set -- \
     -i 127.0.0.1 \
     -p "$TTYD_PORT" \
+    -a \
     -W \
     -t "theme=${TERMINAL_THEME}" \
     -t "fontSize=${TERMINAL_FONT_SIZE}" \
@@ -47,7 +47,7 @@ if [ -n "$TERMINAL_USER" ] && [ -n "$TERMINAL_PASSWORD" ]; then
     set -- "$@" -c "${TERMINAL_USER}:${TERMINAL_PASSWORD}"
 fi
 
-ttyd "$@" sh -lc "$TERMINAL_COMMAND" &
+ttyd "$@" /usr/local/bin/terminal-session.sh &
 TTYD_PID=$!
 
 cat >/tmp/nginx.conf <<EOF
