@@ -14,7 +14,7 @@ Open the `Настройки` menu in the toolbar and use:
 
 - color schemes: `Paper`, `Graphite`, `Amber`, `Midnight`, `Forest`, `Ocean`, `Rose`, `Nord`
 - font sizes from `8px` to `14px`
-- font families such as `JetBrains Mono`, `Fira Code`, `IBM Plex Mono`, `Source Code Pro`, `Cascadia Mono`
+- font families such as `Menlo`, `Monaco`, `Courier New`, `Andale Mono`, `Consolas`, `SF Mono`
 
 The choice is saved in browser `localStorage`, so the same browser opens the next session with the last selected theme, font size, and font family.
 
@@ -42,7 +42,7 @@ Set these in Railway service `Variables` only if you want to change the fallback
 
 ```text
 TERMINAL_FONT_SIZE=12
-TERMINAL_FONT_FAMILY=JetBrains Mono, Menlo, Monaco, monospace
+TERMINAL_FONT_FAMILY=Menlo, monospace
 TERMINAL_THEME={"background":"#f7f3e8","foreground":"#28231f","cursor":"#c65f2f","selectionBackground":"#e7d6b3"}
 ```
 
