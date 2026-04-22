@@ -56,3 +56,7 @@ tmux new-session -A -s fly-terminal
 ```
 
 This keeps the terminal state attached to the same `tmux` session instead of creating a fresh empty shell on every theme switch.
+
+## Mouse wheel
+
+The container includes `/etc/tmux.conf` with mouse mode enabled. This makes mouse wheel events scroll the terminal/tmux history instead of being translated into shell `Up` / `Down` key presses.
