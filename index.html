@@ -177,6 +177,7 @@
 
   <script>
     const STORAGE_KEY = "fly-terminal-preferences-v1";
+    const SESSION_KEY = "fly-terminal-session-id-v1";
     const fontFamily = "JetBrains Mono, Menlo, Monaco, monospace";
 
     const themes = {
@@ -270,6 +271,17 @@
       }
     };
 
+    const readSessionId = () => {
+      const existing = sessionStorage.getItem(SESSION_KEY);
+      if (existing) {
+        return existing;
+      }
+
+      const created = (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-");
+      sessionStorage.setItem(SESSION_KEY, created);
+      return created;
+    };
+
     let preferences = readPreferences();
     const preset = new URLSearchParams(window.location.search).get("preset");
     if (preset && themes[preset]) {
@@ -281,6 +293,7 @@
     const buildTerminalUrl = () => {
       const theme = themes[preferences.theme] || themes.paper;
       const params = new URLSearchParams();
+      params.set("arg", readSessionId());
       params.set("theme", JSON.stringify(theme.colors));
       params.set("fontSize", String(preferences.fontSize));
       params.set("fontFamily", fontFamily);
