@@ -1,10 +1,45 @@
 # Terminal theming
 
-The web terminal is powered by `ttyd`, so theme values are passed to xterm.js through ttyd client options.
+The public Railway port now serves a small web shell with a theme switcher. The terminal itself is proxied under `/terminal/`.
 
-## Railway variables
+## Fast switching
 
-Set these in Railway service `Variables`:
+Open the app root:
+
+```text
+https://kruspe.up.railway.app/
+```
+
+Use the toolbar buttons:
+
+- `Paper`
+- `Graphite`
+- `Amber`
+- `A-` / `A+`
+
+The choice is saved in browser `localStorage`, so the same browser opens the next session with the last selected theme and font size.
+
+## Direct terminal links
+
+The switcher builds a direct ttyd URL with query parameters. ttyd gives URL query parameters higher priority than server-side `-t` options, so links can override the default theme:
+
+```text
+https://kruspe.up.railway.app/terminal/?fontSize=15&theme={"background":"#15171a","foreground":"#e6e0d4"}
+```
+
+For convenience, the app root accepts preset links:
+
+```text
+https://kruspe.up.railway.app/?preset=paper
+https://kruspe.up.railway.app/?preset=graphite
+https://kruspe.up.railway.app/?preset=amber
+```
+
+Opening one of these links stores that preset for the next browser session.
+
+## Defaults
+
+Set these in Railway service `Variables` only if you want to change the fallback defaults used before a browser preference exists:
 
 ```text
 TERMINAL_FONT_SIZE=15
@@ -12,16 +47,12 @@ TERMINAL_FONT_FAMILY=JetBrains Mono, Menlo, Monaco, monospace
 TERMINAL_THEME={"background":"#f7f3e8","foreground":"#28231f","cursor":"#c65f2f","selectionBackground":"#e7d6b3"}
 ```
 
-If `TERMINAL_THEME` is not set, the container uses the built-in light theme from `entrypoint.sh`.
+## Session persistence
 
-## Dark theme example
+Switching a theme reloads the ttyd iframe. The container starts the shell through:
 
 ```text
-TERMINAL_THEME={"background":"#1f2430","foreground":"#d8dee9","cursor":"#88c0d0","selectionBackground":"#3b4252"}
+tmux new-session -A -s fly-terminal
 ```
 
-## Notes
-
-- Railway must redeploy the service after the commit or variable changes.
-- Keep the JSON on one line when adding it to Railway Variables.
-- The app still listens on Railway's `$PORT`; the theme change does not alter networking.
+This keeps the terminal state attached to the same `tmux` session instead of creating a fresh empty shell on every theme switch.
