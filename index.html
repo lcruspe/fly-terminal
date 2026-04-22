@@ -53,6 +53,7 @@
       display: flex;
       gap: 12px;
       justify-content: space-between;
+      overflow: visible;
       padding: 10px 12px 10px 16px;
     }
 
@@ -81,22 +82,130 @@
       justify-content: flex-end;
     }
 
+    .settings {
+      position: relative;
+    }
+
+    .settings summary {
+      list-style: none;
+    }
+
+    .settings summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .settings summary::after {
+      content: "▾";
+      margin-left: 8px;
+      font-size: 11px;
+    }
+
+    .settings[open] summary::after {
+      content: "▴";
+    }
+
+    .settings-panel {
+      background: rgba(255, 250, 239, 0.98);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 18px 44px rgba(63, 45, 25, 0.2);
+      display: grid;
+      gap: 14px;
+      margin-top: 10px;
+      padding: 14px;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 2px);
+      width: min(420px, calc(100vw - 28px));
+      z-index: 20;
+    }
+
+    .settings-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .settings-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .theme-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .theme-grid button {
+      justify-content: center;
+      width: 100%;
+    }
+
+    .settings-row {
+      align-items: center;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 96px minmax(0, 1fr);
+    }
+
+    .settings-row label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    select {
+      appearance: none;
+      background:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%),
+        rgba(255, 255, 255, 0.6);
+      background-position:
+        calc(100% - 16px) calc(50% + 1px),
+        calc(100% - 10px) calc(50% + 1px),
+        center;
+      background-repeat: no-repeat;
+      background-size: 6px 6px, 6px 6px, 100% 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--ink);
+      font: 600 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      padding: 11px 36px 11px 12px;
+      width: 100%;
+    }
+
+    select:focus,
+    button:focus-visible,
+    a.button:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid rgba(198, 95, 47, 0.45);
+      outline-offset: 2px;
+    }
+
     button,
-    a.button {
+    a.button,
+    summary.button {
       appearance: none;
       background: rgba(255, 255, 255, 0.5);
       border: 1px solid var(--border);
       border-radius: 999px;
       color: var(--ink);
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
       font: 700 13px/1 "Avenir Next", "Segoe UI", sans-serif;
       padding: 10px 13px;
       text-decoration: none;
+      white-space: nowrap;
       transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
     }
 
     button:hover,
-    a.button:hover {
+    a.button:hover,
+    summary.button:hover {
       background: rgba(255, 255, 255, 0.78);
       transform: translateY(-1px);
     }
@@ -161,12 +270,35 @@
         <span id="status">Тема сохраняется в этом браузере</span>
       </div>
       <div class="controls">
-        <button type="button" data-theme="paper">Paper</button>
-        <button type="button" data-theme="graphite">Graphite</button>
-        <button type="button" data-theme="amber">Amber</button>
-        <button type="button" id="smaller">A-</button>
-        <button type="button" id="larger">A+</button>
         <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">В отдельном окне</a>
+        <details class="settings">
+          <summary class="button">Настройки</summary>
+          <div class="settings-panel">
+            <div class="settings-group">
+              <span class="settings-label">Цветовая схема</span>
+              <div class="theme-grid">
+                <button type="button" data-theme="paper">Paper</button>
+                <button type="button" data-theme="graphite">Graphite</button>
+                <button type="button" data-theme="amber">Amber</button>
+                <button type="button" data-theme="midnight">Midnight</button>
+                <button type="button" data-theme="forest">Forest</button>
+                <button type="button" data-theme="ocean">Ocean</button>
+                <button type="button" data-theme="rose">Rose</button>
+                <button type="button" data-theme="nord">Nord</button>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <label for="fontSize">Размер текста</label>
+              <select id="fontSize"></select>
+            </div>
+
+            <div class="settings-row">
+              <label for="fontFamily">Шрифт</label>
+              <select id="fontFamily"></select>
+            </div>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -178,7 +310,15 @@
   <script>
     const STORAGE_KEY = "fly-terminal-preferences-v1";
     const SESSION_KEY = "fly-terminal-session-id-v1";
-    const fontFamily = "JetBrains Mono, Menlo, Monaco, monospace";
+    const fontFamilies = [
+      { label: "JetBrains Mono", value: "JetBrains Mono, Menlo, Monaco, monospace" },
+      { label: "Fira Code", value: "Fira Code, Menlo, Monaco, monospace" },
+      { label: "IBM Plex Mono", value: "IBM Plex Mono, Menlo, Monaco, monospace" },
+      { label: "Source Code Pro", value: "Source Code Pro, Menlo, Monaco, monospace" },
+      { label: "Cascadia Mono", value: "Cascadia Mono, Menlo, Monaco, monospace" },
+      { label: "Monospace", value: "monospace" }
+    ];
+    const fontSizes = [8, 9, 10, 11, 12, 13, 14];
 
     const themes = {
       paper: {
@@ -255,6 +395,131 @@
           brightCyan: "#9bcac0",
           brightWhite: "#fff0c9"
         }
+      },
+      midnight: {
+        label: "Midnight",
+        colors: {
+          background: "#0f1320",
+          foreground: "#d7e3ff",
+          cursor: "#8cb4ff",
+          selectionBackground: "#26304a",
+          black: "#0f1320",
+          red: "#ff6b6b",
+          green: "#7ddc9a",
+          yellow: "#ffd166",
+          blue: "#78a9ff",
+          magenta: "#c792ea",
+          cyan: "#65d6e8",
+          white: "#d7e3ff",
+          brightBlack: "#67728f",
+          brightRed: "#ff8080",
+          brightGreen: "#95eaaf",
+          brightYellow: "#ffe28a",
+          brightBlue: "#9bc0ff",
+          brightMagenta: "#dcafff",
+          brightCyan: "#8fe7f1",
+          brightWhite: "#f4f8ff"
+        }
+      },
+      forest: {
+        label: "Forest",
+        colors: {
+          background: "#112117",
+          foreground: "#ddebd4",
+          cursor: "#92d17d",
+          selectionBackground: "#23402a",
+          black: "#112117",
+          red: "#f08d7e",
+          green: "#92d17d",
+          yellow: "#e3c15d",
+          blue: "#7aa8df",
+          magenta: "#b685c9",
+          cyan: "#70c5b7",
+          white: "#ddebd4",
+          brightBlack: "#6e8470",
+          brightRed: "#ff9d8f",
+          brightGreen: "#ade094",
+          brightYellow: "#f0d478",
+          brightBlue: "#9ec1eb",
+          brightMagenta: "#cfaae0",
+          brightCyan: "#92d9ce",
+          brightWhite: "#f3f8ee"
+        }
+      },
+      ocean: {
+        label: "Ocean",
+        colors: {
+          background: "#0d1b25",
+          foreground: "#d8ebf4",
+          cursor: "#6fc2ff",
+          selectionBackground: "#19384a",
+          black: "#0d1b25",
+          red: "#ff7c82",
+          green: "#7bd6a3",
+          yellow: "#ffd27a",
+          blue: "#74b8ff",
+          magenta: "#b98cff",
+          cyan: "#61d3d9",
+          white: "#d8ebf4",
+          brightBlack: "#688296",
+          brightRed: "#ff9ca0",
+          brightGreen: "#9be7bf",
+          brightYellow: "#ffe09d",
+          brightBlue: "#9bc8ff",
+          brightMagenta: "#cfb1ff",
+          brightCyan: "#89e9eb",
+          brightWhite: "#f5fbff"
+        }
+      },
+      rose: {
+        label: "Rose",
+        colors: {
+          background: "#23161a",
+          foreground: "#f3dbe0",
+          cursor: "#f29ab2",
+          selectionBackground: "#452731",
+          black: "#23161a",
+          red: "#f18c8c",
+          green: "#a4c18a",
+          yellow: "#e1bc6f",
+          blue: "#8eb4e8",
+          magenta: "#d29bd1",
+          cyan: "#8dd1cf",
+          white: "#f3dbe0",
+          brightBlack: "#84696f",
+          brightRed: "#ffabab",
+          brightGreen: "#bfd8a8",
+          brightYellow: "#f0d08b",
+          brightBlue: "#b0cdf2",
+          brightMagenta: "#e4bee3",
+          brightCyan: "#aae4e1",
+          brightWhite: "#fff5f7"
+        }
+      },
+      nord: {
+        label: "Nord",
+        colors: {
+          background: "#2e3440",
+          foreground: "#eceff4",
+          cursor: "#88c0d0",
+          selectionBackground: "#4c566a",
+          black: "#2e3440",
+          red: "#bf616a",
+          green: "#a3be8c",
+          yellow: "#ebcb8b",
+          blue: "#81a1c1",
+          magenta: "#b48ead",
+          cyan: "#88c0d0",
+          white: "#eceff4",
+          brightBlack: "#4c566a",
+          brightRed: "#d08770",
+          brightGreen: "#8fbcbb",
+          brightYellow: "#ebcb8b",
+          brightBlue: "#5e81ac",
+          brightMagenta: "#b48ead",
+          brightCyan: "#8fbcbb",
+          brightWhite: "#f8fbff"
+        }
       }
     };
 
@@ -262,12 +527,22 @@
     const directLink = document.getElementById("directLink");
     const status = document.getElementById("status");
     const buttons = Array.from(document.querySelectorAll("[data-theme]"));
+    const fontSizeSelect = document.getElementById("fontSize");
+    const fontFamilySelect = document.getElementById("fontFamily");
+    const defaultFontFamily = fontFamilies[0].value;
+
+    const normalizePreferences = (raw) => {
+      const theme = themes[raw.theme] ? raw.theme : "paper";
+      const fontSize = fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12;
+      const fontFamily = fontFamilies.some((family) => family.value === raw.fontFamily) ? raw.fontFamily : defaultFontFamily;
+      return { theme, fontSize, fontFamily };
+    };
 
     const readPreferences = () => {
       try {
-        return { theme: "paper", fontSize: 15, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+        return normalizePreferences(JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
       } catch {
-        return { theme: "paper", fontSize: 15 };
+        return { theme: "paper", fontSize: 12, fontFamily: defaultFontFamily };
       }
     };
 
@@ -296,11 +571,25 @@
       params.set("arg", readSessionId());
       params.set("theme", JSON.stringify(theme.colors));
       params.set("fontSize", String(preferences.fontSize));
-      params.set("fontFamily", fontFamily);
+      params.set("fontFamily", preferences.fontFamily);
       params.set("cursorBlink", "true");
       params.set("disableLeaveAlert", "true");
       return `/terminal/?${params.toString()}`;
     };
+
+    fontSizes.forEach((size) => {
+      const option = document.createElement("option");
+      option.value = String(size);
+      option.textContent = `${size}px`;
+      fontSizeSelect.appendChild(option);
+    });
+
+    fontFamilies.forEach((family) => {
+      const option = document.createElement("option");
+      option.value = family.value;
+      option.textContent = family.label;
+      fontFamilySelect.appendChild(option);
+    });
 
     const render = () => {
       const url = buildTerminalUrl();
@@ -309,7 +598,10 @@
       buttons.forEach((button) => {
         button.classList.toggle("active", button.dataset.theme === preferences.theme);
       });
-      status.textContent = `${themes[preferences.theme].label}, ${preferences.fontSize}px. Сохранено для следующей сессии.`;
+      fontSizeSelect.value = String(preferences.fontSize);
+      fontFamilySelect.value = preferences.fontFamily;
+      const fontFamilyLabel = fontFamilies.find((family) => family.value === preferences.fontFamily)?.label || "Custom";
+      status.textContent = `${themes[preferences.theme].label}, ${preferences.fontSize}px, ${fontFamilyLabel}. Сохранено для следующей сессии.`;
     };
 
     const saveAndRender = () => {
@@ -324,13 +616,16 @@
       });
     });
 
-    document.getElementById("smaller").addEventListener("click", () => {
-      preferences.fontSize = Math.max(11, preferences.fontSize - 1);
-      saveAndRender();
+    fontSizeSelect.addEventListener("change", () => {
+      const nextSize = Number(fontSizeSelect.value);
+      if (!Number.isNaN(nextSize)) {
+        preferences.fontSize = nextSize;
+        saveAndRender();
+      }
     });
 
-    document.getElementById("larger").addEventListener("click", () => {
-      preferences.fontSize = Math.min(24, preferences.fontSize + 1);
+    fontFamilySelect.addEventListener("change", () => {
+      preferences.fontFamily = fontFamilySelect.value;
       saveAndRender();
     });
 
