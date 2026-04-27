@@ -1,18 +1,22 @@
 #!/bin/sh
 set -e
 
-echo "Starting Tailscale daemon..."
-# Запуск демона Tailscale в userspace режиме (без tun устройства)
-tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
+if [ -n "${TS_AUTHKEY}" ]; then
+    echo "Starting Tailscale daemon..."
+    # Запуск демона Tailscale в userspace режиме (без tun устройства)
+    tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
 
-# Ждем запуска демона
-sleep 2
+    # Ждем запуска демона
+    sleep 2
 
-echo "Connecting to Tailscale network..."
-# Авторизация в Tailnet с эфемерным ключом
-tailscale up --authkey=${TS_AUTHKEY} --hostname=fly-terminal --accept-routes
+    echo "Connecting to Tailscale network..."
+    # Авторизация в Tailnet с эфемерным ключом
+    tailscale up --authkey="${TS_AUTHKEY}" --hostname=fly-terminal --accept-routes
 
-echo "Tailscale connected. Starting web terminal..."
+    echo "Tailscale connected. Starting web terminal..."
+else
+    echo "TS_AUTHKEY is not set. Starting web terminal without Tailscale..."
+fi
 # Railway использует переменную PORT
 PORT=${PORT:-7681}
 TTYD_PORT=${TTYD_PORT:-7682}
