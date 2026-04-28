@@ -273,6 +273,7 @@
         <span id="status">Тема сохраняется в этом браузере</span>
       </div>
       <div class="controls">
+        <button type="button" id="copySelection">Скопировать</button>
         <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">В отдельном окне</a>
         <details class="settings">
           <summary class="button">Настройки</summary>
@@ -306,7 +307,7 @@
     </section>
 
     <section class="terminal" aria-label="Web terminal">
-      <iframe id="terminalFrame" title="Web terminal"></iframe>
+      <iframe id="terminalFrame" title="Web terminal" allow="clipboard-read; clipboard-write"></iframe>
     </section>
   </main>
 
@@ -528,12 +529,33 @@
     };
 
     const frame = document.getElementById("terminalFrame");
+    const copySelectionButton = document.getElementById("copySelection");
     const directLink = document.getElementById("directLink");
     const status = document.getElementById("status");
     const buttons = Array.from(document.querySelectorAll("[data-theme]"));
     const fontSizeSelect = document.getElementById("fontSize");
     const fontFamilySelect = document.getElementById("fontFamily");
     const defaultFontFamily = fontFamilies[0].value;
+    let statusResetTimer = null;
+
+    const statusText = () => {
+      const fontFamilyLabel = fontFamilies.find((family) => family.value === preferences.fontFamily)?.label || "Custom";
+      return `${themes[preferences.theme].label}, ${preferences.fontSize}px, ${fontFamilyLabel}. Сохранено для следующей сессии.`;
+    };
+
+    const setStatusText = (message, duration = 0) => {
+      status.textContent = message;
+      if (statusResetTimer) {
+        clearTimeout(statusResetTimer);
+        statusResetTimer = null;
+      }
+      if (duration > 0) {
+        statusResetTimer = window.setTimeout(() => {
+          status.textContent = statusText();
+          statusResetTimer = null;
+        }, duration);
+      }
+    };
 
     const normalizePreferences = (raw) => {
       const theme = themes[raw.theme] ? raw.theme : "paper";
@@ -604,8 +626,7 @@
       });
       fontSizeSelect.value = String(preferences.fontSize);
       fontFamilySelect.value = preferences.fontFamily;
-      const fontFamilyLabel = fontFamilies.find((family) => family.value === preferences.fontFamily)?.label || "Custom";
-      status.textContent = `${themes[preferences.theme].label}, ${preferences.fontSize}px, ${fontFamilyLabel}. Сохранено для следующей сессии.`;
+      setStatusText(statusText());
     };
 
     const saveAndRender = () => {
@@ -631,6 +652,45 @@
     fontFamilySelect.addEventListener("change", () => {
       preferences.fontFamily = fontFamilySelect.value;
       saveAndRender();
+    });
+
+    const getFrameSelection = () => {
+      try {
+        return frame.contentWindow?.getSelection?.()?.toString() || "";
+      } catch {
+        return "";
+      }
+    };
+
+    const copySelection = async () => {
+      const selection = getFrameSelection().trim();
+      if (!selection) {
+        setStatusText("Сначала выдели текст в терминале.", 2200);
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(selection);
+        setStatusText("Выделение скопировано.", 2200);
+      } catch {
+        try {
+          frame.contentWindow?.document?.execCommand?.("copy");
+          setStatusText("Выделение скопировано.", 2200);
+        } catch {
+          setStatusText("Браузер не дал доступ к буферу обмена.", 2600);
+        }
+      }
+    };
+
+    copySelectionButton.addEventListener("click", () => {
+      copySelection();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+      }
     });
 
     render();

@@ -15,6 +15,7 @@ if [ -n "${TS_AUTHKEY}" ]; then
 
     echo "Tailscale connected. Starting web terminal..."
 else
+    rm -f /etc/ssh/ssh_config.d/tailscale.conf
     echo "TS_AUTHKEY is not set. Starting web terminal without Tailscale..."
 fi
 # Railway использует переменную PORT

@@ -21,6 +21,7 @@ COPY entrypoint.sh /entrypoint.sh
 COPY ssh_config /etc/ssh/ssh_config.d/tailscale.conf
 COPY tmux.conf /etc/tmux.conf
 COPY terminal-session.sh /usr/local/bin/terminal-session.sh
+COPY terminal-bashrc.sh /etc/fly-terminal.bashrc
 COPY index.html /usr/share/nginx/html/index.html
 RUN chmod +x /entrypoint.sh
 RUN chmod +x /usr/local/bin/terminal-session.sh
