@@ -358,6 +358,9 @@
     const FRAME_STYLE_ID = "fly-terminal-frame-style";
     const FRAME_BINDING_KEY = "__flyTerminalConfigured";
     const FRAME_WHEEL_HANDLER_KEY = "__flyTerminalWheelHandlerConfigured";
+    const FRAME_DOC_WHEEL_HANDLER_KEY = "__flyTerminalDocWheelHandlerConfigured";
+    const FRAME_VIEWPORT_WHEEL_HANDLER_KEY = "__flyTerminalViewportWheelHandlerConfigured";
+    const FRAME_IFRAME_WHEEL_HANDLER_KEY = "__flyTerminalIframeWheelHandlerConfigured";
     const fontFamilies = [
       { label: "Menlo", value: "Menlo, monospace" },
       { label: "Monaco", value: "Monaco, monospace" },
@@ -857,13 +860,17 @@
       }
     };
 
+    const createSessionId = () => {
+      return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-");
+    };
+
     const readSessionId = () => {
       const existing = sessionStorage.getItem(SESSION_KEY);
       if (existing) {
         return existing;
       }
 
-      const created = (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-");
+      const created = createSessionId();
       sessionStorage.setItem(SESSION_KEY, created);
       return created;
     };
@@ -876,10 +883,10 @@
       window.history.replaceState(null, "", window.location.pathname);
     }
 
-    const buildTerminalUrl = () => {
+    const buildTerminalUrl = (sessionId = readSessionId()) => {
       const theme = themes[preferences.theme] || themes.paper;
       const params = new URLSearchParams();
-      params.set("arg", readSessionId());
+      params.set("arg", sessionId);
       params.set("theme", JSON.stringify(theme.colors));
       params.set("fontSize", String(preferences.fontSize));
       params.set("fontFamily", preferences.fontFamily);
@@ -926,6 +933,14 @@
       }
     };
 
+    const getEmbeddedTerm = () => {
+      try {
+        return frame.contentWindow?.term || null;
+      } catch {
+        return null;
+      }
+    };
+
     const getEmbeddedRowHeight = (doc) => {
       const sampleRow = doc?.querySelector(".xterm-rows > div");
       if (!sampleRow) {
@@ -947,22 +962,81 @@
       return pixels;
     };
 
-    const handleEmbeddedWheel = (event) => {
+    const scrollEmbeddedTerminal = (event) => {
       const viewport = getEmbeddedViewport();
       if (!viewport) {
-        return;
+        return false;
       }
 
       const pixels = getWheelPixels(event, viewport);
       if (!pixels) {
-        return;
+        return false;
       }
 
       focusEmbeddedTerminal();
-      viewport.scrollTop += pixels;
+      const term = getEmbeddedTerm();
+      const rowHeight = getEmbeddedRowHeight(frame.contentDocument);
+      const lineDelta = Math.round(pixels / Math.max(rowHeight, 1));
+
+      if (term && typeof term.scrollLines === "function" && lineDelta) {
+        term.scrollLines(lineDelta);
+      } else {
+        viewport.scrollTop += pixels;
+      }
+
+      return true;
+    };
+
+    const handleEmbeddedWheel = (event) => {
+      if (!scrollEmbeddedTerminal(event)) {
+        return;
+      }
+
       event.preventDefault();
       event.stopImmediatePropagation();
       event.stopPropagation();
+    };
+
+    const bindEmbeddedDocumentWheelHandler = (doc) => {
+      try {
+        if (!doc || doc[FRAME_DOC_WHEEL_HANDLER_KEY]) {
+          return false;
+        }
+
+        doc[FRAME_DOC_WHEEL_HANDLER_KEY] = true;
+        doc.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const bindEmbeddedViewportWheelHandler = (viewport) => {
+      try {
+        if (!viewport || viewport[FRAME_VIEWPORT_WHEEL_HANDLER_KEY]) {
+          return false;
+        }
+
+        viewport[FRAME_VIEWPORT_WHEEL_HANDLER_KEY] = true;
+        viewport.addEventListener("wheel", handleEmbeddedWheel, { passive: false });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const bindFrameElementWheelHandler = () => {
+      try {
+        if (frame[FRAME_IFRAME_WHEEL_HANDLER_KEY]) {
+          return false;
+        }
+
+        frame[FRAME_IFRAME_WHEEL_HANDLER_KEY] = true;
+        frame.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
+        return true;
+      } catch {
+        return false;
+      }
     };
 
     const bindEmbeddedTermWheelHandler = (win) => {
@@ -978,7 +1052,7 @@
 
         term[FRAME_WHEEL_HANDLER_KEY] = true;
         term.attachCustomWheelEventHandler((event) => {
-          handleEmbeddedWheel(event);
+          scrollEmbeddedTerminal(event);
           return false;
         });
         return true;
@@ -987,13 +1061,17 @@
       }
     };
 
-    const scheduleEmbeddedTermWheelBinding = (win, attempt = 0) => {
-      if (bindEmbeddedTermWheelHandler(win) || attempt >= 40) {
+    const scheduleEmbeddedWheelBinding = (win, attempt = 0) => {
+      const viewport = getEmbeddedViewport();
+      bindEmbeddedViewportWheelHandler(viewport);
+      bindEmbeddedTermWheelHandler(win);
+
+      if ((viewport && getEmbeddedTerm()) || attempt >= 40) {
         return;
       }
 
       win.setTimeout(() => {
-        scheduleEmbeddedTermWheelBinding(win, attempt + 1);
+        scheduleEmbeddedWheelBinding(win, attempt + 1);
       }, 100);
     };
 
@@ -1047,7 +1125,10 @@
           doc.addEventListener("mouseenter", focusEmbeddedTerminal, true);
         }
 
-        scheduleEmbeddedTermWheelBinding(win);
+        bindFrameElementWheelHandler();
+        bindEmbeddedDocumentWheelHandler(doc);
+        bindEmbeddedViewportWheelHandler(getEmbeddedViewport());
+        scheduleEmbeddedWheelBinding(win);
       } catch {
         // ignore iframe sync failures and keep terminal usable
       }
@@ -1085,7 +1166,7 @@
       applyShellTheme();
       const url = buildTerminalUrl();
       frame.src = url;
-      directLink.href = url;
+      directLink.href = buildTerminalUrl(createSessionId());
       buttons.forEach((button) => {
         button.classList.toggle("active", button.dataset.theme === preferences.theme);
       });
@@ -1149,6 +1230,10 @@
 
     copySelectionButton.addEventListener("click", () => {
       copySelection();
+    });
+
+    directLink.addEventListener("click", () => {
+      directLink.href = buildTerminalUrl(createSessionId());
     });
 
     window.addEventListener("keydown", (event) => {
