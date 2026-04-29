@@ -357,6 +357,7 @@
     const SESSION_KEY = "fly-terminal-session-id-v1";
     const FRAME_STYLE_ID = "fly-terminal-frame-style";
     const FRAME_BINDING_KEY = "__flyTerminalConfigured";
+    const FRAME_WHEEL_HANDLER_KEY = "__flyTerminalWheelHandlerConfigured";
     const fontFamilies = [
       { label: "Menlo", value: "Menlo, monospace" },
       { label: "Monaco", value: "Monaco, monospace" },
@@ -964,6 +965,38 @@
       event.stopPropagation();
     };
 
+    const bindEmbeddedTermWheelHandler = (win) => {
+      try {
+        const term = win?.term;
+        if (!term || typeof term.attachCustomWheelEventHandler !== "function") {
+          return false;
+        }
+
+        if (term[FRAME_WHEEL_HANDLER_KEY]) {
+          return true;
+        }
+
+        term[FRAME_WHEEL_HANDLER_KEY] = true;
+        term.attachCustomWheelEventHandler((event) => {
+          handleEmbeddedWheel(event);
+          return false;
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const scheduleEmbeddedTermWheelBinding = (win, attempt = 0) => {
+      if (bindEmbeddedTermWheelHandler(win) || attempt >= 40) {
+        return;
+      }
+
+      win.setTimeout(() => {
+        scheduleEmbeddedTermWheelBinding(win, attempt + 1);
+      }, 100);
+    };
+
     const syncEmbeddedTerminal = () => {
       try {
         const doc = frame.contentDocument;
@@ -1010,17 +1043,11 @@
 
         if (!win[FRAME_BINDING_KEY]) {
           win[FRAME_BINDING_KEY] = true;
-          const viewport = doc.querySelector(".xterm-viewport");
-          const terminalRoot = doc.querySelector(".xterm");
           doc.addEventListener("pointerdown", focusEmbeddedTerminal, { passive: true });
           doc.addEventListener("mouseenter", focusEmbeddedTerminal, true);
-          if (terminalRoot) {
-            terminalRoot.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
-          }
-          if (viewport) {
-            viewport.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
-          }
         }
+
+        scheduleEmbeddedTermWheelBinding(win);
       } catch {
         // ignore iframe sync failures and keep terminal usable
       }
