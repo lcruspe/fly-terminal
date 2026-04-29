@@ -5,8 +5,8 @@ if [ -f "$HOME/.bashrc" ] && [ "$HOME/.bashrc" != "/etc/fly-terminal.bashrc" ]; 
 fi
 
 export HISTCONTROL=ignoredups:erasedups
-export HISTSIZE=100000
-export HISTFILESIZE=200000
+export HISTSIZE="${FLY_TERMINAL_HISTSIZE:-5000}"
+export HISTFILESIZE="${FLY_TERMINAL_HISTFILESIZE:-10000}"
 
 shopt -s histappend
 

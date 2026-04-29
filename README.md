@@ -60,6 +60,11 @@ railway up
 TS_AUTHKEY=tskey-auth-XXXXXXXXXX
 TERMINAL_USER=admin
 TERMINAL_PASSWORD=your-secure-password
+TERMINAL_SCROLLBACK=4000
+FLY_TERMINAL_HISTSIZE=5000
+FLY_TERMINAL_HISTFILESIZE=10000
+FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=120
+FLY_TERMINAL_DIAGNOSTICS=1
 ```
 
 ### 4. Получите URL
@@ -112,6 +117,14 @@ export default function Terminal() {
 - **Metrics**: CPU, RAM, Network
 - **Deployments**: История деплоев
 
+При старте контейнер теперь пишет в логи:
+- лимит памяти cgroup
+- текущее потребление памяти
+- наличие/отсутствие swap в контейнере
+- список активных процессов
+
+Это помогает сразу отличить нехватку RAM от проблем Tailscale/ttyd/nginx.
+
 ## Стоимость
 
 - **$5 кредитов/месяц** бесплатно (хватает на 24/7 работу терминала)
@@ -127,6 +140,18 @@ export default function Terminal() {
 1. Проверьте статус деплоя в Railway Dashboard
 2. Убедитесь, что порт `PORT` правильно пробрасывается
 3. Проверьте логи на ошибки
+
+### Контейнер нестабилен по памяти
+По умолчанию проект теперь ограничивает:
+- `TERMINAL_SCROLLBACK=4000`
+- `tmux history-limit=5000`
+- `FLY_TERMINAL_HISTSIZE=5000`
+- `FLY_TERMINAL_HISTFILESIZE=10000`
+
+Старые unattached `tmux`-сессии также автоматически очищаются по TTL:
+- `FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=120`
+
+В текущей конфигурации swap внутри Railway не настраивается и не считается опорным механизмом стабилизации.
 
 ## Альтернативные регионы
 
