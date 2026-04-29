@@ -179,3 +179,40 @@ docker run -p 7681:7681 \
 ```
 
 Откройте http://localhost:7681
+
+## Direct macOS deployment
+
+If you want to remove Oracle completely and run the web terminal directly on the Mac mini:
+
+1. Install local runtime dependencies:
+   ```bash
+   brew install ttyd caddy tmux
+   ```
+2. Run the macOS installer from this repo:
+   ```bash
+   cd /Users/kruspe/CodexProjects/fly-terminal-live
+   ./macos/install-direct-mac.sh
+   ```
+3. The script will:
+   - create `~/.config/fly-terminal-mac/fly-terminal.env`
+   - register two `launchd` agents
+   - start local `ttyd` on `127.0.0.1:7682`
+   - start local `caddy` on `127.0.0.1:8080`
+   - publish the endpoint through `tailscale funnel`
+
+### macOS paths
+
+- config: `~/.config/fly-terminal-mac/fly-terminal.env`
+- logs: `~/Library/Logs/fly-terminal`
+- launch agents:
+  - `~/Library/LaunchAgents/ai.kruspe.fly-terminal.ttyd.plist`
+  - `~/Library/LaunchAgents/ai.kruspe.fly-terminal.caddy.plist`
+
+### Password rotation on macOS
+
+```bash
+cd /Users/kruspe/CodexProjects/fly-terminal-live
+./macos/set-password.sh 'new-password'
+```
+
+This restarts only the local `ttyd` agent on the Mac mini.

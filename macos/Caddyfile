@@ -1,0 +1,19 @@
+{
+  auto_https off
+  admin off
+}
+
+:{$CADDY_PORT:8080} {
+  root * {$FLY_TERMINAL_REPO_ROOT}
+
+  @terminalRoot path /terminal
+  redir @terminalRoot /terminal/ 302
+
+  @terminal path /terminal/*
+
+  route {
+    reverse_proxy @terminal 127.0.0.1:{$TTYD_PORT:7682}
+    try_files {path} /index.html
+    file_server
+  }
+}

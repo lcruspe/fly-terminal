@@ -1,0 +1,113 @@
+#!/bin/zsh
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONFIG_DIR="${HOME}/.config/fly-terminal-mac"
+LOG_DIR="${HOME}/Library/Logs/fly-terminal"
+LAUNCH_AGENTS_DIR="${HOME}/Library/LaunchAgents"
+ENV_FILE="${CONFIG_DIR}/fly-terminal.env"
+TTYD_LABEL="ai.kruspe.fly-terminal.ttyd"
+CADDY_LABEL="ai.kruspe.fly-terminal.caddy"
+TTYD_PLIST="${LAUNCH_AGENTS_DIR}/${TTYD_LABEL}.plist"
+CADDY_PLIST="${LAUNCH_AGENTS_DIR}/${CADDY_LABEL}.plist"
+UID_VALUE="$(id -u)"
+
+mkdir -p "${CONFIG_DIR}" "${LOG_DIR}" "${LAUNCH_AGENTS_DIR}" "${HOME}/.local/share/fly-terminal/bash_history" "${HOME}/.local/share/caddy"
+
+if [ ! -f "${ENV_FILE}" ]; then
+  cat >"${ENV_FILE}" <<'EOF'
+TERMINAL_USER=admin
+TERMINAL_PASSWORD=dM5pozis
+TTYD_PORT=7682
+CADDY_PORT=8080
+TERMINAL_SCROLLBACK=4000
+TERMINAL_FONT_SIZE=12
+TERMINAL_FONT_FAMILY=Menlo,Monaco,monospace
+FLY_TERMINAL_HISTSIZE=5000
+FLY_TERMINAL_HISTFILESIZE=10000
+FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=120
+FLY_TERMINAL_TMUX_HISTORY_LIMIT=5000
+FLY_TERMINAL_HISTORY_DIR=$HOME/.local/share/fly-terminal/bash_history
+EOF
+  chmod 600 "${ENV_FILE}"
+fi
+
+chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/set-password.sh"
+
+cat >"${TTYD_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${TTYD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${SCRIPT_DIR}/launch-ttyd.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${REPO_ROOT}</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/ttyd.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/ttyd.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>${HOME}</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
+cat >"${CADDY_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${CADDY_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${SCRIPT_DIR}/launch-caddy.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${REPO_ROOT}</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/caddy.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/caddy.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>${HOME}</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
+launchctl bootout "gui/${UID_VALUE}/${TTYD_LABEL}" 2>/dev/null || true
+launchctl bootout "gui/${UID_VALUE}/${CADDY_LABEL}" 2>/dev/null || true
+
+launchctl bootstrap "gui/${UID_VALUE}" "${TTYD_PLIST}"
+launchctl bootstrap "gui/${UID_VALUE}" "${CADDY_PLIST}"
+launchctl kickstart -k "gui/${UID_VALUE}/${TTYD_LABEL}"
+launchctl kickstart -k "gui/${UID_VALUE}/${CADDY_LABEL}"
+
+tailscale funnel --bg --yes 8080
+
+printf '\n== direct terminal ==\n'
+tailscale funnel status
