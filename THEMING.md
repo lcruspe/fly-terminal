@@ -1,6 +1,6 @@
 # Terminal theming
 
-The public Railway port now serves a small web shell with a compact settings menu. The terminal itself is proxied under `/terminal/`.
+The public Railway port serves a small web shell with a compact settings menu. The terminal itself is proxied under `/terminal/`.
 
 ## Fast switching
 
@@ -12,11 +12,13 @@ https://kruspe.up.railway.app/
 
 Open the `Настройки` menu in the toolbar and use:
 
-- color schemes: `Paper`, `Graphite`, `Amber`, `Midnight`, `Forest`, `Ocean`, `Rose`, `Nord`
+- color schemes with a balanced `50/50` split:
+  - light: `Paper`, `Linen`, `Ledger`, `Harbor`, `Sage`
+  - dark: `Graphite`, `Ink`, `Midnight`, `Nord`, `Forest`
 - font sizes from `8px` to `14px`
 - font families such as `Menlo`, `Monaco`, `Courier New`, `Andale Mono`, `Consolas`, `SF Mono`
 
-The choice is saved in browser `localStorage`, so the same browser opens the next session with the last selected theme, font size, and font family.
+The choice is saved in browser `localStorage`, so the same browser opens the next session with the last selected theme, font size, and font family. The selected preset also drives the embedded ttyd/xterm colors.
 
 ## Direct terminal links
 
@@ -31,7 +33,7 @@ For convenience, the app root accepts preset links:
 ```text
 https://kruspe.up.railway.app/?preset=paper
 https://kruspe.up.railway.app/?preset=graphite
-https://kruspe.up.railway.app/?preset=amber
+https://kruspe.up.railway.app/?preset=linen
 ```
 
 Opening one of these links stores that preset for the next browser session.
@@ -58,4 +60,12 @@ This keeps the terminal state attached to the same `tmux` session instead of cre
 
 ## Mouse wheel
 
-The container includes `/etc/tmux.conf` with mouse mode enabled. This makes mouse wheel events scroll the terminal/tmux history instead of being translated into shell `Up` / `Down` key presses.
+The container keeps `/etc/tmux.conf` with mouse mode disabled and lets `ttyd`/xterm own wheel behavior. The shell UI also focuses the embedded terminal on pointer and wheel events, so the mouse wheel scrolls terminal scrollback instead of the browser page.
+
+## Shape and chrome
+
+The outer shell and the embedded ttyd frame now share flatter corporate-style geometry:
+
+- reduced corner radius for toolbar, controls, settings panel, and terminal shell
+- embedded ttyd background is restyled after load to match the selected preset
+- the iframe keeps the inner terminal flush to the container instead of using the default padded ttyd layout

@@ -6,13 +6,25 @@
   <title>Terminal</title>
   <style>
     :root {
-      --bg: #e9dfca;
+      --bg-start: #f8f0dd;
+      --bg-end: #e3d4b9;
+      --glow-a: rgba(198, 95, 47, 0.18);
+      --glow-b: rgba(63, 111, 159, 0.14);
       --panel: rgba(255, 250, 239, 0.86);
+      --panel-solid: rgba(255, 250, 239, 0.98);
+      --control: rgba(255, 255, 255, 0.5);
+      --control-strong: rgba(255, 255, 255, 0.78);
       --ink: #27221d;
       --muted: #766c60;
       --accent: #c65f2f;
       --border: rgba(67, 54, 41, 0.16);
+      --focus: rgba(198, 95, 47, 0.45);
+      --terminal-shell: #181511;
+      --terminal-edge: rgba(39, 34, 29, 0.28);
       --shadow: 0 24px 80px rgba(63, 45, 25, 0.18);
+      --panel-radius: 12px;
+      --control-radius: 10px;
+      --terminal-radius: 10px;
     }
 
     * {
@@ -27,9 +39,9 @@
 
     body {
       background:
-        radial-gradient(circle at 12% 12%, rgba(198, 95, 47, 0.18), transparent 34%),
-        radial-gradient(circle at 86% 8%, rgba(63, 111, 159, 0.14), transparent 28%),
-        linear-gradient(135deg, #f8f0dd 0%, #e3d4b9 100%);
+        radial-gradient(circle at 12% 12%, var(--glow-a), transparent 34%),
+        radial-gradient(circle at 86% 8%, var(--glow-b), transparent 28%),
+        linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%);
       color: var(--ink);
       font-family: "Avenir Next", "Segoe UI", sans-serif;
       overflow: hidden;
@@ -48,7 +60,7 @@
       backdrop-filter: blur(20px);
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 22px;
+      border-radius: var(--panel-radius);
       box-shadow: var(--shadow);
       display: flex;
       gap: 12px;
@@ -107,9 +119,9 @@
     }
 
     .settings-panel {
-      background: rgba(255, 250, 239, 0.98);
+      background: var(--panel-solid);
       border: 1px solid var(--border);
-      border-radius: 18px;
+      border-radius: var(--panel-radius);
       box-shadow: 0 18px 44px rgba(63, 45, 25, 0.2);
       display: grid;
       gap: 14px;
@@ -135,6 +147,12 @@
       text-transform: uppercase;
     }
 
+    .settings-note {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
     .theme-grid {
       display: grid;
       gap: 8px;
@@ -142,8 +160,27 @@
     }
 
     .theme-grid button {
-      justify-content: center;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      justify-content: flex-start;
+      min-height: 62px;
+      padding: 10px 12px;
+      text-align: left;
       width: 100%;
+    }
+
+    .theme-name {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .theme-mode {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     .settings-row {
@@ -172,7 +209,7 @@
       background-repeat: no-repeat;
       background-size: 6px 6px, 6px 6px, 100% 100%;
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--control-radius);
       color: var(--ink);
       font: 600 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
       padding: 11px 36px 11px 12px;
@@ -183,7 +220,7 @@
     button:focus-visible,
     a.button:focus-visible,
     summary:focus-visible {
-      outline: 2px solid rgba(198, 95, 47, 0.45);
+      outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
 
@@ -191,9 +228,9 @@
     a.button,
     summary.button {
       appearance: none;
-      background: rgba(255, 255, 255, 0.5);
+      background: var(--control);
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: var(--control-radius);
       color: var(--ink);
       cursor: pointer;
       display: inline-flex;
@@ -208,7 +245,7 @@
     button:hover,
     a.button:hover,
     summary.button:hover {
-      background: rgba(255, 255, 255, 0.78);
+      background: var(--control-strong);
       transform: translateY(-1px);
     }
 
@@ -219,9 +256,9 @@
     }
 
     .terminal {
-      background: #181511;
-      border: 1px solid rgba(39, 34, 29, 0.28);
-      border-radius: 24px;
+      background: var(--terminal-shell);
+      border: 1px solid var(--terminal-edge);
+      border-radius: var(--terminal-radius);
       box-shadow: var(--shadow);
       min-height: 0;
       overflow: hidden;
@@ -230,6 +267,7 @@
     }
 
     iframe {
+      background: var(--terminal-shell);
       border: 0;
       height: 100%;
       width: 100%;
@@ -252,7 +290,7 @@
       .toolbar {
         align-items: flex-start;
         flex-direction: column;
-        border-radius: 18px;
+        border-radius: var(--panel-radius);
       }
 
       .controls {
@@ -281,15 +319,18 @@
             <div class="settings-group">
               <span class="settings-label">Цветовая схема</span>
               <div class="theme-grid">
-                <button type="button" data-theme="paper">Paper</button>
-                <button type="button" data-theme="graphite">Graphite</button>
-                <button type="button" data-theme="amber">Amber</button>
-                <button type="button" data-theme="midnight">Midnight</button>
-                <button type="button" data-theme="forest">Forest</button>
-                <button type="button" data-theme="ocean">Ocean</button>
-                <button type="button" data-theme="rose">Rose</button>
-                <button type="button" data-theme="nord">Nord</button>
+                <button type="button" data-theme="paper"></button>
+                <button type="button" data-theme="linen"></button>
+                <button type="button" data-theme="ledger"></button>
+                <button type="button" data-theme="harbor"></button>
+                <button type="button" data-theme="sage"></button>
+                <button type="button" data-theme="graphite"></button>
+                <button type="button" data-theme="ink"></button>
+                <button type="button" data-theme="midnight"></button>
+                <button type="button" data-theme="nord"></button>
+                <button type="button" data-theme="forest"></button>
               </div>
+              <span class="settings-note">Пять светлых и пять темных пресетов. Все палитры нейтральные и рассчитаны на рабочее использование.</span>
             </div>
 
             <div class="settings-row">
@@ -312,8 +353,10 @@
   </main>
 
   <script>
-    const STORAGE_KEY = "fly-terminal-preferences-v1";
+    const STORAGE_KEY = "fly-terminal-preferences-v2";
     const SESSION_KEY = "fly-terminal-session-id-v1";
+    const FRAME_STYLE_ID = "fly-terminal-frame-style";
+    const FRAME_BINDING_KEY = "__flyTerminalConfigured";
     const fontFamilies = [
       { label: "Menlo", value: "Menlo, monospace" },
       { label: "Monaco", value: "Monaco, monospace" },
@@ -328,6 +371,25 @@
     const themes = {
       paper: {
         label: "Paper",
+        mode: "light",
+        shell: {
+          bgStart: "#f8f0dd",
+          bgEnd: "#e3d4b9",
+          glowA: "rgba(198, 95, 47, 0.18)",
+          glowB: "rgba(63, 111, 159, 0.14)",
+          panel: "rgba(255, 250, 239, 0.86)",
+          panelSolid: "rgba(255, 250, 239, 0.98)",
+          control: "rgba(255, 255, 255, 0.5)",
+          controlStrong: "rgba(255, 255, 255, 0.78)",
+          ink: "#27221d",
+          muted: "#766c60",
+          accent: "#c65f2f",
+          border: "rgba(67, 54, 41, 0.16)",
+          focus: "rgba(198, 95, 47, 0.45)",
+          terminalShell: "#efe6d7",
+          terminalEdge: "rgba(73, 60, 44, 0.18)",
+          shadow: "0 24px 80px rgba(63, 45, 25, 0.18)"
+        },
         colors: {
           background: "#f7f3e8",
           foreground: "#28231f",
@@ -351,158 +413,335 @@
           brightWhite: "#fff8eb"
         }
       },
+      linen: {
+        label: "Linen",
+        mode: "light",
+        shell: {
+          bgStart: "#f7f5ef",
+          bgEnd: "#ddd8cc",
+          glowA: "rgba(148, 105, 75, 0.12)",
+          glowB: "rgba(95, 126, 164, 0.12)",
+          panel: "rgba(250, 248, 243, 0.88)",
+          panelSolid: "rgba(250, 248, 243, 0.98)",
+          control: "rgba(255, 255, 255, 0.64)",
+          controlStrong: "rgba(255, 255, 255, 0.84)",
+          ink: "#252220",
+          muted: "#68615b",
+          accent: "#8a694a",
+          border: "rgba(72, 65, 57, 0.14)",
+          focus: "rgba(138, 105, 74, 0.4)",
+          terminalShell: "#efebe3",
+          terminalEdge: "rgba(77, 70, 60, 0.16)",
+          shadow: "0 24px 80px rgba(43, 39, 33, 0.14)"
+        },
+        colors: {
+          background: "#f5f3ee",
+          foreground: "#262321",
+          cursor: "#8a694a",
+          selectionBackground: "#ddd5c6",
+          black: "#262321",
+          red: "#a85148",
+          green: "#5f7758",
+          yellow: "#8b7540",
+          blue: "#486f98",
+          magenta: "#7f628d",
+          cyan: "#4f7f83",
+          white: "#efe8dc",
+          brightBlack: "#6e665d",
+          brightRed: "#bf655b",
+          brightGreen: "#75906d",
+          brightYellow: "#a0894f",
+          brightBlue: "#5b86b4",
+          brightMagenta: "#9676a5",
+          brightCyan: "#66959a",
+          brightWhite: "#fffdf8"
+        }
+      },
+      ledger: {
+        label: "Ledger",
+        mode: "light",
+        shell: {
+          bgStart: "#eef3f7",
+          bgEnd: "#d4dde7",
+          glowA: "rgba(71, 104, 138, 0.14)",
+          glowB: "rgba(108, 130, 104, 0.1)",
+          panel: "rgba(248, 251, 253, 0.86)",
+          panelSolid: "rgba(248, 251, 253, 0.98)",
+          control: "rgba(255, 255, 255, 0.58)",
+          controlStrong: "rgba(255, 255, 255, 0.86)",
+          ink: "#1f2a34",
+          muted: "#61717f",
+          accent: "#4a6988",
+          border: "rgba(69, 89, 108, 0.16)",
+          focus: "rgba(74, 105, 136, 0.38)",
+          terminalShell: "#dfe7ef",
+          terminalEdge: "rgba(73, 97, 118, 0.18)",
+          shadow: "0 24px 80px rgba(42, 60, 77, 0.16)"
+        },
+        colors: {
+          background: "#f3f6fa",
+          foreground: "#1f2a34",
+          cursor: "#4a6988",
+          selectionBackground: "#d8e2ec",
+          black: "#1f2a34",
+          red: "#a44f54",
+          green: "#57735e",
+          yellow: "#8e7940",
+          blue: "#4a6988",
+          magenta: "#6e628e",
+          cyan: "#4e7d88",
+          white: "#edf3f8",
+          brightBlack: "#60707e",
+          brightRed: "#bb6468",
+          brightGreen: "#6f8d76",
+          brightYellow: "#a58f52",
+          brightBlue: "#6287ab",
+          brightMagenta: "#8777a5",
+          brightCyan: "#679aa4",
+          brightWhite: "#ffffff"
+        }
+      },
+      harbor: {
+        label: "Harbor",
+        mode: "light",
+        shell: {
+          bgStart: "#edf4f6",
+          bgEnd: "#d6e4e7",
+          glowA: "rgba(58, 108, 118, 0.14)",
+          glowB: "rgba(96, 124, 158, 0.12)",
+          panel: "rgba(246, 251, 252, 0.88)",
+          panelSolid: "rgba(246, 251, 252, 0.98)",
+          control: "rgba(255, 255, 255, 0.62)",
+          controlStrong: "rgba(255, 255, 255, 0.84)",
+          ink: "#203034",
+          muted: "#5f7277",
+          accent: "#3f6f77",
+          border: "rgba(66, 93, 99, 0.16)",
+          focus: "rgba(63, 111, 119, 0.38)",
+          terminalShell: "#dce9eb",
+          terminalEdge: "rgba(60, 88, 95, 0.18)",
+          shadow: "0 24px 80px rgba(44, 68, 73, 0.16)"
+        },
+        colors: {
+          background: "#f2f7f8",
+          foreground: "#203034",
+          cursor: "#3f6f77",
+          selectionBackground: "#d8e7e9",
+          black: "#203034",
+          red: "#a85753",
+          green: "#587567",
+          yellow: "#8f7a45",
+          blue: "#46738d",
+          magenta: "#6f678f",
+          cyan: "#3f7f77",
+          white: "#edf5f6",
+          brightBlack: "#607579",
+          brightRed: "#c06b66",
+          brightGreen: "#6f8f80",
+          brightYellow: "#a69156",
+          brightBlue: "#5d8ca8",
+          brightMagenta: "#867ea6",
+          brightCyan: "#5a9a92",
+          brightWhite: "#ffffff"
+        }
+      },
+      sage: {
+        label: "Sage",
+        mode: "light",
+        shell: {
+          bgStart: "#f3f4ee",
+          bgEnd: "#dfe4d7",
+          glowA: "rgba(105, 127, 96, 0.14)",
+          glowB: "rgba(94, 111, 139, 0.1)",
+          panel: "rgba(249, 249, 244, 0.88)",
+          panelSolid: "rgba(249, 249, 244, 0.98)",
+          control: "rgba(255, 255, 255, 0.58)",
+          controlStrong: "rgba(255, 255, 255, 0.84)",
+          ink: "#273026",
+          muted: "#667062",
+          accent: "#627c59",
+          border: "rgba(73, 83, 67, 0.16)",
+          focus: "rgba(98, 124, 89, 0.38)",
+          terminalShell: "#e8ebe0",
+          terminalEdge: "rgba(78, 89, 72, 0.18)",
+          shadow: "0 24px 80px rgba(50, 57, 45, 0.16)"
+        },
+        colors: {
+          background: "#f5f6f1",
+          foreground: "#273026",
+          cursor: "#627c59",
+          selectionBackground: "#dce1d1",
+          black: "#273026",
+          red: "#a2554a",
+          green: "#627c59",
+          yellow: "#8a7a43",
+          blue: "#55708c",
+          magenta: "#726585",
+          cyan: "#527c72",
+          white: "#edf0e6",
+          brightBlack: "#697264",
+          brightRed: "#bb695b",
+          brightGreen: "#79926f",
+          brightYellow: "#a09156",
+          brightBlue: "#6d88a4",
+          brightMagenta: "#8b7c9e",
+          brightCyan: "#679289",
+          brightWhite: "#ffffff"
+        }
+      },
       graphite: {
         label: "Graphite",
+        mode: "dark",
+        shell: {
+          bgStart: "#1a1d21",
+          bgEnd: "#0f1114",
+          glowA: "rgba(242, 179, 102, 0.08)",
+          glowB: "rgba(97, 175, 239, 0.1)",
+          panel: "rgba(29, 33, 38, 0.84)",
+          panelSolid: "rgba(29, 33, 38, 0.98)",
+          control: "rgba(255, 255, 255, 0.06)",
+          controlStrong: "rgba(255, 255, 255, 0.12)",
+          ink: "#e8e3da",
+          muted: "#9b9486",
+          accent: "#f2b366",
+          border: "rgba(230, 224, 212, 0.12)",
+          focus: "rgba(242, 179, 102, 0.35)",
+          terminalShell: "#121418",
+          terminalEdge: "rgba(230, 224, 212, 0.1)",
+          shadow: "0 24px 80px rgba(0, 0, 0, 0.4)"
+        },
         colors: {
           background: "#15171a",
           foreground: "#e6e0d4",
           cursor: "#f2b366",
           selectionBackground: "#343a40",
           black: "#15171a",
-          red: "#e06c75",
-          green: "#98c379",
-          yellow: "#e5c07b",
-          blue: "#61afef",
-          magenta: "#c678dd",
-          cyan: "#56b6c2",
+          red: "#d66d70",
+          green: "#8cad73",
+          yellow: "#d3b06f",
+          blue: "#689fd4",
+          magenta: "#a97dbe",
+          cyan: "#4fa0a9",
           white: "#d7d1c7",
           brightBlack: "#6b7280",
-          brightRed: "#ff7b86",
-          brightGreen: "#b5e890",
-          brightYellow: "#ffd28a",
-          brightBlue: "#7cc7ff",
-          brightMagenta: "#de8cff",
-          brightCyan: "#71d7e3",
+          brightRed: "#ea8286",
+          brightGreen: "#a2c587",
+          brightYellow: "#e7c384",
+          brightBlue: "#82b7ea",
+          brightMagenta: "#c094d5",
+          brightCyan: "#6ab7c0",
           brightWhite: "#fff7e8"
         }
       },
-      amber: {
-        label: "Amber",
+      ink: {
+        label: "Ink",
+        mode: "dark",
+        shell: {
+          bgStart: "#10151b",
+          bgEnd: "#090c10",
+          glowA: "rgba(103, 140, 183, 0.12)",
+          glowB: "rgba(83, 117, 157, 0.08)",
+          panel: "rgba(18, 24, 31, 0.84)",
+          panelSolid: "rgba(18, 24, 31, 0.98)",
+          control: "rgba(255, 255, 255, 0.05)",
+          controlStrong: "rgba(255, 255, 255, 0.11)",
+          ink: "#dfe7f1",
+          muted: "#96a5b5",
+          accent: "#6b90b5",
+          border: "rgba(223, 231, 241, 0.12)",
+          focus: "rgba(107, 144, 181, 0.34)",
+          terminalShell: "#0d1116",
+          terminalEdge: "rgba(223, 231, 241, 0.1)",
+          shadow: "0 24px 80px rgba(0, 0, 0, 0.42)"
+        },
         colors: {
-          background: "#22170c",
-          foreground: "#f7d79a",
-          cursor: "#ffb547",
-          selectionBackground: "#59401d",
-          black: "#22170c",
-          red: "#d96c52",
-          green: "#9ba66f",
-          yellow: "#d7a34a",
-          blue: "#8da1b9",
-          magenta: "#c08aa6",
-          cyan: "#80aaa0",
-          white: "#efd4a3",
-          brightBlack: "#7d6749",
-          brightRed: "#ef8567",
-          brightGreen: "#bdc989",
-          brightYellow: "#ffc76b",
-          brightBlue: "#a9c0d8",
-          brightMagenta: "#dea3c1",
-          brightCyan: "#9bcac0",
-          brightWhite: "#fff0c9"
+          background: "#10151b",
+          foreground: "#dfe7f1",
+          cursor: "#6b90b5",
+          selectionBackground: "#223141",
+          black: "#10151b",
+          red: "#d36c74",
+          green: "#7ea07a",
+          yellow: "#c1a56d",
+          blue: "#6b90b5",
+          magenta: "#9f7ead",
+          cyan: "#5f98a0",
+          white: "#d8e1eb",
+          brightBlack: "#64778b",
+          brightRed: "#ea838b",
+          brightGreen: "#97b792",
+          brightYellow: "#d8bc85",
+          brightBlue: "#82a8cd",
+          brightMagenta: "#b595c4",
+          brightCyan: "#77afb7",
+          brightWhite: "#f8fbff"
         }
       },
       midnight: {
         label: "Midnight",
+        mode: "dark",
+        shell: {
+          bgStart: "#121827",
+          bgEnd: "#090d16",
+          glowA: "rgba(140, 180, 255, 0.12)",
+          glowB: "rgba(101, 214, 232, 0.08)",
+          panel: "rgba(20, 27, 41, 0.84)",
+          panelSolid: "rgba(20, 27, 41, 0.98)",
+          control: "rgba(255, 255, 255, 0.06)",
+          controlStrong: "rgba(255, 255, 255, 0.12)",
+          ink: "#dbe6ff",
+          muted: "#97a5c6",
+          accent: "#8cb4ff",
+          border: "rgba(219, 230, 255, 0.11)",
+          focus: "rgba(140, 180, 255, 0.35)",
+          terminalShell: "#0d1320",
+          terminalEdge: "rgba(219, 230, 255, 0.1)",
+          shadow: "0 24px 80px rgba(0, 0, 0, 0.42)"
+        },
         colors: {
           background: "#0f1320",
           foreground: "#d7e3ff",
           cursor: "#8cb4ff",
           selectionBackground: "#26304a",
           black: "#0f1320",
-          red: "#ff6b6b",
-          green: "#7ddc9a",
-          yellow: "#ffd166",
+          red: "#d97575",
+          green: "#7fc598",
+          yellow: "#d9b86c",
           blue: "#78a9ff",
-          magenta: "#c792ea",
-          cyan: "#65d6e8",
+          magenta: "#ad8fcf",
+          cyan: "#65b7c7",
           white: "#d7e3ff",
           brightBlack: "#67728f",
-          brightRed: "#ff8080",
-          brightGreen: "#95eaaf",
-          brightYellow: "#ffe28a",
+          brightRed: "#ef8d8d",
+          brightGreen: "#95daae",
+          brightYellow: "#eccd84",
           brightBlue: "#9bc0ff",
-          brightMagenta: "#dcafff",
-          brightCyan: "#8fe7f1",
+          brightMagenta: "#c5a8e7",
+          brightCyan: "#82cfdd",
           brightWhite: "#f4f8ff"
-        }
-      },
-      forest: {
-        label: "Forest",
-        colors: {
-          background: "#112117",
-          foreground: "#ddebd4",
-          cursor: "#92d17d",
-          selectionBackground: "#23402a",
-          black: "#112117",
-          red: "#f08d7e",
-          green: "#92d17d",
-          yellow: "#e3c15d",
-          blue: "#7aa8df",
-          magenta: "#b685c9",
-          cyan: "#70c5b7",
-          white: "#ddebd4",
-          brightBlack: "#6e8470",
-          brightRed: "#ff9d8f",
-          brightGreen: "#ade094",
-          brightYellow: "#f0d478",
-          brightBlue: "#9ec1eb",
-          brightMagenta: "#cfaae0",
-          brightCyan: "#92d9ce",
-          brightWhite: "#f3f8ee"
-        }
-      },
-      ocean: {
-        label: "Ocean",
-        colors: {
-          background: "#0d1b25",
-          foreground: "#d8ebf4",
-          cursor: "#6fc2ff",
-          selectionBackground: "#19384a",
-          black: "#0d1b25",
-          red: "#ff7c82",
-          green: "#7bd6a3",
-          yellow: "#ffd27a",
-          blue: "#74b8ff",
-          magenta: "#b98cff",
-          cyan: "#61d3d9",
-          white: "#d8ebf4",
-          brightBlack: "#688296",
-          brightRed: "#ff9ca0",
-          brightGreen: "#9be7bf",
-          brightYellow: "#ffe09d",
-          brightBlue: "#9bc8ff",
-          brightMagenta: "#cfb1ff",
-          brightCyan: "#89e9eb",
-          brightWhite: "#f5fbff"
-        }
-      },
-      rose: {
-        label: "Rose",
-        colors: {
-          background: "#23161a",
-          foreground: "#f3dbe0",
-          cursor: "#f29ab2",
-          selectionBackground: "#452731",
-          black: "#23161a",
-          red: "#f18c8c",
-          green: "#a4c18a",
-          yellow: "#e1bc6f",
-          blue: "#8eb4e8",
-          magenta: "#d29bd1",
-          cyan: "#8dd1cf",
-          white: "#f3dbe0",
-          brightBlack: "#84696f",
-          brightRed: "#ffabab",
-          brightGreen: "#bfd8a8",
-          brightYellow: "#f0d08b",
-          brightBlue: "#b0cdf2",
-          brightMagenta: "#e4bee3",
-          brightCyan: "#aae4e1",
-          brightWhite: "#fff5f7"
         }
       },
       nord: {
         label: "Nord",
+        mode: "dark",
+        shell: {
+          bgStart: "#37404d",
+          bgEnd: "#232933",
+          glowA: "rgba(136, 192, 208, 0.12)",
+          glowB: "rgba(129, 161, 193, 0.08)",
+          panel: "rgba(50, 59, 72, 0.84)",
+          panelSolid: "rgba(50, 59, 72, 0.98)",
+          control: "rgba(255, 255, 255, 0.06)",
+          controlStrong: "rgba(255, 255, 255, 0.11)",
+          ink: "#edf1f7",
+          muted: "#b4bcc7",
+          accent: "#88c0d0",
+          border: "rgba(236, 239, 244, 0.12)",
+          focus: "rgba(136, 192, 208, 0.34)",
+          terminalShell: "#2b313b",
+          terminalEdge: "rgba(236, 239, 244, 0.1)",
+          shadow: "0 24px 80px rgba(0, 0, 0, 0.38)"
+        },
         colors: {
           background: "#2e3440",
           foreground: "#eceff4",
@@ -525,6 +764,50 @@
           brightCyan: "#8fbcbb",
           brightWhite: "#f8fbff"
         }
+      },
+      forest: {
+        label: "Forest",
+        mode: "dark",
+        shell: {
+          bgStart: "#16231a",
+          bgEnd: "#0d1510",
+          glowA: "rgba(146, 209, 125, 0.12)",
+          glowB: "rgba(112, 197, 183, 0.08)",
+          panel: "rgba(20, 33, 23, 0.84)",
+          panelSolid: "rgba(20, 33, 23, 0.98)",
+          control: "rgba(255, 255, 255, 0.05)",
+          controlStrong: "rgba(255, 255, 255, 0.11)",
+          ink: "#ddebd4",
+          muted: "#9db09a",
+          accent: "#92d17d",
+          border: "rgba(221, 235, 212, 0.1)",
+          focus: "rgba(146, 209, 125, 0.34)",
+          terminalShell: "#0f1d14",
+          terminalEdge: "rgba(221, 235, 212, 0.08)",
+          shadow: "0 24px 80px rgba(0, 0, 0, 0.4)"
+        },
+        colors: {
+          background: "#112117",
+          foreground: "#ddebd4",
+          cursor: "#92d17d",
+          selectionBackground: "#23402a",
+          black: "#112117",
+          red: "#d88478",
+          green: "#92d17d",
+          yellow: "#cfb667",
+          blue: "#7aa8c8",
+          magenta: "#a285ba",
+          cyan: "#67b1a5",
+          white: "#ddebd4",
+          brightBlack: "#6e8470",
+          brightRed: "#ea9a8f",
+          brightGreen: "#ade094",
+          brightYellow: "#e2c983",
+          brightBlue: "#93bdd9",
+          brightMagenta: "#b99bcf",
+          brightCyan: "#83c9bc",
+          brightWhite: "#f3f8ee"
+        }
       }
     };
 
@@ -540,7 +823,8 @@
 
     const statusText = () => {
       const fontFamilyLabel = fontFamilies.find((family) => family.value === preferences.fontFamily)?.label || "Custom";
-      return `${themes[preferences.theme].label}, ${preferences.fontSize}px, ${fontFamilyLabel}. Сохранено для следующей сессии.`;
+      const theme = themes[preferences.theme];
+      return `${theme.label} (${theme.mode === "light" ? "light" : "dark"}), ${preferences.fontSize}px, ${fontFamilyLabel}. Сохранено для следующей сессии.`;
     };
 
     const setStatusText = (message, duration = 0) => {
@@ -603,6 +887,91 @@
       return `/terminal/?${params.toString()}`;
     };
 
+    const applyShellTheme = () => {
+      const theme = themes[preferences.theme] || themes.paper;
+      const root = document.documentElement.style;
+      root.setProperty("--bg-start", theme.shell.bgStart);
+      root.setProperty("--bg-end", theme.shell.bgEnd);
+      root.setProperty("--glow-a", theme.shell.glowA);
+      root.setProperty("--glow-b", theme.shell.glowB);
+      root.setProperty("--panel", theme.shell.panel);
+      root.setProperty("--panel-solid", theme.shell.panelSolid);
+      root.setProperty("--control", theme.shell.control);
+      root.setProperty("--control-strong", theme.shell.controlStrong);
+      root.setProperty("--ink", theme.shell.ink);
+      root.setProperty("--muted", theme.shell.muted);
+      root.setProperty("--accent", theme.shell.accent);
+      root.setProperty("--border", theme.shell.border);
+      root.setProperty("--focus", theme.shell.focus);
+      root.setProperty("--terminal-shell", theme.shell.terminalShell);
+      root.setProperty("--terminal-edge", theme.shell.terminalEdge);
+      root.setProperty("--shadow", theme.shell.shadow);
+    };
+
+    const focusEmbeddedTerminal = () => {
+      try {
+        const textarea = frame.contentDocument?.querySelector(".xterm-helper-textarea");
+        textarea?.focus({ preventScroll: true });
+      } catch {
+        // ignore cross-document or transient iframe states
+      }
+    };
+
+    const syncEmbeddedTerminal = () => {
+      try {
+        const doc = frame.contentDocument;
+        const win = frame.contentWindow;
+        const theme = themes[preferences.theme] || themes.paper;
+        if (!doc || !win) {
+          return;
+        }
+
+        let styleTag = doc.getElementById(FRAME_STYLE_ID);
+        if (!styleTag) {
+          styleTag = doc.createElement("style");
+          styleTag.id = FRAME_STYLE_ID;
+          doc.head.appendChild(styleTag);
+        }
+
+        styleTag.textContent = `
+          html, body {
+            background: ${theme.colors.background} !important;
+            overflow: hidden !important;
+          }
+          #terminal-container {
+            width: 100% !important;
+            max-width: none !important;
+            height: 100% !important;
+          }
+          #terminal-container .terminal {
+            height: 100% !important;
+            padding: 0 !important;
+            background: ${theme.colors.background} !important;
+            border-radius: 0 !important;
+          }
+          .xterm,
+          .xterm-screen,
+          .xterm-viewport {
+            background: ${theme.colors.background} !important;
+          }
+          .xterm-viewport {
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: ${theme.colors.brightBlack} ${theme.colors.background};
+          }
+        `;
+
+        if (!win[FRAME_BINDING_KEY]) {
+          win[FRAME_BINDING_KEY] = true;
+          doc.addEventListener("pointerdown", focusEmbeddedTerminal, { passive: true });
+          doc.addEventListener("wheel", focusEmbeddedTerminal, { passive: true });
+          doc.addEventListener("mouseenter", focusEmbeddedTerminal, true);
+        }
+      } catch {
+        // ignore iframe sync failures and keep terminal usable
+      }
+    };
+
     fontSizes.forEach((size) => {
       const option = document.createElement("option");
       option.value = String(size);
@@ -617,7 +986,22 @@
       fontFamilySelect.appendChild(option);
     });
 
+    buttons.forEach((button) => {
+      const theme = themes[button.dataset.theme];
+      if (!theme) {
+        return;
+      }
+      const themeName = document.createElement("span");
+      themeName.className = "theme-name";
+      themeName.textContent = theme.label;
+      const themeMode = document.createElement("span");
+      themeMode.className = "theme-mode";
+      themeMode.textContent = theme.mode === "light" ? "Light" : "Dark";
+      button.append(themeName, themeMode);
+    });
+
     const render = () => {
+      applyShellTheme();
       const url = buildTerminalUrl();
       frame.src = url;
       directLink.href = url;
@@ -691,6 +1075,11 @@
         event.preventDefault();
         copySelection();
       }
+    });
+
+    frame.addEventListener("load", () => {
+      syncEmbeddedTerminal();
+      focusEmbeddedTerminal();
     });
 
     render();
