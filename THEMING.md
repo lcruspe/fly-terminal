@@ -60,7 +60,7 @@ This keeps the terminal state attached to the same `tmux` session instead of cre
 
 ## Mouse wheel
 
-The container keeps `/etc/tmux.conf` with mouse mode disabled and lets `ttyd`/xterm own wheel behavior. The shell UI also focuses the embedded terminal on pointer and wheel events, so the mouse wheel scrolls terminal scrollback instead of the browser page.
+The container keeps `/etc/tmux.conf` with mouse mode disabled. The shell UI overrides the embedded ttyd wheel handler and scrolls `.xterm-viewport` directly, so the mouse wheel targets terminal scrollback instead of browser page scroll or shell input history navigation.
 
 ## Shape and chrome
 

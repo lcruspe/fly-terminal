@@ -917,6 +917,53 @@
       }
     };
 
+    const getEmbeddedViewport = () => {
+      try {
+        return frame.contentDocument?.querySelector(".xterm-viewport") || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const getEmbeddedRowHeight = (doc) => {
+      const sampleRow = doc?.querySelector(".xterm-rows > div");
+      if (!sampleRow) {
+        return 18;
+      }
+
+      const lineHeight = Number.parseFloat(getComputedStyle(sampleRow).lineHeight);
+      return Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 18;
+    };
+
+    const getWheelPixels = (event, viewport) => {
+      const doc = frame.contentDocument;
+      let pixels = event.deltaY;
+      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+        pixels *= getEmbeddedRowHeight(doc);
+      } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+        pixels *= Math.max(viewport?.clientHeight || 0, getEmbeddedRowHeight(doc));
+      }
+      return pixels;
+    };
+
+    const handleEmbeddedWheel = (event) => {
+      const viewport = getEmbeddedViewport();
+      if (!viewport) {
+        return;
+      }
+
+      const pixels = getWheelPixels(event, viewport);
+      if (!pixels) {
+        return;
+      }
+
+      focusEmbeddedTerminal();
+      viewport.scrollTop += pixels;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      event.stopPropagation();
+    };
+
     const syncEmbeddedTerminal = () => {
       try {
         const doc = frame.contentDocument;
@@ -963,9 +1010,16 @@
 
         if (!win[FRAME_BINDING_KEY]) {
           win[FRAME_BINDING_KEY] = true;
+          const viewport = doc.querySelector(".xterm-viewport");
+          const terminalRoot = doc.querySelector(".xterm");
           doc.addEventListener("pointerdown", focusEmbeddedTerminal, { passive: true });
-          doc.addEventListener("wheel", focusEmbeddedTerminal, { passive: true });
           doc.addEventListener("mouseenter", focusEmbeddedTerminal, true);
+          if (terminalRoot) {
+            terminalRoot.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
+          }
+          if (viewport) {
+            viewport.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
+          }
         }
       } catch {
         // ignore iframe sync failures and keep terminal usable
