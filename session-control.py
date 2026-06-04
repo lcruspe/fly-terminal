@@ -44,6 +44,20 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 200, {"ok": True, "sessions": sessions})
             return
 
+        if self.path == "/api/browser/config":
+            enabled = os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
+            browser_url = os.environ.get("FLY_BROWSER_URL", "")
+            send_json(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "enabled": enabled,
+                    "url": browser_url if enabled else "",
+                },
+            )
+            return
+
         send_json(self, 404, {"ok": False, "error": "not_found"})
 
     def do_POST(self):

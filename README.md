@@ -5,6 +5,7 @@
 ## Особенности проекта
 
 *   **Двухпанельный интерфейс**: переключение между вкладками (Tabs) и разделением экрана (Split Screen) для параллельной работы.
+*   **Remote Browser для macOS**: отдельная browser-панель открывает Chromium в Docker/noVNC через сеть Mac mini, не смешиваясь с терминальными tmux-сессиями.
 *   **Умное именование вкладок**: автоматическое отслеживание текущей рабочей директории (`cwd`) каждого tmux-сеанса с обновлением заголовка. Возможность ручного переименования по двойному клику.
 *   **Кастомизация UI**: 10 профессионально подобранных цветовых схем (5 светлых и 5 темных), выбор размера шрифта (8px - 16px) и шрифтового семейства с сохранением настроек в `localStorage`.
 *   **Синхронизацией истории**: общая история команд bash мгновенно синхронизируется между всеми сессиями и вкладками.
@@ -24,6 +25,7 @@ graph TD
     Proxy -->|Статический фронтенд /| IndexHtml[index.html]
     Proxy -->|Управление сессиями /api/*| ControlPy[session-control.py]
     Proxy -->|Терминальный поток /terminal/| Ttyd[ttyd]
+    User -->|HTTPS :10000| Browser[Remote Chromium / noVNC]
     
     ControlPy -->|tmux list-panes / kill-session| Tmux[tmux]
     Ttyd -->|Запуск сессии| SessionSh[terminal-session.sh]
@@ -33,7 +35,7 @@ graph TD
 ```
 
 ### Описание компонентов:
-1.  **Frontend (`index.html`)**: Адаптивный веб-интерфейс, который управляет отображением вкладок/сетки, отправляет API-запросы для получения информации о сессиях, настраивает параметры шрифтов и тем оформления, а также встраивает терминалы через `iframe`.
+1.  **Frontend (`index.html`)**: Адаптивный веб-интерфейс, который управляет отображением вкладок/сетки, отправляет API-запросы для получения информации о сессиях, настраивает параметры шрифтов и тем оформления, а также встраивает терминалы и remote browser через `iframe`.
 2.  **Прокси-сервер (Nginx / Caddy)**: Маршрутизирует запросы пользователя. Отдает статику фронтенда, проксирует WebSocket-соединения к `ttyd` и перенаправляет запросы к панели управления в Python API.
 3.  **Python API (`session-control.py`)**: Легковесный HTTP-сервер, который управляет процессами tmux: запрашивает текущую директорию активной панели (`pane_current_path`) для отображения во вкладках и завершает сессии по запросу фронтенда.
 4.  **Скрипт сессии (`terminal-session.sh`)**: Инициализирует окружение при открытии новой вкладки. Перед запуском tmux он:
@@ -117,9 +119,9 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 
 Этот скрипт выполнит следующие действия:
 *   Создаст директорию конфигурации `~/.config/fly-terminal-mac/fly-terminal.env`.
-*   Зарегистрирует и запустит два системных агента `launchd` (для `ttyd` + Python API и для веб-сервера `caddy`).
+*   Зарегистрирует и запустит `launchd` агенты для `ttyd` + Python API, `caddy` и optional browser-модуля.
 *   Настроит `ttyd` на локальный порт `7682`, а `caddy` — на порт `8080`.
-*   Опубликует веб-интерфейс через встроенный `tailscale funnel`.
+*   Опубликует веб-интерфейс через `tailscale funnel`, а remote browser — на отдельном порту `10000`.
 
 #### 3. Управление паролем на macOS
 Для смены пароля доступа к терминалу на Mac выполните:
@@ -134,6 +136,7 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 *   Файлы служб (Launch Agents):
     *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.ttyd.plist`
     *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.caddy.plist`
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.browser.plist`
 
 ---
 
@@ -156,6 +159,12 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES`| `120` | Время жизни (в минутах) неактивной (отключенной) сессии tmux. Старые сессии автоматически завершаются. |
 | `FLY_TERMINAL_DIAGNOSTICS` | `1` | Флаг включения вывода системной диагностики (лимиты cgroup, доступная ОЗУ, swap, процессы) в лог контейнера при запуске. |
 | `FLY_TERMINAL_HISTORY_DIR` | `/data/bash_history` (Docker) | Путь к директории хранения файла общей истории. |
+| `FLY_BROWSER_ENABLED` | `0` | Включает кнопку Browser в UI и endpoint `/api/browser/config`. Для direct macOS обычно `1`. |
+| `FLY_BROWSER_URL` | *Не задано* | Публичный URL remote browser, например `https://mac-mini.tail1c55c5.ts.net:10000/`. |
+| `FLY_BROWSER_IMAGE` | `kasmweb/chrome:1.17.0` | Docker image для Chromium/noVNC. |
+| `FLY_BROWSER_HOST_PORT` | `7690` | Локальный порт Mac mini, на который проброшен web UI контейнера browser. |
+| `FLY_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/browser-profile` | Persistent profile Chromium для cookies и настроек. |
+| `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с домашним каталогом `kasm-user`; используется вместо bind mount, чтобы не ломать права Kasm на macOS. |
 
 ---
 
@@ -167,6 +176,7 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 ### Описание кнопок управления:
 *   **Вкладки / Сплит**: Переключает режим отображения. Режим **Сплит** делит экран на равные области для всех открытых вкладок. Переключение фокуса в режиме Сплит происходит автоматически при наведении курсора мыши или по клику.
 *   **Новая вкладка**: Запускает новый независимый сеанс tmux и добавляет его в текущее окно.
+*   **Browser**: Добавляет панель с удаленным Chromium/noVNC. Закрытие browser-панели закрывает только UI-панель, контейнер продолжает работать.
 *   **Новое окно**: Генерирует уникальный идентификатор сессии и открывает чистый терминал в новой вкладке браузера (сессии не будут пересекаться).
 *   **Переподключить**: Перезагружает iframe активного терминала (полезно при сбое сетевого соединения).
 *   **Фокус**: Программно возвращает фокус ввода на текстовое поле xterm (терминал готов к вводу команд).

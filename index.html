@@ -691,6 +691,10 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>
           Новая вкладка
         </button>
+        <button type="button" id="addBrowser" hidden>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/></svg>
+          Browser
+        </button>
         <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
           Новое окно
@@ -1238,6 +1242,7 @@
     
     // Buttons
     const addTabBtn = document.getElementById("addTab");
+    const addBrowserBtn = document.getElementById("addBrowser");
     const reloadActiveBtn = document.getElementById("reloadSession");
     const focusTerminalBtn = document.getElementById("focusTerminal");
     const copySelectionBtn = document.getElementById("copySelection");
@@ -1246,11 +1251,12 @@
     const directLink = document.getElementById("directLink");
 
     // State
-    let tabs = []; // { id, sessionId, label, customLabel, active, wrapper }
+    let tabs = []; // { id, type, sessionId, label, customLabel, active, wrapper }
     let activeTabId = null;
     let viewMode = 'tabs'; // 'tabs' or 'split'
     let preferences = readPreferences();
     let statusResetTimer = null;
+    let browserConfig = { enabled: false, url: "" };
 
     function createId() { return Math.random().toString(36).substr(2, 9); }
     function createSessionId() { return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-"); }
@@ -1429,6 +1435,10 @@
       return `/terminal/?${params.toString()}`;
     }
 
+    function buildBrowserUrl() {
+      return browserConfig.url || "about:blank";
+    }
+
     function refreshDirectLink() {
       directLink.href = buildTerminalUrl(createSessionId());
     }
@@ -1467,7 +1477,8 @@
       themeButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.theme === preferences.theme));
     }
 
-    function syncIframe(iframe) {
+    function syncIframe(iframe, type = "terminal") {
+      if (type !== "terminal") return;
       try {
         const doc = iframe.contentDocument;
         const theme = themes[preferences.theme];
@@ -1491,8 +1502,23 @@
       applyShellTheme();
       tabs.forEach(tab => {
         const iframe = tab.wrapper.querySelector("iframe");
-        if (iframe) syncIframe(iframe);
+        if (iframe) syncIframe(iframe, tab.type);
       });
+    }
+
+    async function loadBrowserConfig() {
+      try {
+        const response = await fetch("/api/browser/config", { cache: "no-store" });
+        const config = await response.json();
+        browserConfig = {
+          enabled: Boolean(config.enabled && config.url),
+          url: typeof config.url === "string" ? config.url : ""
+        };
+      } catch (e) {
+        browserConfig = { enabled: false, url: "" };
+      }
+
+      addBrowserBtn.hidden = !browserConfig.enabled;
     }
 
     function addTab(sessionId = null, label = "Terminal") {
@@ -1518,7 +1544,7 @@
         </div>
       `;
       
-      const tab = { id, sessionId: sId, label, customLabel: null, wrapper };
+      const tab = { id, type: "terminal", sessionId: sId, label, customLabel: null, wrapper };
       tabs.push(tab);
       terminalContainer.appendChild(wrapper);
       
@@ -1530,8 +1556,46 @@
 
       const iframe = wrapper.querySelector("iframe");
       iframe.addEventListener("load", () => {
-        syncIframe(iframe);
+        syncIframe(iframe, tab.type);
         setSessionState("badge-ok", "Готово");
+      });
+
+      renderTabs();
+      switchTab(id);
+      renderSplitLayoutPresets();
+      applySplitLayout();
+      saveSessions();
+      return tab;
+    }
+
+    function addBrowserTab(label = "Browser", customLabel = null) {
+      const id = createId();
+      const wrapper = document.createElement("div");
+      wrapper.className = "terminal-frame-wrapper";
+      wrapper.id = `wrapper-${id}`;
+      wrapper.innerHTML = `
+        <div class="terminal-topbar">
+          <div class="terminal-heading">
+            <strong class="tab-label-text">${customLabel || label}</strong>
+            <span class="tab-subtext">remote chromium</span>
+          </div>
+        </div>
+        <div class="terminal-stage">
+          <iframe src="${buildBrowserUrl()}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+        </div>
+      `;
+
+      const tab = { id, type: "browser", sessionId: null, label, customLabel, wrapper };
+      tabs.push(tab);
+      terminalContainer.appendChild(wrapper);
+
+      wrapper.addEventListener('mousedown', () => switchTab(id));
+      wrapper.addEventListener('mouseenter', () => {
+        if (viewMode === 'split') switchTab(id);
+      });
+
+      wrapper.querySelector("iframe").addEventListener("load", () => {
+        setSessionState("badge-ok", "Browser готов");
       });
 
       renderTabs();
@@ -1555,11 +1619,12 @@
       const activeTab = tabs.find(t => t.id === id);
       if (activeTab) {
         const iframe = activeTab.wrapper.querySelector("iframe");
-        // Try focusing the xterm textarea specifically
         try {
           iframe?.contentWindow?.focus();
-          const textarea = iframe?.contentDocument?.querySelector(".xterm-helper-textarea");
-          textarea?.focus({ preventScroll: true });
+          if (activeTab.type === "terminal") {
+            const textarea = iframe?.contentDocument?.querySelector(".xterm-helper-textarea");
+            textarea?.focus({ preventScroll: true });
+          }
         } catch(e) {}
       }
     }
@@ -1570,12 +1635,13 @@
       if (index === -1) return;
       
       const tab = tabs[index];
-      // Optional: terminate session on backend
-      fetch("/api/session/terminate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: tab.sessionId })
-      }).catch(() => {});
+      if (tab.type === "terminal" && tab.sessionId) {
+        fetch("/api/session/terminate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: tab.sessionId })
+        }).catch(() => {});
+      }
 
       tab.wrapper.remove();
       tabs.splice(index, 1);
@@ -1631,6 +1697,7 @@
 
     async function updateTabLabels() {
       for (const tab of tabs) {
+        if (tab.type !== "terminal" || !tab.sessionId) continue;
         try {
           const res = await fetch("/api/session/info", {
             method: "POST",
@@ -1655,7 +1722,12 @@
     }
 
     function saveSessions() {
-      const data = tabs.map(t => ({ sessionId: t.sessionId, customLabel: t.customLabel }));
+      const data = tabs.map(t => ({
+        type: t.type || "terminal",
+        sessionId: t.sessionId,
+        customLabel: t.customLabel,
+        label: t.label
+      }));
       sessionStorage.setItem(SESSIONS_STORE_KEY, JSON.stringify(data));
     }
 
@@ -1663,7 +1735,14 @@
       try {
         const data = JSON.parse(sessionStorage.getItem(SESSIONS_STORE_KEY));
         if (data && Array.isArray(data) && data.length > 0) {
-          data.forEach(s => addTab(s.sessionId, s.customLabel || "Terminal"));
+          data.forEach(s => {
+            if (s.type === "browser") {
+              if (browserConfig.enabled) addBrowserTab(s.label || "Browser", s.customLabel || null);
+            } else {
+              addTab(s.sessionId, s.customLabel || "Terminal");
+            }
+          });
+          if (tabs.length === 0) addTab();
           return;
         }
       } catch (e) {}
@@ -1699,6 +1778,13 @@
 
     // Listeners
     addTabBtn.onclick = () => addTab();
+    addBrowserBtn.onclick = () => {
+      if (!browserConfig.enabled) {
+        setStatusText("Browser module disabled", 2200);
+        return;
+      }
+      addBrowserTab();
+    };
     directLink.onclick = (event) => {
       event.preventDefault();
       window.open(buildTerminalUrl(createSessionId()), "_blank", "noopener,noreferrer");
@@ -1710,7 +1796,7 @@
       const tab = tabs.find(t => t.id === activeTabId);
       if (tab) {
         const iframe = tab.wrapper.querySelector("iframe");
-        iframe.src = buildTerminalUrl(tab.sessionId);
+        iframe.src = tab.type === "browser" ? buildBrowserUrl() : buildTerminalUrl(tab.sessionId);
       }
     };
     viewTabsBtn.onclick = () => setViewMode('tabs');
@@ -1728,10 +1814,14 @@
     copySelectionBtn.onclick = async () => {
       const tab = tabs.find(t => t.id === activeTabId);
       const iframe = tab?.wrapper.querySelector("iframe");
-      const selection = iframe?.contentWindow?.getSelection()?.toString().trim();
-      if (selection) {
-        await navigator.clipboard.writeText(selection);
-        setStatusText("Скопировано", 2000);
+      try {
+        const selection = iframe?.contentWindow?.getSelection()?.toString().trim();
+        if (selection) {
+          await navigator.clipboard.writeText(selection);
+          setStatusText("Скопировано", 2000);
+        }
+      } catch (e) {
+        setStatusText("Копирование доступно через панель remote browser", 2600);
       }
     };
 
@@ -1749,7 +1839,7 @@
     // Initial load
     applyShellTheme();
     refreshDirectLink();
-    loadSessions();
+    loadBrowserConfig().finally(loadSessions);
     setInterval(updateTabLabels, 10000);
 
     document.addEventListener('click', (e) => {
