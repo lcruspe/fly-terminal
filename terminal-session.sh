@@ -75,14 +75,28 @@ apply_tmux_runtime_limits() {
     tmux set-option -g history-limit "$tmux_history_limit" >/dev/null 2>&1 || true
 }
 
-SESSION_ID=${1:-default}
-shift || true
+# Robust SESSION_ID extraction
+# 1. From command line argument
+# 2. From TTYD_QUERY_arg (ttyd environment)
+# 3. From TTYD_QUERY_STRING (parsing manually)
+# 4. Fallback to default
+RAW_ID="${1:-${TTYD_QUERY_arg:-}}"
 
-case "$SESSION_ID" in
-    *[!A-Za-z0-9._-]*)
-        SESSION_ID=default
-        ;;
-esac
+if [ -z "$RAW_ID" ] && [ -n "${TTYD_QUERY_STRING:-}" ]; then
+    RAW_ID=$(echo "$TTYD_QUERY_STRING" | sed -n 's/.*arg=\([^&]*\).*/\1/p')
+fi
+
+SESSION_ID="${RAW_ID:-default}"
+
+# Debug logging
+echo "--- $(date) ---" >> /tmp/terminal-session.log
+echo "RAW_ID: $RAW_ID" >> /tmp/terminal-session.log
+echo "SESSION_ID: $SESSION_ID" >> /tmp/terminal-session.log
+echo "All Args: $@" >> /tmp/terminal-session.log
+
+# Clean session ID to be safe for tmux
+SESSION_ID=$(echo "$SESSION_ID" | tr -dc 'A-Za-z0-9._-')
+[ -z "$SESSION_ID" ] && SESSION_ID="default"
 
 HISTORY_ROOT=${FLY_TERMINAL_HISTORY_DIR:-/data/bash_history}
 

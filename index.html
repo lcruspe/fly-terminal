@@ -14,13 +14,24 @@
       --panel-solid: rgba(255, 250, 239, 0.98);
       --control: rgba(255, 255, 255, 0.5);
       --control-strong: rgba(255, 255, 255, 0.78);
+      --button-bg: rgba(255, 255, 255, 0.5);
+      --button-bg-strong: rgba(255, 255, 255, 0.78);
+      --button-ink: #27221d;
       --ink: #27221d;
       --muted: #766c60;
       --accent: #c65f2f;
       --border: rgba(67, 54, 41, 0.16);
       --focus: rgba(198, 95, 47, 0.45);
+      --ok: #2f7a52;
+      --warn: #a66d27;
+      --danger: #9f4d46;
       --terminal-shell: #181511;
       --terminal-edge: rgba(39, 34, 29, 0.28);
+      --terminal-topbar-bg: rgba(0, 0, 0, 0.18);
+      --terminal-topbar-ink: #27221d;
+      --select-bg: rgba(255, 255, 255, 0.6);
+      --badge-bg: rgba(255, 255, 255, 0.44);
+      --active-btn-ink: #fff8eb;
       --shadow: 0 24px 80px rgba(63, 45, 25, 0.18);
       --panel-radius: 12px;
       --control-radius: 10px;
@@ -49,7 +60,7 @@
 
     .shell {
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto 1fr;
       gap: 12px;
       height: 100%;
       padding: 14px;
@@ -71,21 +82,50 @@
       z-index: 30;
     }
 
+    .toolbar-primary {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      min-width: 240px;
+    }
+
     .brand {
-      min-width: 190px;
+      display: grid;
+      gap: 3px;
+      min-width: 0;
     }
 
     .brand strong {
-      display: block;
       font-size: 15px;
       letter-spacing: 0.02em;
     }
 
     .brand span {
       color: var(--muted);
-      display: block;
       font-size: 12px;
-      margin-top: 2px;
+    }
+
+    .session-meta {
+      display: flex;
+      flex-shrink: 0;
+    }
+
+    .badge {
+      background: var(--badge-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font: 700 11px/1 "Avenir Next", "Segoe UI", sans-serif;
+      padding: 7px 9px;
+      white-space: nowrap;
+    }
+
+    .badge-ok {
+      color: var(--ok);
+    }
+
+    .badge-warn {
+      color: var(--warn);
     }
 
     .controls {
@@ -96,26 +136,165 @@
       justify-content: flex-end;
     }
 
-    .settings {
+    .view-switch {
+      background: var(--control);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      display: inline-flex;
+      padding: 3px;
+    }
+
+    .view-switch button {
+      border-color: transparent;
+      box-shadow: none;
+      padding: 7px 10px;
+    }
+
+    /* Tabs Bar */
+    .tab-bar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+      z-index: 20;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .mode-split #tabBar { display: none; }
+
+    .tab {
+      background: var(--button-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      color: var(--button-ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      font: 600 12px/1 "Avenir Next", "Segoe UI", sans-serif;
+      padding: 8px 12px;
+      white-space: nowrap;
+      transition: all 140ms ease;
       position: relative;
+      gap: 8px;
+    }
+    .tab:hover { background: var(--button-bg-strong); transform: translateY(-1px); }
+    .tab.active {
+      background: var(--accent);
+      border-color: transparent;
+      color: var(--active-btn-ink);
+    }
+    .tab-close {
+      opacity: 0.5;
+      border-radius: 4px;
+      padding: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+    .tab-close:hover {
+      background: rgba(0,0,0,0.1);
+      opacity: 1;
+    }
+
+    .terminal-container {
+      display: grid;
+      height: 100%;
+      min-height: 0;
+      gap: 12px;
+    }
+
+    /* Modes */
+    .mode-tabs .terminal-frame-wrapper:not(.active) {
+      display: none;
+    }
+    .mode-split {
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      grid-template-rows: repeat(auto-fit, minmax(300px, 1fr));
+    }
+    .mode-split .terminal-frame-wrapper.active {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+      box-shadow: 0 0 0 4px var(--focus);
+    }
+
+    @media (max-width: 700px) {
+      .mode-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .terminal-frame-wrapper {
+      background: var(--terminal-shell);
+      border: 1px solid var(--terminal-edge);
+      border-radius: var(--terminal-radius);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+      transition: outline 140ms ease, box-shadow 140ms ease;
+    }
+
+    /* Restore Original Button styles */
+    button,
+    a.button,
+    summary.button {
+      appearance: none;
+      background: var(--button-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      color: var(--button-ink);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      font: 700 13px/1 "Avenir Next", "Segoe UI", sans-serif;
+      padding: 10px 13px;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    button:hover,
+    a.button:hover,
+    summary.button:hover {
+      background: var(--button-bg-strong);
+      transform: translateY(-1px);
+    }
+
+    button.active {
+      background: var(--accent);
+      border-color: transparent;
+      color: var(--active-btn-ink);
+    }
+    
+    .dropdown-menu button,
+    .dropdown-menu a.button {
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: var(--ink);
+      padding: 10px 12px;
+      transform: none;
+      width: 100%;
+    }
+    .dropdown-menu button:hover,
+    .dropdown-menu a.button:hover {
+      background: var(--control);
+      transform: none;
     }
 
     .settings summary {
       list-style: none;
     }
+    .settings summary::-webkit-details-marker { display: none; }
+    .settings summary::after { content: "▾"; margin-left: 8px; font-size: 11px; }
+    .settings[open] summary::after { content: "▴"; }
 
-    .settings summary::-webkit-details-marker {
-      display: none;
-    }
-
-    .settings summary::after {
-      content: "▾";
-      margin-left: 8px;
-      font-size: 11px;
-    }
-
-    .settings[open] summary::after {
-      content: "▴";
+    .settings {
+      position: relative;
     }
 
     .settings-panel {
@@ -147,12 +326,6 @@
       text-transform: uppercase;
     }
 
-    .settings-note {
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.4;
-    }
-
     .theme-grid {
       display: grid;
       gap: 8px;
@@ -160,13 +333,12 @@
     }
 
     .theme-grid button {
-      flex-direction: column;
       align-items: flex-start;
-      gap: 4px;
-      justify-content: flex-start;
-      min-height: 62px;
-      padding: 10px 12px;
-      text-align: left;
+      flex-direction: column;
+      gap: 3px;
+      justify-content: center;
+      min-height: 52px;
+      padding: 9px 11px;
       width: 100%;
     }
 
@@ -177,9 +349,9 @@
 
     .theme-mode {
       color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
     }
 
@@ -201,7 +373,7 @@
       background:
         linear-gradient(45deg, transparent 50%, var(--muted) 50%),
         linear-gradient(135deg, var(--muted) 50%, transparent 50%),
-        rgba(255, 255, 255, 0.6);
+        var(--select-bg);
       background-position:
         calc(100% - 16px) calc(50% + 1px),
         calc(100% - 10px) calc(50% + 1px),
@@ -212,7 +384,7 @@
       border-radius: var(--control-radius);
       color: var(--ink);
       font: 600 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
-      padding: 11px 36px 11px 12px;
+      padding: 10px 36px 10px 12px;
       width: 100%;
     }
 
@@ -224,46 +396,80 @@
       outline-offset: 2px;
     }
 
-    button,
-    a.button,
-    summary.button {
-      appearance: none;
-      background: var(--control);
-      border: 1px solid var(--border);
-      border-radius: var(--control-radius);
-      color: var(--ink);
-      cursor: pointer;
-      display: inline-flex;
+    .terminal-topbar {
       align-items: center;
-      font: 700 13px/1 "Avenir Next", "Segoe UI", sans-serif;
-      padding: 10px 13px;
-      text-decoration: none;
-      white-space: nowrap;
-      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent),
+        var(--terminal-topbar-bg);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 8px 12px;
     }
 
-    button:hover,
-    a.button:hover,
-    summary.button:hover {
-      background: var(--control-strong);
-      transform: translateY(-1px);
+    .terminal-heading {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
     }
 
-    button.active {
-      background: var(--accent);
-      border-color: transparent;
-      color: #fff8eb;
+    .terminal-heading strong {
+      color: var(--terminal-topbar-ink);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
     }
 
-    .terminal {
-      background: var(--terminal-shell);
-      border: 1px solid var(--terminal-edge);
-      border-radius: var(--terminal-radius);
-      box-shadow: var(--shadow);
+    .terminal-heading span {
+      color: var(--terminal-topbar-ink);
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .terminal-tools {
+      color: var(--terminal-topbar-ink);
+      font-size: 11px;
+      text-align: right;
+      opacity: 0.8;
+    }
+
+    .terminal-stage {
       min-height: 0;
-      overflow: hidden;
       position: relative;
-      z-index: 0;
+    }
+
+    .terminal-overlay {
+      align-content: end;
+      background:
+        linear-gradient(180deg, rgba(17, 18, 22, 0.2), rgba(17, 18, 22, 0.72)),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 58%);
+      color: #f7f1e8;
+      display: grid;
+      gap: 6px;
+      inset: 0;
+      opacity: 0;
+      padding: 18px;
+      pointer-events: none;
+      position: absolute;
+      transition: opacity 180ms ease;
+      z-index: 3;
+    }
+
+    .terminal-overlay.visible {
+      opacity: 1;
+    }
+
+    .terminal-overlay strong {
+      font-size: 15px;
+      letter-spacing: 0.01em;
+    }
+
+    .terminal-overlay span {
+      color: rgba(247, 241, 232, 0.76);
+      font-size: 12px;
+      line-height: 1.45;
+      max-width: 38rem;
     }
 
     iframe {
@@ -276,6 +482,89 @@
     .hint {
       color: var(--muted);
       font-size: 12px;
+    }
+
+    /* Dropdown menus */
+    .dropdown {
+      position: relative;
+    }
+
+    .dropdown summary {
+      list-style: none;
+      cursor: pointer;
+    }
+
+    .dropdown summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .dropdown summary::after {
+      content: "";
+      display: inline-block;
+      width: 0;
+      height: 0;
+      margin-left: 8px;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--muted);
+      transition: transform 140ms ease;
+    }
+
+    .dropdown[open] summary::after {
+      transform: rotate(180deg);
+    }
+
+    .dropdown-menu {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      box-shadow: 0 12px 32px rgba(63, 45, 25, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: 6px;
+      min-width: 190px;
+      padding: 4px;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 2px);
+      z-index: 40;
+    }
+
+    .dropdown-menu button,
+    .dropdown-menu a.button {
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      font: 600 13px/1 "Avenir Next", "Segoe UI", sans-serif;
+      gap: 8px;
+      justify-content: flex-start;
+      padding: 10px 12px;
+      text-align: left;
+      text-decoration: none;
+      transition: background 100ms ease;
+      white-space: nowrap;
+      width: 100%;
+    }
+
+    .dropdown-menu button:hover,
+    .dropdown-menu a.button:hover {
+      background: var(--control);
+      transform: none;
+    }
+
+    .dropdown-menu button:active,
+    .dropdown-menu a.button:active {
+      background: var(--control-strong);
+    }
+
+    .dropdown-menu .divider {
+      border-top: 1px solid var(--border);
+      margin: 2px 8px;
     }
 
     @media (max-width: 760px) {
@@ -293,6 +582,15 @@
         border-radius: var(--panel-radius);
       }
 
+      .toolbar-primary,
+      .controls {
+        width: 100%;
+      }
+
+      .toolbar-primary {
+        justify-content: space-between;
+      }
+
       .controls {
         justify-content: flex-start;
       }
@@ -301,18 +599,114 @@
         min-height: 70vh;
       }
     }
+
+    /* Layout presets for Split Mode */
+    .layout-presets-wrapper {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .layout-preset-btn {
+      background: var(--button-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      padding: 6px 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    .layout-preset-btn:hover {
+      background: var(--button-bg-strong);
+      transform: translateY(-1px);
+    }
+
+    .layout-preset-btn.active {
+      background: var(--accent);
+      border-color: transparent;
+    }
+
+    .mini-preview {
+      width: 22px;
+      height: 16px;
+      display: grid;
+      gap: 1px;
+      background: transparent;
+    }
+
+    .mini-preview-cell {
+      background: var(--ink);
+      opacity: 0.35;
+      border-radius: 1px;
+      transition: background 140ms ease, opacity 140ms ease;
+    }
+
+    .layout-preset-btn:hover .mini-preview-cell {
+      opacity: 0.6;
+    }
+
+    .layout-preset-btn.active .mini-preview-cell {
+      background: var(--active-btn-ink);
+      opacity: 0.8;
+    }
+
+    .layout-preset-btn.active .mini-preview-cell:first-child {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
   <main class="shell">
     <section class="toolbar" aria-label="Terminal settings">
-      <div class="brand">
-        <strong>Fly Terminal</strong>
-        <span id="status">Тема сохраняется в этом браузере</span>
+      <div class="toolbar-primary">
+        <div class="brand">
+          <strong>Fly Terminal</strong>
+          <span id="status">Browser-first терминал без локального SSH-клиента</span>
+        </div>
+        <div class="session-meta" aria-label="Terminal session details">
+          <span class="badge badge-neutral" id="sessionState">Подключение</span>
+        </div>
       </div>
       <div class="controls">
-        <button type="button" id="copySelection">Скопировать</button>
-        <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">В отдельном окне</a>
+        <div class="view-switch" aria-label="Режим отображения">
+          <button type="button" id="viewTabs" class="active" title="Вкладки">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M2 7h12"/></svg>
+            Вкладки
+          </button>
+          <button type="button" id="viewSplit" title="Сплит">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M8 2v12M2 8h12"/></svg>
+            Сплит
+          </button>
+        </div>
+        <div id="splitLayoutContainer" class="layout-presets-wrapper" style="display: none;">
+          <span class="hint" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-left: 4px;">Макет:</span>
+          <div id="splitLayoutPresets" style="display: inline-flex; gap: 4px; background: var(--control); border: 1px solid var(--border); border-radius: var(--control-radius); padding: 3px;">
+            <!-- Будет заполнено динамически в JS -->
+          </div>
+        </div>
+        <button type="button" id="addTab">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>
+          Новая вкладка
+        </button>
+        <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
+          Новое окно
+        </a>
+        <button type="button" id="reloadSession" title="Переподключить активную вкладку">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 11.5-2.5M14 8a6 6 0 0 1-11.5 2.5"/><path d="M13.5 2v3.5H10M2.5 14v-3.5H6"/></svg>
+          Переподключить
+        </button>
+        <button type="button" id="focusTerminal" title="Вернуть фокус в терминал">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>
+          Фокус
+        </button>
+        <button type="button" id="copySelection" title="Скопировать выделенный текст">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="10" height="12" rx="1"/><path d="M2 5v9a1 1 0 0 0 1 1h7"/></svg>
+          Копировать
+        </button>
         <details class="settings">
           <summary class="button">Настройки</summary>
           <div class="settings-panel">
@@ -330,11 +724,10 @@
                 <button type="button" data-theme="nord"></button>
                 <button type="button" data-theme="forest"></button>
               </div>
-              <span class="settings-note">Пять светлых и пять темных пресетов. Все палитры нейтральные и рассчитаны на рабочее использование.</span>
             </div>
 
             <div class="settings-row">
-              <label for="fontSize">Размер текста</label>
+              <label for="fontSize">Размер</label>
               <select id="fontSize"></select>
             </div>
 
@@ -347,20 +740,16 @@
       </div>
     </section>
 
-    <section class="terminal" aria-label="Web terminal">
-      <iframe id="terminalFrame" title="Web terminal" allow="clipboard-read; clipboard-write"></iframe>
-    </section>
+    <nav class="tab-bar" id="tabBar"></nav>
+
+    <section class="terminal-container mode-tabs" id="terminalContainer"></section>
   </main>
 
   <script>
     const STORAGE_KEY = "fly-terminal-preferences-v2";
-    const SESSION_KEY = "fly-terminal-session-id-v1";
+    const SESSIONS_STORE_KEY = "fly-terminal-active-sessions-v1";
     const FRAME_STYLE_ID = "fly-terminal-frame-style";
-    const FRAME_BINDING_KEY = "__flyTerminalConfigured";
-    const FRAME_WHEEL_HANDLER_KEY = "__flyTerminalWheelHandlerConfigured";
-    const FRAME_DOC_WHEEL_HANDLER_KEY = "__flyTerminalDocWheelHandlerConfigured";
-    const FRAME_VIEWPORT_WHEEL_HANDLER_KEY = "__flyTerminalViewportWheelHandlerConfigured";
-    const FRAME_IFRAME_WHEEL_HANDLER_KEY = "__flyTerminalIframeWheelHandlerConfigured";
+    
     const fontFamilies = [
       { label: "Menlo", value: "Menlo, monospace" },
       { label: "Monaco", value: "Monaco, monospace" },
@@ -370,7 +759,7 @@
       { label: "SF Mono", value: "SFMono-Regular, SF Mono, Menlo, monospace" },
       { label: "Monospace", value: "monospace" }
     ];
-    const fontSizes = [8, 9, 10, 11, 12, 13, 14];
+    const fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16];
 
     const themes = {
       paper: {
@@ -386,7 +775,7 @@
           control: "rgba(255, 255, 255, 0.5)",
           controlStrong: "rgba(255, 255, 255, 0.78)",
           ink: "#27221d",
-          muted: "#766c60",
+          muted: "#50463b",
           accent: "#c65f2f",
           border: "rgba(67, 54, 41, 0.16)",
           focus: "rgba(198, 95, 47, 0.45)",
@@ -465,43 +854,49 @@
         label: "Ledger",
         mode: "light",
         shell: {
-          bgStart: "#eef3f7",
-          bgEnd: "#d4dde7",
-          glowA: "rgba(71, 104, 138, 0.14)",
-          glowB: "rgba(108, 130, 104, 0.1)",
-          panel: "rgba(248, 251, 253, 0.86)",
-          panelSolid: "rgba(248, 251, 253, 0.98)",
-          control: "rgba(255, 255, 255, 0.58)",
-          controlStrong: "rgba(255, 255, 255, 0.86)",
-          ink: "#1f2a34",
-          muted: "#61717f",
-          accent: "#4a6988",
-          border: "rgba(69, 89, 108, 0.16)",
-          focus: "rgba(74, 105, 136, 0.38)",
-          terminalShell: "#dfe7ef",
-          terminalEdge: "rgba(73, 97, 118, 0.18)",
-          shadow: "0 24px 80px rgba(42, 60, 77, 0.16)"
+          bgStart: "#fbfbfb",
+          bgEnd: "#f1f3f1",
+          glowA: "rgba(130, 191, 0, 0.1)",
+          glowB: "rgba(72, 90, 89, 0.08)",
+          panel: "rgba(255, 255, 255, 0.9)",
+          panelSolid: "rgba(255, 255, 255, 0.98)",
+          control: "#000000",
+          controlStrong: "#141414",
+          buttonBg: "#000000",
+          buttonBgStrong: "#141414",
+          buttonInk: "#ffffff",
+          ink: "#1d2423",
+          muted: "#64706f",
+          accent: "#82BF00",
+          activeButtonInk: "#000000",
+          border: "#F4F4F4",
+          focus: "rgba(130, 191, 0, 0.34)",
+          terminalShell: "#ffffff",
+          terminalEdge: "#F4F4F4",
+          terminalTopbarBg: "#485A59",
+          terminalTopbarInk: "#f7f1e8",
+          shadow: "0 24px 80px rgba(72, 90, 89, 0.12)"
         },
         colors: {
-          background: "#f3f6fa",
-          foreground: "#1f2a34",
-          cursor: "#4a6988",
-          selectionBackground: "#d8e2ec",
-          black: "#1f2a34",
-          red: "#a44f54",
-          green: "#57735e",
-          yellow: "#8e7940",
-          blue: "#4a6988",
-          magenta: "#6e628e",
-          cyan: "#4e7d88",
-          white: "#edf3f8",
-          brightBlack: "#60707e",
-          brightRed: "#bb6468",
-          brightGreen: "#6f8d76",
-          brightYellow: "#a58f52",
-          brightBlue: "#6287ab",
-          brightMagenta: "#8777a5",
-          brightCyan: "#679aa4",
+          background: "#ffffff",
+          foreground: "#1d2423",
+          cursor: "#82BF00",
+          selectionBackground: "#F4F4F4",
+          black: "#1d2423",
+          red: "#b45454",
+          green: "#82BF00",
+          yellow: "#8d8d42",
+          blue: "#485A59",
+          magenta: "#6f5d7d",
+          cyan: "#4d7f79",
+          white: "#f4f4f4",
+          brightBlack: "#667170",
+          brightRed: "#cb6a6a",
+          brightGreen: "#98d61d",
+          brightYellow: "#a7a754",
+          brightBlue: "#607877",
+          brightMagenta: "#877194",
+          brightCyan: "#65948f",
           brightWhite: "#ffffff"
         }
       },
@@ -518,7 +913,7 @@
           control: "rgba(255, 255, 255, 0.62)",
           controlStrong: "rgba(255, 255, 255, 0.84)",
           ink: "#203034",
-          muted: "#5f7277",
+          muted: "#455355",
           accent: "#3f6f77",
           border: "rgba(66, 93, 99, 0.16)",
           focus: "rgba(63, 111, 119, 0.38)",
@@ -562,7 +957,7 @@
           control: "rgba(255, 255, 255, 0.58)",
           controlStrong: "rgba(255, 255, 255, 0.84)",
           ink: "#273026",
-          muted: "#667062",
+          muted: "#48513f",
           accent: "#627c59",
           border: "rgba(73, 83, 67, 0.16)",
           focus: "rgba(98, 124, 89, 0.38)",
@@ -605,9 +1000,12 @@
           panelSolid: "rgba(29, 33, 38, 0.98)",
           control: "rgba(255, 255, 255, 0.06)",
           controlStrong: "rgba(255, 255, 255, 0.12)",
+          buttonBg: "rgba(255, 255, 255, 0.12)",
+          buttonBgStrong: "rgba(255, 255, 255, 0.2)",
           ink: "#e8e3da",
           muted: "#9b9486",
           accent: "#f2b366",
+          activeButtonInk: "#000000",
           border: "rgba(230, 224, 212, 0.12)",
           focus: "rgba(242, 179, 102, 0.35)",
           terminalShell: "#121418",
@@ -649,9 +1047,12 @@
           panelSolid: "rgba(18, 24, 31, 0.98)",
           control: "rgba(255, 255, 255, 0.05)",
           controlStrong: "rgba(255, 255, 255, 0.11)",
+          buttonBg: "rgba(255, 255, 255, 0.11)",
+          buttonBgStrong: "rgba(255, 255, 255, 0.2)",
           ink: "#dfe7f1",
           muted: "#96a5b5",
           accent: "#6b90b5",
+          activeButtonInk: "#000000",
           border: "rgba(223, 231, 241, 0.12)",
           focus: "rgba(107, 144, 181, 0.34)",
           terminalShell: "#0d1116",
@@ -693,9 +1094,12 @@
           panelSolid: "rgba(20, 27, 41, 0.98)",
           control: "rgba(255, 255, 255, 0.06)",
           controlStrong: "rgba(255, 255, 255, 0.12)",
+          buttonBg: "rgba(255, 255, 255, 0.12)",
+          buttonBgStrong: "rgba(255, 255, 255, 0.2)",
           ink: "#dbe6ff",
           muted: "#97a5c6",
           accent: "#8cb4ff",
+          activeButtonInk: "#000000",
           border: "rgba(219, 230, 255, 0.11)",
           focus: "rgba(140, 180, 255, 0.35)",
           terminalShell: "#0d1320",
@@ -737,9 +1141,12 @@
           panelSolid: "rgba(50, 59, 72, 0.98)",
           control: "rgba(255, 255, 255, 0.06)",
           controlStrong: "rgba(255, 255, 255, 0.11)",
+          buttonBg: "rgba(255, 255, 255, 0.11)",
+          buttonBgStrong: "rgba(255, 255, 255, 0.2)",
           ink: "#edf1f7",
           muted: "#b4bcc7",
           accent: "#88c0d0",
+          activeButtonInk: "#000000",
           border: "rgba(236, 239, 244, 0.12)",
           focus: "rgba(136, 192, 208, 0.34)",
           terminalShell: "#2b313b",
@@ -781,9 +1188,12 @@
           panelSolid: "rgba(20, 33, 23, 0.98)",
           control: "rgba(255, 255, 255, 0.05)",
           controlStrong: "rgba(255, 255, 255, 0.11)",
+          buttonBg: "rgba(255, 255, 255, 0.11)",
+          buttonBgStrong: "rgba(255, 255, 255, 0.2)",
           ink: "#ddebd4",
           muted: "#9db09a",
           accent: "#92d17d",
+          activeButtonInk: "#000000",
           border: "rgba(221, 235, 212, 0.1)",
           focus: "rgba(146, 209, 125, 0.34)",
           terminalShell: "#0f1d14",
@@ -815,76 +1225,200 @@
       }
     };
 
-    const frame = document.getElementById("terminalFrame");
-    const copySelectionButton = document.getElementById("copySelection");
-    const directLink = document.getElementById("directLink");
+    // UI Elements
+    const tabBar = document.getElementById("tabBar");
+    const terminalContainer = document.getElementById("terminalContainer");
     const status = document.getElementById("status");
-    const buttons = Array.from(document.querySelectorAll("[data-theme]"));
+    const sessionState = document.getElementById("sessionState");
     const fontSizeSelect = document.getElementById("fontSize");
     const fontFamilySelect = document.getElementById("fontFamily");
-    const defaultFontFamily = fontFamilies[0].value;
+    const themeButtons = Array.from(document.querySelectorAll("[data-theme]"));
+    const splitLayoutContainer = document.getElementById("splitLayoutContainer");
+    const splitLayoutPresets = document.getElementById("splitLayoutPresets");
+    
+    // Buttons
+    const addTabBtn = document.getElementById("addTab");
+    const reloadActiveBtn = document.getElementById("reloadSession");
+    const focusTerminalBtn = document.getElementById("focusTerminal");
+    const copySelectionBtn = document.getElementById("copySelection");
+    const viewTabsBtn = document.getElementById("viewTabs");
+    const viewSplitBtn = document.getElementById("viewSplit");
+    const directLink = document.getElementById("directLink");
+
+    // State
+    let tabs = []; // { id, sessionId, label, customLabel, active, wrapper }
+    let activeTabId = null;
+    let viewMode = 'tabs'; // 'tabs' or 'split'
+    let preferences = readPreferences();
     let statusResetTimer = null;
 
-    const statusText = () => {
-      const fontFamilyLabel = fontFamilies.find((family) => family.value === preferences.fontFamily)?.label || "Custom";
-      const theme = themes[preferences.theme];
-      return `${theme.label} (${theme.mode === "light" ? "light" : "dark"}), ${preferences.fontSize}px, ${fontFamilyLabel}. Сохранено для следующей сессии.`;
-    };
+    function createId() { return Math.random().toString(36).substr(2, 9); }
+    function createSessionId() { return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-"); }
 
-    const setStatusText = (message, duration = 0) => {
-      status.textContent = message;
-      if (statusResetTimer) {
-        clearTimeout(statusResetTimer);
-        statusResetTimer = null;
-      }
-      if (duration > 0) {
-        statusResetTimer = window.setTimeout(() => {
-          status.textContent = statusText();
-          statusResetTimer = null;
-        }, duration);
-      }
-    };
-
-    const normalizePreferences = (raw) => {
-      const theme = themes[raw.theme] ? raw.theme : "paper";
-      const fontSize = fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12;
-      const fontFamily = fontFamilies.some((family) => family.value === raw.fontFamily) ? raw.fontFamily : defaultFontFamily;
-      return { theme, fontSize, fontFamily };
-    };
-
-    const readPreferences = () => {
+    function readPreferences() {
       try {
-        return normalizePreferences(JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
+        const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        const validLayouts = ["grid", "columns", "rows", "master-left", "master-top"];
+        return {
+          theme: themes[raw.theme] ? raw.theme : "paper",
+          fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
+          fontFamily: fontFamilies.some(f => f.value === raw.fontFamily) ? raw.fontFamily : fontFamilies[0].value,
+          splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid"
+        };
       } catch {
-        return { theme: "paper", fontSize: 12, fontFamily: defaultFontFamily };
+        return { theme: "paper", fontSize: 12, fontFamily: fontFamilies[0].value, splitLayout: "grid" };
       }
-    };
-
-    const createSessionId = () => {
-      return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-");
-    };
-
-    const readSessionId = () => {
-      const existing = sessionStorage.getItem(SESSION_KEY);
-      if (existing) {
-        return existing;
-      }
-
-      const created = createSessionId();
-      sessionStorage.setItem(SESSION_KEY, created);
-      return created;
-    };
-
-    let preferences = readPreferences();
-    const preset = new URLSearchParams(window.location.search).get("preset");
-    if (preset && themes[preset]) {
-      preferences.theme = preset;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-      window.history.replaceState(null, "", window.location.pathname);
     }
 
-    const buildTerminalUrl = (sessionId = readSessionId()) => {
-      const theme = themes[preferences.theme] || themes.paper;
+    function savePreferences() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      applyAllThemes();
+    }
+
+    function setStatusText(message, duration = 0) {
+      status.textContent = message;
+      if (statusResetTimer) clearTimeout(statusResetTimer);
+      if (duration > 0) {
+        statusResetTimer = setTimeout(() => {
+          const theme = themes[preferences.theme];
+          status.textContent = `${theme.label}, ${preferences.fontSize}px. ${tabs.length} сессий.`;
+        }, duration);
+      }
+    }
+
+    function getLayoutStyles(layout, N) {
+      const container = { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' };
+      const items = Array.from({ length: N }, () => ({ gridRow: 'auto', gridColumn: 'auto' }));
+      
+      if (N <= 1) {
+        return { container, items };
+      }
+      
+      if (layout === 'grid') {
+        const cols = Math.ceil(Math.sqrt(N));
+        const rows = Math.ceil(N / cols);
+        container.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        container.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      } else if (layout === 'columns') {
+        container.gridTemplateColumns = `repeat(${N}, 1fr)`;
+        container.gridTemplateRows = '1fr';
+      } else if (layout === 'rows') {
+        container.gridTemplateColumns = '1fr';
+        container.gridTemplateRows = `repeat(${N}, 1fr)`;
+      } else if (layout === 'master-left') {
+        container.gridTemplateColumns = '2fr 1fr';
+        container.gridTemplateRows = `repeat(${N - 1}, 1fr)`;
+        items[0].gridRow = `1 / span ${N - 1}`;
+        items[0].gridColumn = '1';
+        for (let i = 1; i < N; i++) {
+          items[i].gridColumn = '2';
+          items[i].gridRow = 'auto';
+        }
+      } else if (layout === 'master-top') {
+        container.gridTemplateColumns = `repeat(${N - 1}, 1fr)`;
+        container.gridTemplateRows = '2fr 1fr';
+        items[0].gridColumn = `1 / span ${N - 1}`;
+        items[0].gridRow = '1';
+        for (let i = 1; i < N; i++) {
+          items[i].gridRow = '2';
+          items[i].gridColumn = 'auto';
+        }
+      }
+      
+      return { container, items };
+    }
+
+    function createMiniPreviewHtml(layout, N) {
+      const styles = getLayoutStyles(layout, N);
+      let cellsHtml = '';
+      for (let i = 0; i < N; i++) {
+        const itemStyle = styles.items[i];
+        const styleAttr = `grid-row: ${itemStyle.gridRow}; grid-column: ${itemStyle.gridColumn};`;
+        cellsHtml += `<div class="mini-preview-cell" style="${styleAttr}"></div>`;
+      }
+      const containerStyle = `grid-template-columns: ${styles.container.gridTemplateColumns}; grid-template-rows: ${styles.container.gridTemplateRows};`;
+      return `
+        <div class="mini-preview" style="${containerStyle}">
+          ${cellsHtml}
+        </div>
+      `;
+    }
+
+    function renderSplitLayoutPresets() {
+      const N = tabs.length;
+      if (N <= 1) {
+        splitLayoutContainer.style.display = 'none';
+        return;
+      }
+      
+      if (viewMode === 'split') {
+        splitLayoutContainer.style.display = 'inline-flex';
+      } else {
+        splitLayoutContainer.style.display = 'none';
+      }
+      
+      const presets = [
+        { id: 'grid', title: 'Сетка' },
+        { id: 'columns', title: 'Колонки' },
+        { id: 'rows', title: 'Строки' },
+        { id: 'master-left', title: 'Главный слева' },
+        { id: 'master-top', title: 'Главный сверху' }
+      ];
+      
+      splitLayoutPresets.innerHTML = '';
+      
+      presets.forEach(preset => {
+        const activeLayout = preferences.splitLayout || 'grid';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `layout-preset-btn ${preset.id === activeLayout ? 'active' : ''}`;
+        button.title = preset.title;
+        button.innerHTML = createMiniPreviewHtml(preset.id, N);
+        button.onclick = () => {
+          preferences.splitLayout = preset.id;
+          savePreferences();
+          renderSplitLayoutPresets();
+          applySplitLayout();
+        };
+        splitLayoutPresets.appendChild(button);
+      });
+    }
+
+    function applySplitLayout() {
+      if (viewMode !== 'split') {
+        terminalContainer.style.display = '';
+        terminalContainer.style.gridTemplateColumns = '';
+        terminalContainer.style.gridTemplateRows = '';
+        tabs.forEach(tab => {
+          tab.wrapper.style.gridRow = '';
+          tab.wrapper.style.gridColumn = '';
+        });
+        return;
+      }
+      
+      const N = tabs.length;
+      const layout = preferences.splitLayout || 'grid';
+      
+      const styles = getLayoutStyles(layout, N);
+      
+      terminalContainer.style.display = 'grid';
+      terminalContainer.style.gridTemplateColumns = styles.container.gridTemplateColumns;
+      terminalContainer.style.gridTemplateRows = styles.container.gridTemplateRows;
+      
+      tabs.forEach((tab, index) => {
+        const itemStyle = styles.items[index];
+        if (itemStyle) {
+          tab.wrapper.style.gridRow = itemStyle.gridRow;
+          tab.wrapper.style.gridColumn = itemStyle.gridColumn;
+        } else {
+          tab.wrapper.style.gridRow = '';
+          tab.wrapper.style.gridColumn = '';
+        }
+      });
+    }
+
+    function buildTerminalUrl(sessionId) {
+      const theme = themes[preferences.theme];
       const params = new URLSearchParams();
       params.set("arg", sessionId);
       params.set("theme", JSON.stringify(theme.colors));
@@ -893,10 +1427,14 @@
       params.set("cursorBlink", "true");
       params.set("disableLeaveAlert", "true");
       return `/terminal/?${params.toString()}`;
-    };
+    }
 
-    const applyShellTheme = () => {
-      const theme = themes[preferences.theme] || themes.paper;
+    function refreshDirectLink() {
+      directLink.href = buildTerminalUrl(createSessionId());
+    }
+
+    function applyShellTheme() {
+      const theme = themes[preferences.theme];
       const root = document.documentElement.style;
       root.setProperty("--bg-start", theme.shell.bgStart);
       root.setProperty("--bg-end", theme.shell.bgEnd);
@@ -906,6 +1444,9 @@
       root.setProperty("--panel-solid", theme.shell.panelSolid);
       root.setProperty("--control", theme.shell.control);
       root.setProperty("--control-strong", theme.shell.controlStrong);
+      root.setProperty("--button-bg", theme.shell.buttonBg || theme.shell.control);
+      root.setProperty("--button-bg-strong", theme.shell.buttonBgStrong || theme.shell.controlStrong);
+      root.setProperty("--button-ink", theme.shell.buttonInk || theme.shell.ink);
       root.setProperty("--ink", theme.shell.ink);
       root.setProperty("--muted", theme.shell.muted);
       root.setProperty("--accent", theme.shell.accent);
@@ -913,246 +1454,237 @@
       root.setProperty("--focus", theme.shell.focus);
       root.setProperty("--terminal-shell", theme.shell.terminalShell);
       root.setProperty("--terminal-edge", theme.shell.terminalEdge);
+      root.setProperty("--terminal-topbar-bg", theme.shell.terminalTopbarBg || "rgba(0, 0, 0, 0.18)");
+      root.setProperty("--terminal-topbar-ink", theme.shell.terminalTopbarInk || theme.shell.ink);
+      root.setProperty("--select-bg", theme.mode === "light" ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.15)");
+      root.setProperty("--badge-bg", theme.mode === "light" ? "rgba(255, 255, 255, 0.44)" : "rgba(255, 255, 255, 0.15)");
+      root.setProperty("--active-btn-ink", theme.shell.activeButtonInk || "#fff8eb");
       root.setProperty("--shadow", theme.shell.shadow);
-    };
+      root.setProperty("--ok", theme.mode === "light" ? "#2f7a52" : "#7fc598");
+      root.setProperty("--warn", theme.mode === "light" ? "#a66d27" : "#e7c384");
+      root.setProperty("--danger", theme.mode === "light" ? "#9f4d46" : "#ef8d8d");
+      
+      themeButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.theme === preferences.theme));
+    }
 
-    const focusEmbeddedTerminal = () => {
+    function syncIframe(iframe) {
       try {
-        const textarea = frame.contentDocument?.querySelector(".xterm-helper-textarea");
-        textarea?.focus({ preventScroll: true });
-      } catch {
-        // ignore cross-document or transient iframe states
+        const doc = iframe.contentDocument;
+        const theme = themes[preferences.theme];
+        if (!doc) return;
+        let style = doc.getElementById(FRAME_STYLE_ID);
+        if (!style) {
+          style = doc.createElement("style");
+          style.id = FRAME_STYLE_ID;
+          doc.head.appendChild(style);
+        }
+        style.textContent = `
+          html, body { background: ${theme.colors.background} !important; overflow: hidden !important; }
+          #terminal-container, .terminal, .xterm, .xterm-screen, .xterm-viewport { background: ${theme.colors.background} !important; }
+          #terminal-container { padding: 0 !important; height: 100% !important; width: 100% !important; max-width: none !important; }
+          .xterm-viewport { scrollbar-width: thin; scrollbar-color: ${theme.colors.brightBlack} ${theme.colors.background}; }
+        `;
+      } catch (e) {}
+    }
+
+    function applyAllThemes() {
+      applyShellTheme();
+      tabs.forEach(tab => {
+        const iframe = tab.wrapper.querySelector("iframe");
+        if (iframe) syncIframe(iframe);
+      });
+    }
+
+    function addTab(sessionId = null, label = "Terminal") {
+      const id = createId();
+      // Ensure we don't accidentally reuse a session ID if it's already open
+      let sId = sessionId;
+      if (!sId || tabs.some(t => t.sessionId === sId)) {
+        sId = createSessionId();
       }
-    };
+      
+      const wrapper = document.createElement("div");
+      wrapper.className = "terminal-frame-wrapper";
+      wrapper.id = `wrapper-${id}`;
+      wrapper.innerHTML = `
+        <div class="terminal-topbar">
+          <div class="terminal-heading">
+            <strong class="tab-label-text">${label}</strong>
+            <span class="tab-subtext">${sId.slice(0, 8)}...</span>
+          </div>
+        </div>
+        <div class="terminal-stage">
+          <iframe src="${buildTerminalUrl(sId)}" allow="clipboard-read; clipboard-write"></iframe>
+        </div>
+      `;
+      
+      const tab = { id, sessionId: sId, label, customLabel: null, wrapper };
+      tabs.push(tab);
+      terminalContainer.appendChild(wrapper);
+      
+      // Handle activation on click/hover for Split Mode
+      wrapper.addEventListener('mousedown', () => switchTab(id));
+      wrapper.addEventListener('mouseenter', () => {
+        if (viewMode === 'split') switchTab(id);
+      });
 
-    const getEmbeddedViewport = () => {
-      try {
-        return frame.contentDocument?.querySelector(".xterm-viewport") || null;
-      } catch {
-        return null;
+      const iframe = wrapper.querySelector("iframe");
+      iframe.addEventListener("load", () => {
+        syncIframe(iframe);
+        setSessionState("badge-ok", "Готово");
+      });
+
+      renderTabs();
+      switchTab(id);
+      renderSplitLayoutPresets();
+      applySplitLayout();
+      saveSessions();
+      return tab;
+    }
+
+    function switchTab(id) {
+      if (!id) return;
+      activeTabId = id;
+      tabs.forEach(t => {
+        const isActive = (t.id === id);
+        t.active = isActive;
+        t.wrapper.classList.toggle("active", isActive);
+      });
+      renderTabs();
+      
+      const activeTab = tabs.find(t => t.id === id);
+      if (activeTab) {
+        const iframe = activeTab.wrapper.querySelector("iframe");
+        // Try focusing the xterm textarea specifically
+        try {
+          iframe?.contentWindow?.focus();
+          const textarea = iframe?.contentDocument?.querySelector(".xterm-helper-textarea");
+          textarea?.focus({ preventScroll: true });
+        } catch(e) {}
       }
-    };
+    }
 
-    const getEmbeddedTerm = () => {
-      try {
-        return frame.contentWindow?.term || null;
-      } catch {
-        return null;
-      }
-    };
+    async function closeTab(id, event) {
+      if (event) event.stopPropagation();
+      const index = tabs.findIndex(t => t.id === id);
+      if (index === -1) return;
+      
+      const tab = tabs[index];
+      // Optional: terminate session on backend
+      fetch("/api/session/terminate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: tab.sessionId })
+      }).catch(() => {});
 
-    const getEmbeddedRowHeight = (doc) => {
-      const sampleRow = doc?.querySelector(".xterm-rows > div");
-      if (!sampleRow) {
-        return 18;
-      }
-
-      const lineHeight = Number.parseFloat(getComputedStyle(sampleRow).lineHeight);
-      return Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 18;
-    };
-
-    const getWheelPixels = (event, viewport) => {
-      const doc = frame.contentDocument;
-      let pixels = event.deltaY;
-      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-        pixels *= getEmbeddedRowHeight(doc);
-      } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
-        pixels *= Math.max(viewport?.clientHeight || 0, getEmbeddedRowHeight(doc));
-      }
-      return pixels;
-    };
-
-    const scrollEmbeddedTerminal = (event) => {
-      const viewport = getEmbeddedViewport();
-      if (!viewport) {
-        return false;
-      }
-
-      const pixels = getWheelPixels(event, viewport);
-      if (!pixels) {
-        return false;
-      }
-
-      focusEmbeddedTerminal();
-      const term = getEmbeddedTerm();
-      const rowHeight = getEmbeddedRowHeight(frame.contentDocument);
-      const lineDelta = Math.round(pixels / Math.max(rowHeight, 1));
-
-      if (term && typeof term.scrollLines === "function" && lineDelta) {
-        term.scrollLines(lineDelta);
+      tab.wrapper.remove();
+      tabs.splice(index, 1);
+      
+      if (tabs.length === 0) {
+        addTab();
+      } else if (activeTabId === id) {
+        switchTab(tabs[Math.max(0, index - 1)].id);
       } else {
-        viewport.scrollTop += pixels;
+        renderTabs();
       }
+      renderSplitLayoutPresets();
+      applySplitLayout();
+      saveSessions();
+    }
 
-      return true;
-    };
-
-    const handleEmbeddedWheel = (event) => {
-      if (!scrollEmbeddedTerminal(event)) {
-        return;
+    function renameTab(id) {
+      const tab = tabs.find(t => t.id === id);
+      if (!tab) return;
+      const newName = prompt("Введите имя вкладки:", tab.customLabel || tab.label);
+      if (newName !== null) {
+        tab.customLabel = newName || null;
+        renderTabs();
+        saveSessions();
       }
+    }
 
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      event.stopPropagation();
-    };
+    function renderTabs() {
+      tabBar.innerHTML = "";
+      tabs.forEach(t => {
+        const btn = document.createElement("div");
+        btn.className = `tab ${t.id === activeTabId ? 'active' : ''}`;
+        btn.innerHTML = `
+          <span class="tab-name">${t.customLabel || t.label}</span>
+          <span class="tab-close" title="Закрыть">✕</span>
+        `;
+        btn.onclick = () => switchTab(t.id);
+        btn.ondblclick = (e) => { e.stopPropagation(); renameTab(t.id); };
+        btn.querySelector(".tab-close").onclick = (e) => closeTab(t.id, e);
+        tabBar.appendChild(btn);
+      });
+    }
 
-    const bindEmbeddedDocumentWheelHandler = (doc) => {
+    function setViewMode(mode) {
+      viewMode = mode;
+      terminalContainer.className = `terminal-container mode-${mode}`;
+      viewTabsBtn.classList.toggle("active", mode === 'tabs');
+      viewSplitBtn.classList.toggle("active", mode === 'split');
+      if (mode === 'tabs' && activeTabId) switchTab(activeTabId);
+      renderSplitLayoutPresets();
+      applySplitLayout();
+    }
+
+    async function updateTabLabels() {
+      for (const tab of tabs) {
+        try {
+          const res = await fetch("/api/session/info", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: tab.sessionId })
+          });
+          const data = await res.json();
+          if (data.ok && data.cwd) {
+            const parts = data.cwd.split("/");
+            tab.label = parts[parts.length - 1] || "/";
+            const labelEl = tab.wrapper.querySelector(".tab-label-text");
+            if (labelEl) labelEl.textContent = tab.customLabel || tab.label;
+          }
+        } catch (e) {}
+      }
+      renderTabs();
+    }
+
+    function setSessionState(tone, message) {
+      sessionState.className = `badge ${tone}`;
+      sessionState.textContent = message;
+    }
+
+    function saveSessions() {
+      const data = tabs.map(t => ({ sessionId: t.sessionId, customLabel: t.customLabel }));
+      sessionStorage.setItem(SESSIONS_STORE_KEY, JSON.stringify(data));
+    }
+
+    function loadSessions() {
       try {
-        if (!doc || doc[FRAME_DOC_WHEEL_HANDLER_KEY]) {
-          return false;
-        }
-
-        doc[FRAME_DOC_WHEEL_HANDLER_KEY] = true;
-        doc.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const bindEmbeddedViewportWheelHandler = (viewport) => {
-      try {
-        if (!viewport || viewport[FRAME_VIEWPORT_WHEEL_HANDLER_KEY]) {
-          return false;
-        }
-
-        viewport[FRAME_VIEWPORT_WHEEL_HANDLER_KEY] = true;
-        viewport.addEventListener("wheel", handleEmbeddedWheel, { passive: false });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const bindFrameElementWheelHandler = () => {
-      try {
-        if (frame[FRAME_IFRAME_WHEEL_HANDLER_KEY]) {
-          return false;
-        }
-
-        frame[FRAME_IFRAME_WHEEL_HANDLER_KEY] = true;
-        frame.addEventListener("wheel", handleEmbeddedWheel, { passive: false, capture: true });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const bindEmbeddedTermWheelHandler = (win) => {
-      try {
-        const term = win?.term;
-        if (!term || typeof term.attachCustomWheelEventHandler !== "function") {
-          return false;
-        }
-
-        if (term[FRAME_WHEEL_HANDLER_KEY]) {
-          return true;
-        }
-
-        term[FRAME_WHEEL_HANDLER_KEY] = true;
-        term.attachCustomWheelEventHandler((event) => {
-          scrollEmbeddedTerminal(event);
-          return false;
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const scheduleEmbeddedWheelBinding = (win, attempt = 0) => {
-      const viewport = getEmbeddedViewport();
-      bindEmbeddedViewportWheelHandler(viewport);
-      bindEmbeddedTermWheelHandler(win);
-
-      if ((viewport && getEmbeddedTerm()) || attempt >= 40) {
-        return;
-      }
-
-      win.setTimeout(() => {
-        scheduleEmbeddedWheelBinding(win, attempt + 1);
-      }, 100);
-    };
-
-    const syncEmbeddedTerminal = () => {
-      try {
-        const doc = frame.contentDocument;
-        const win = frame.contentWindow;
-        const theme = themes[preferences.theme] || themes.paper;
-        if (!doc || !win) {
+        const data = JSON.parse(sessionStorage.getItem(SESSIONS_STORE_KEY));
+        if (data && Array.isArray(data) && data.length > 0) {
+          data.forEach(s => addTab(s.sessionId, s.customLabel || "Terminal"));
           return;
         }
+      } catch (e) {}
+      addTab();
+    }
 
-        let styleTag = doc.getElementById(FRAME_STYLE_ID);
-        if (!styleTag) {
-          styleTag = doc.createElement("style");
-          styleTag.id = FRAME_STYLE_ID;
-          doc.head.appendChild(styleTag);
-        }
-
-        styleTag.textContent = `
-          html, body {
-            background: ${theme.colors.background} !important;
-            overflow: hidden !important;
-          }
-          #terminal-container {
-            width: 100% !important;
-            max-width: none !important;
-            height: 100% !important;
-          }
-          #terminal-container .terminal {
-            height: 100% !important;
-            padding: 0 !important;
-            background: ${theme.colors.background} !important;
-            border-radius: 0 !important;
-          }
-          .xterm,
-          .xterm-screen,
-          .xterm-viewport {
-            background: ${theme.colors.background} !important;
-          }
-          .xterm-viewport {
-            overscroll-behavior: contain;
-            scrollbar-width: thin;
-            scrollbar-color: ${theme.colors.brightBlack} ${theme.colors.background};
-          }
-        `;
-
-        if (!win[FRAME_BINDING_KEY]) {
-          win[FRAME_BINDING_KEY] = true;
-          doc.addEventListener("pointerdown", focusEmbeddedTerminal, { passive: true });
-          doc.addEventListener("mouseenter", focusEmbeddedTerminal, true);
-        }
-
-        bindFrameElementWheelHandler();
-        bindEmbeddedDocumentWheelHandler(doc);
-        bindEmbeddedViewportWheelHandler(getEmbeddedViewport());
-        scheduleEmbeddedWheelBinding(win);
-      } catch {
-        // ignore iframe sync failures and keep terminal usable
-      }
-    };
-
-    fontSizes.forEach((size) => {
-      const option = document.createElement("option");
-      option.value = String(size);
-      option.textContent = `${size}px`;
-      fontSizeSelect.appendChild(option);
+    // Initialize Selects
+    fontSizes.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s; opt.textContent = `${s}px`;
+      fontSizeSelect.appendChild(opt);
+    });
+    fontFamilies.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.value; opt.textContent = f.label;
+      fontFamilySelect.appendChild(opt);
     });
 
-    fontFamilies.forEach((family) => {
-      const option = document.createElement("option");
-      option.value = family.value;
-      option.textContent = family.label;
-      fontFamilySelect.appendChild(option);
-    });
-
-    buttons.forEach((button) => {
+    themeButtons.forEach((button) => {
       const theme = themes[button.dataset.theme];
-      if (!theme) {
-        return;
-      }
+      if (!theme) return;
       const themeName = document.createElement("span");
       themeName.className = "theme-name";
       themeName.textContent = theme.label;
@@ -1162,93 +1694,69 @@
       button.append(themeName, themeMode);
     });
 
-    const render = () => {
-      applyShellTheme();
-      const url = buildTerminalUrl();
-      frame.src = url;
-      directLink.href = buildTerminalUrl(createSessionId());
-      buttons.forEach((button) => {
-        button.classList.toggle("active", button.dataset.theme === preferences.theme);
-      });
-      fontSizeSelect.value = String(preferences.fontSize);
-      fontFamilySelect.value = preferences.fontFamily;
-      setStatusText(statusText());
+    fontSizeSelect.value = preferences.fontSize;
+    fontFamilySelect.value = preferences.fontFamily;
+
+    // Listeners
+    addTabBtn.onclick = () => addTab();
+    directLink.onclick = (event) => {
+      event.preventDefault();
+      window.open(buildTerminalUrl(createSessionId()), "_blank", "noopener,noreferrer");
+      refreshDirectLink();
     };
-
-    const saveAndRender = () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-      render();
-    };
-
-    buttons.forEach((button) => {
-      button.addEventListener("click", () => {
-        preferences.theme = button.dataset.theme;
-        saveAndRender();
-      });
-    });
-
-    fontSizeSelect.addEventListener("change", () => {
-      const nextSize = Number(fontSizeSelect.value);
-      if (!Number.isNaN(nextSize)) {
-        preferences.fontSize = nextSize;
-        saveAndRender();
-      }
-    });
-
-    fontFamilySelect.addEventListener("change", () => {
-      preferences.fontFamily = fontFamilySelect.value;
-      saveAndRender();
-    });
-
-    const getFrameSelection = () => {
-      try {
-        return frame.contentWindow?.getSelection?.()?.toString() || "";
-      } catch {
-        return "";
+    directLink.onfocus = refreshDirectLink;
+    directLink.onpointerenter = refreshDirectLink;
+    reloadActiveBtn.onclick = () => {
+      const tab = tabs.find(t => t.id === activeTabId);
+      if (tab) {
+        const iframe = tab.wrapper.querySelector("iframe");
+        iframe.src = buildTerminalUrl(tab.sessionId);
       }
     };
+    viewTabsBtn.onclick = () => setViewMode('tabs');
+    viewSplitBtn.onclick = () => setViewMode('split');
+    
+    fontSizeSelect.onchange = () => { preferences.fontSize = Number(fontSizeSelect.value); savePreferences(); applyAllThemes(); };
+    fontFamilySelect.onchange = () => { preferences.fontFamily = fontFamilySelect.value; savePreferences(); applyAllThemes(); };
+    themeButtons.forEach(btn => btn.onclick = () => { preferences.theme = btn.dataset.theme; savePreferences(); applyAllThemes(); });
 
-    const copySelection = async () => {
-      const selection = getFrameSelection().trim();
-      if (!selection) {
-        setStatusText("Сначала выдели текст в терминале.", 2200);
-        return;
-      }
-
-      try {
+    focusTerminalBtn.onclick = () => {
+      const tab = tabs.find(t => t.id === activeTabId);
+      tab?.wrapper.querySelector("iframe")?.contentWindow?.focus();
+    };
+    
+    copySelectionBtn.onclick = async () => {
+      const tab = tabs.find(t => t.id === activeTabId);
+      const iframe = tab?.wrapper.querySelector("iframe");
+      const selection = iframe?.contentWindow?.getSelection()?.toString().trim();
+      if (selection) {
         await navigator.clipboard.writeText(selection);
-        setStatusText("Выделение скопировано.", 2200);
-      } catch {
-        try {
-          frame.contentWindow?.document?.execCommand?.("copy");
-          setStatusText("Выделение скопировано.", 2200);
-        } catch {
-          setStatusText("Браузер не дал доступ к буферу обмена.", 2600);
+        setStatusText("Скопировано", 2000);
+      }
+    };
+
+    // Auto-switch on resize
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        if (entry.contentRect.width < 700 && viewMode === 'split') {
+          setViewMode('tabs');
+          setStatusText("Авто-переключение во вкладки (узкое окно)", 3000);
         }
       }
-    };
-
-    copySelectionButton.addEventListener("click", () => {
-      copySelection();
     });
+    resizeObserver.observe(document.body);
 
-    directLink.addEventListener("click", () => {
-      directLink.href = buildTerminalUrl(createSessionId());
+    // Initial load
+    applyShellTheme();
+    refreshDirectLink();
+    loadSessions();
+    setInterval(updateTabLabels, 10000);
+
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('.settings[open]').forEach((details) => {
+        if (!details.contains(e.target)) details.removeAttribute('open');
+      });
     });
-
-    window.addEventListener("keydown", (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "c") {
-        event.preventDefault();
-        copySelection();
-      }
-    });
-
-    frame.addEventListener("load", () => {
-      syncEmbeddedTerminal();
-      focusEmbeddedTerminal();
-    });
-
-    render();
   </script>
 </body>
 </html>

@@ -15,7 +15,7 @@ Open the `Настройки` menu in the toolbar and use:
 - color schemes with a balanced `50/50` split:
   - light: `Paper`, `Linen`, `Ledger`, `Harbor`, `Sage`
   - dark: `Graphite`, `Ink`, `Midnight`, `Nord`, `Forest`
-- font sizes from `8px` to `14px`
+- font sizes from `8px` to `16px`
 - font families such as `Menlo`, `Monaco`, `Courier New`, `Andale Mono`, `Consolas`, `SF Mono`
 
 The choice is saved in browser `localStorage`, so the same browser opens the next session with the last selected theme, font size, and font family. The selected preset also drives the embedded ttyd/xterm colors.
@@ -60,7 +60,7 @@ This keeps the terminal state attached to the same `tmux` session instead of cre
 
 ## Mouse wheel
 
-The container keeps `/etc/tmux.conf` with mouse mode disabled. The shell UI overrides the embedded ttyd wheel path on several levels: direct xterm hook when available, iframe/document `wheel` listeners, and a `.xterm-viewport` fallback. The xterm hook always returns `false` after scrolling, so ttyd does not get a chance to reinterpret the wheel as shell input history navigation. After frontend updates, do a hard reload if wheel behavior looks stale because the shell HTML/script and ttyd assets can be cached separately.
+The container keeps `/etc/tmux.conf` with mouse mode disabled. The shell UI overrides the embedded ttyd wheel path on several levels: direct xterm hook when available, iframe/document `wheel` listeners, and a `.xterm-viewport` fallback. The wheel path now tries both the public xterm scroll API and older internal viewport hooks used by legacy builds before falling back to raw `.xterm-viewport` scrolling. The xterm hook only cancels native processing when the shell UI actually moved the buffer; otherwise it lets xterm handle the wheel normally instead of swallowing the event. After frontend updates, do a hard reload if wheel behavior looks stale because the shell HTML/script and ttyd assets can be cached separately.
 
 ## Separate tabs
 

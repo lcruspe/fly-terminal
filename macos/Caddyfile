@@ -10,9 +10,11 @@
   redir @terminalRoot /terminal/ 302
 
   @terminal path /terminal/*
+  @api path /api/*
 
   route {
     reverse_proxy @terminal 127.0.0.1:{$TTYD_PORT:7682}
+    reverse_proxy @api 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}
     try_files {path} /index.html
     file_server
   }

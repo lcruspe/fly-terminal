@@ -1,221 +1,219 @@
 # Railway.app Web Terminal with Tailscale
 
-Веб-терминал на Railway.app с интеграцией Tailscale для безопасного доступа.
+Веб-терминал с поддержкой вкладок, разделением экрана (Split Mode), безопасным доступом через Tailscale и синхронизацией истории команд. Проект оптимизирован для развертывания на **Railway.app** (в Docker-контейнере) или нативно на **macOS**.
+
+## Особенности проекта
+
+*   **Двухпанельный интерфейс**: переключение между вкладками (Tabs) и разделением экрана (Split Screen) для параллельной работы.
+*   **Умное именование вкладок**: автоматическое отслеживание текущей рабочей директории (`cwd`) каждого tmux-сеанса с обновлением заголовка. Возможность ручного переименования по двойному клику.
+*   **Кастомизация UI**: 10 профессионально подобранных цветовых схем (5 светлых и 5 темных), выбор размера шрифта (8px - 16px) и шрифтового семейства с сохранением настроек в `localStorage`.
+*   **Синхронизацией истории**: общая история команд bash мгновенно синхронизируется между всеми сессиями и вкладками.
+*   **Оптимизация ресурсов**: автоматическая очистка неактивных tmux-сессий по таймауту (idle TTL) и ротация файла истории для предотвращения утечек памяти.
+*   **Безопасность**: поддержка базовой авторизации (Basic Auth) и шифрованного туннелирования через Tailscale Funnel.
+*   **Два режима работы**: Docker (для Railway.app и локального запуска) и нативный macOS (с автозапуском служб через `launchd`).
+
+---
+
+## Архитектура системы
+
+Ниже представлена схема взаимодействия компонентов приложения:
+
+```mermaid
+graph TD
+    User([Пользователь / Браузер]) -->|HTTP / WebSocket| Proxy[Прокси: Nginx / Caddy]
+    Proxy -->|Статический фронтенд /| IndexHtml[index.html]
+    Proxy -->|Управление сессиями /api/*| ControlPy[session-control.py]
+    Proxy -->|Терминальный поток /terminal/| Ttyd[ttyd]
+    
+    ControlPy -->|tmux list-panes / kill-session| Tmux[tmux]
+    Ttyd -->|Запуск сессии| SessionSh[terminal-session.sh]
+    SessionSh -->|Очистка сессий / Лимиты| Tmux
+    Tmux -->|Интерактивный shell| Bash[bash]
+    Bash -->|Запись истории| HistFile[(shared_history)]
+```
+
+### Описание компонентов:
+1.  **Frontend (`index.html`)**: Адаптивный веб-интерфейс, который управляет отображением вкладок/сетки, отправляет API-запросы для получения информации о сессиях, настраивает параметры шрифтов и тем оформления, а также встраивает терминалы через `iframe`.
+2.  **Прокси-сервер (Nginx / Caddy)**: Маршрутизирует запросы пользователя. Отдает статику фронтенда, проксирует WebSocket-соединения к `ttyd` и перенаправляет запросы к панели управления в Python API.
+3.  **Python API (`session-control.py`)**: Легковесный HTTP-сервер, который управляет процессами tmux: запрашивает текущую директорию активной панели (`pane_current_path`) для отображения во вкладках и завершает сессии по запросу фронтенда.
+4.  **Скрипт сессии (`terminal-session.sh`)**: Инициализирует окружение при открытии новой вкладки. Перед запуском tmux он:
+    *   Проверяет и удаляет старые неактивные сессии (согласно лимиту `FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES`).
+    *   Обрезает файл общей истории, чтобы он не переполнял диск контейнера.
+    *   Настраивает лимиты истории в tmux.
+    *   Запускает `tmux new-session` с индивидуальным идентификатором вкладки и кастомным `.bashrc`.
+5.  **Конфигурация Shell (`terminal-bashrc.sh`)**: Настраивает bash на моментальный сброс и чтение истории (`PROMPT_COMMAND="history -a; history -n"`), чтобы команды, введенные в одной вкладке, были сразу доступны в другой.
+
+---
 
 ## Требования
 
-1. Аккаунт на [Railway.app](https://railway.app) (регистрация через GitHub, **карта не нужна**)
-2. Auth Key от [Tailscale](https://login.tailscale.com/admin/settings/keys)
+1.  Аккаунт на [Railway.app](https://railway.app) (для облачного деплоя) или локальный Docker / macOS.
+2.  Ключ авторизации (Auth Key) от [Tailscale](https://login.tailscale.com/admin/settings/keys) (для безопасного доступа без публичных IP-адресов).
 
-## Установка
+---
 
-### 1. Получите Tailscale Auth Key
+## Установка и развертывание
 
-1. Зайдите в [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
-2. Создайте новый Auth Key:
-   - Включите **Ephemeral** (нода удалится при остановке)
-   - Включите **Reusable** (если планируете пересоздавать контейнер)
-3. Скопируйте ключ (начинается с `tskey-auth-`)
+### Вариант A: Деплой на Railway.app (Рекомендуется)
 
-### 2. Деплой на Railway
+#### 1. Получите Tailscale Auth Key
+1.  Перейдите в [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys).
+2.  Создайте новый Auth Key:
+    *   Включите **Ephemeral** (узел автоматически удалится из вашей сети при остановке контейнера).
+    *   Включите **Reusable** (для удобства при автоматических перезапусках контейнера на Railway).
+3.  Скопируйте ключ (формат: `tskey-auth-...`).
 
-#### Вариант A: Через GitHub (рекомендуется)
+#### 2. Деплой репозитория
+1.  Сделайте форк или запушьте данный проект в свой приватный GitHub-репозиторий:
+    ```bash
+    git init
+    git add .
+    git commit -m "Initial commit"
+    git remote add origin https://github.com/ваш-username/fly-terminal.git
+    git push -u origin main
+    ```
+2.  В панели [Railway.app](https://railway.app/new) выберите **Deploy from GitHub repo** и выберите ваш репозиторий.
+3.  Railway автоматически обнаружит `Dockerfile` и начнет сборку.
 
-1. Создайте репозиторий на GitHub и запушьте этот проект:
-   ```bash
-   cd /Volumes/WD/Projects/fly-terminal
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/ваш-username/fly-terminal.git
-   git push -u origin main
-   ```
+#### 3. Настройка переменных окружения
+В настройках проекта Railway (**Variables**) добавьте обязательные и опциональные переменные (полный список см. ниже).
 
-2. Зайдите на [Railway.app](https://railway.app/new)
-3. Нажмите **Deploy from GitHub repo**
-4. Выберите ваш репозиторий `fly-terminal`
-5. Railway автоматически обнаружит Dockerfile и начнет деплой
+---
 
-#### Вариант B: Через Railway CLI
+### Вариант Б: Локальный запуск в Docker
 
-```bash
-# Установка CLI
-npm i -g @railway/cli
-
-# Логин
-railway login
-
-# Инициализация проекта
-railway init
-
-# Деплой
-railway up
-```
-
-### 3. Добавьте переменные окружения
-
-В Railway Dashboard → Variables добавьте:
-
-```
-TS_AUTHKEY=tskey-auth-XXXXXXXXXX
-TERMINAL_USER=admin
-TERMINAL_PASSWORD=your-secure-password
-TERMINAL_SCROLLBACK=4000
-FLY_TERMINAL_HISTSIZE=5000
-FLY_TERMINAL_HISTFILESIZE=10000
-FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=120
-FLY_TERMINAL_DIAGNOSTICS=1
-```
-
-Интерфейс приложения сам сохраняет тему, размер текста и шрифт в `localStorage`. Текущий набор тем сбалансирован как `50/50` между светлыми и темными пресетами и рассчитан на нейтральную рабочую палитру.
-
-### 4. Получите URL
-
-После деплоя Railway выдаст публичный URL типа:
-```
-https://fly-terminal-production.up.railway.app
-```
-
-## Использование
-
-### Интеграция в React/Next.js приложение
-
-```jsx
-export default function Terminal() {
-  return (
-    <iframe 
-      src="https://your-app.up.railway.app" 
-      style={{ 
-        width: '100%', 
-        height: '600px', 
-        border: 'none',
-        borderRadius: '8px'
-      }}
-      title="Web Terminal"
-    />
-  );
-}
-```
-
-## Безопасность
-
-### Вариант 1: Базовая авторизация (простой)
-Уже настроена через переменные `TERMINAL_USER` и `TERMINAL_PASSWORD`.
-
-### Вариант 2: Tailscale Funnel (рекомендуется)
-Для доступа только через вашу Tailscale сеть:
-
-1. В `entrypoint.sh` добавьте после `tailscale up`:
-   ```bash
-   tailscale funnel $PORT
-   ```
-
-2. Доступ будет только у устройств в вашей Tailnet
-
-## Мониторинг
-
-В Railway Dashboard:
-- **Logs**: Просмотр логов в реальном времени
-- **Metrics**: CPU, RAM, Network
-- **Deployments**: История деплоев
-
-При старте контейнер теперь пишет в логи:
-- лимит памяти cgroup
-- текущее потребление памяти
-- наличие/отсутствие swap в контейнере
-- список активных процессов
-
-Это помогает сразу отличить нехватку RAM от проблем Tailscale/ttyd/nginx.
-
-## Стоимость
-
-- **$5 кредитов/месяц** бесплатно (хватает на 24/7 работу терминала)
-- После исчерпания кредитов: ~$5-10/месяц в зависимости от использования
-- Без карты работает на бесплатных кредитах
-
-## Troubleshooting
-
-### Tailscale не подключается
-Проверьте логи в Railway Dashboard и убедитесь, что `TS_AUTHKEY` установлен правильно.
-
-### Терминал недоступен
-1. Проверьте статус деплоя в Railway Dashboard
-2. Убедитесь, что порт `PORT` правильно пробрасывается
-3. Проверьте логи на ошибки
-
-### Колесо мыши не прокручивает терминал
-Текущая реализация принудительно прокручивает `terminal scrollback`, а не всю страницу браузера и не историю введенных команд. Shell UI перехватывает wheel и не отдает его обратно ttyd/xterm после скролла. Если поведение выглядит старым, сделайте hard reload, потому что shell UI и ttyd theme/script кешируются браузером отдельно.
-
-### Новая вкладка открывает ту же сессию
-Кнопка `В отдельном окне` теперь генерирует новый `session id` на каждый клик и должна открывать отдельный `tmux`-сеанс. Если браузер все равно показывает старую живую сессию, проверьте, не открывается ли закешированная старая версия shell UI.
-
-### Контейнер нестабилен по памяти
-По умолчанию проект теперь ограничивает:
-- `TERMINAL_SCROLLBACK=4000`
-- `tmux history-limit=5000`
-- `FLY_TERMINAL_HISTSIZE=5000`
-- `FLY_TERMINAL_HISTFILESIZE=10000`
-
-Старые unattached `tmux`-сессии также автоматически очищаются по TTL:
-- `FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=120`
-
-В текущей конфигурации swap внутри Railway не настраивается и не считается опорным механизмом стабилизации.
-
-## Альтернативные регионы
-
-Railway автоматически выбирает ближайший регион. Для изменения:
-1. Settings → Region
-2. Выберите: US West, US East, Europe
-
-## Локальная разработка
+Для тестирования и локальной разработки соберите образ и запустите контейнер:
 
 ```bash
 # Сборка образа
-docker build -t terminal .
+docker build -t fly-terminal .
 
-# Запуск
+# Запуск контейнера
 docker run -p 7681:7681 \
-  -e TS_AUTHKEY=your-key \
+  -e TS_AUTHKEY=tskey-auth-XXXXXXXXXX \
   -e TERMINAL_USER=admin \
-  -e TERMINAL_PASSWORD=pass \
-  terminal
+  -e TERMINAL_PASSWORD=secure-password \
+  fly-terminal
 ```
 
-Откройте http://localhost:7681
+После этого откройте в браузере: `http://localhost:7681`.
 
-## Direct macOS deployment
+---
 
-If you want to remove Oracle completely and run the web terminal directly on the Mac mini:
+### Вариант В: Нативный запуск на macOS
 
-1. Install local runtime dependencies:
-   ```bash
-   brew install ttyd caddy tmux
-   ```
-2. Run the macOS installer from this repo:
-   ```bash
-   cd /Users/kruspe/CodexProjects/fly-terminal-live
-   ./macos/install-direct-mac.sh
-   ```
-3. The script will:
-   - create `~/.config/fly-terminal-mac/fly-terminal.env`
-   - register two `launchd` agents
-   - start local `ttyd` on `127.0.0.1:7682`
-   - start local `caddy` on `127.0.0.1:8080`
-   - publish the endpoint through `tailscale funnel`
+Вы можете запустить веб-терминал напрямую на macOS (например, на Mac mini под сервером), полностью исключив Docker:
 
-### macOS paths
+#### 1. Установите зависимости
+```bash
+brew install ttyd caddy tmux tailscale
+```
 
-- config: `~/.config/fly-terminal-mac/fly-terminal.env`
-- logs: `~/Library/Logs/fly-terminal`
-- launch agents:
-  - `~/Library/LaunchAgents/ai.kruspe.fly-terminal.ttyd.plist`
-  - `~/Library/LaunchAgents/ai.kruspe.fly-terminal.caddy.plist`
-
-### Password rotation on macOS
-
+#### 2. Запустите скрипт установки
 ```bash
 cd /Users/kruspe/CodexProjects/fly-terminal-live
-./macos/set-password.sh 'new-password'
+./macos/install-direct-mac.sh
 ```
 
-This restarts only the local `ttyd` agent on the Mac mini.
+Этот скрипт выполнит следующие действия:
+*   Создаст директорию конфигурации `~/.config/fly-terminal-mac/fly-terminal.env`.
+*   Зарегистрирует и запустит два системных агента `launchd` (для `ttyd` + Python API и для веб-сервера `caddy`).
+*   Настроит `ttyd` на локальный порт `7682`, а `caddy` — на порт `8080`.
+*   Опубликует веб-интерфейс через встроенный `tailscale funnel`.
+
+#### 3. Управление паролем на macOS
+Для смены пароля доступа к терминалу на Mac выполните:
+```bash
+./macos/set-password.sh 'новый-пароль'
+```
+Скрипт автоматически обновит файл конфигурации и перезапустит агента `ttyd`.
+
+#### Пути и логи на macOS:
+*   Конфигурация: `~/.config/fly-terminal-mac/fly-terminal.env`
+*   Логи работы: `~/Library/Logs/fly-terminal/` (файлы `ttyd.log`, `ttyd.err.log`, `caddy.log`, `caddy.err.log`)
+*   Файлы служб (Launch Agents):
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.ttyd.plist`
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.caddy.plist`
+
+---
+
+## Таблица переменных окружения
+
+Конфигурация задается через переменные окружения (в Railway Dashboard или в файле `fly-terminal.env` для macOS):
+
+| Переменная | Значение по умолчанию | Описание |
+| :--- | :--- | :--- |
+| `TS_AUTHKEY` | *Не задано* | Авторизационный ключ Tailscale. Если не задан, терминал будет работать только по локальной сети без подключения к VPN. |
+| `TERMINAL_USER` | *Не задано* | Имя пользователя для Basic Auth авторизации в веб-интерфейсе. |
+| `TERMINAL_PASSWORD` | *Не задано* | Пароль для Basic Auth авторизации. |
+| `PORT` | `7681` | Внешний порт, на котором слушает Nginx / Caddy. |
+| `TTYD_PORT` | `7682` | Внутренний порт для демона `ttyd`. |
+| `FLY_TERMINAL_CONTROL_PORT` | `7683` | Внутренний порт для Python API (`session-control.py`). |
+| `TERMINAL_SCROLLBACK` | `4000` | Размер буфера прокрутки (количество строк) в терминале. |
+| `FLY_TERMINAL_HISTSIZE` | `5000` | Лимит количества команд в оперативной памяти сессии bash (`HISTSIZE`). |
+| `FLY_TERMINAL_HISTFILESIZE` | `10000` | Максимальный размер файла истории bash на диске (`HISTFILESIZE`). При превышении файл обрезается. |
+| `FLY_TERMINAL_TMUX_HISTORY_LIMIT`| `5000` | Максимальная глубина истории вывода в буфере tmux. |
+| `FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES`| `120` | Время жизни (в минутах) неактивной (отключенной) сессии tmux. Старые сессии автоматически завершаются. |
+| `FLY_TERMINAL_DIAGNOSTICS` | `1` | Флаг включения вывода системной диагностики (лимиты cgroup, доступная ОЗУ, swap, процессы) в лог контейнера при запуске. |
+| `FLY_TERMINAL_HISTORY_DIR` | `/data/bash_history` (Docker) | Путь к директории хранения файла общей истории. |
+
+---
+
+## Использование и возможности UI
+
+### Сценарии использования
+Основной кейс — доступ к рабочей консоли сервера прямо из браузера (например, с рабочего ПК, где заблокированы стандартные SSH-порты или запрещена установка стороннего ПО).
+
+### Описание кнопок управления:
+*   **Вкладки / Сплит**: Переключает режим отображения. Режим **Сплит** делит экран на равные области для всех открытых вкладок. Переключение фокуса в режиме Сплит происходит автоматически при наведении курсора мыши или по клику.
+*   **Новая вкладка**: Запускает новый независимый сеанс tmux и добавляет его в текущее окно.
+*   **Новое окно**: Генерирует уникальный идентификатор сессии и открывает чистый терминал в новой вкладке браузера (сессии не будут пересекаться).
+*   **Переподключить**: Перезагружает iframe активного терминала (полезно при сбое сетевого соединения).
+*   **Фокус**: Программно возвращает фокус ввода на текстовое поле xterm (терминал готов к вводу команд).
+*   **Копировать**: Автоматически копирует выделенный текст внутри активного терминала в буфер обмена ОС (работает на базе `navigator.clipboard`).
+*   **Настройки**: Панель выбора тем оформления и шрифтов. Все изменения мгновенно применяются к терминалу и сохраняются в браузере.
+
+---
+
+## Безопасность
+
+### 1. Basic Auth (Простая защита)
+Настраивается через переменные `TERMINAL_USER` и `TERMINAL_PASSWORD`. При переходе на URL-адрес терминала браузер потребует ввести логин и пароль.
+
+### 2. Tailscale Funnel (Рекомендуемый)
+Если вы хотите полностью закрыть терминал от внешнего мира и заходить на него только через ваше защищенное облако Tailnet:
+1.  На Railway в `entrypoint.sh` раскомментируйте или добавьте после инициализации tailscale:
+    ```bash
+    tailscale funnel $PORT
+    ```
+2.  Доступ к веб-панели получат только авторизованные устройства из вашей сети Tailnet.
+
+---
+
+## Мониторинг и диагностика ресурсов
+
+По умолчанию при старте контейнера в логи выводятся параметры окружения и состояние памяти. Это помогает обнаружить нехватку ресурсов (OOM) до того, как контейнер упадет:
+*   Текущие ограничения памяти cgroup.
+*   Доступная оперативная память хоста (`MemAvailable`).
+*   Наличие и размер Swap.
+*   Список запущенных процессов с их PID и потреблением памяти (`RSS`).
+
+Вы можете отслеживать эти показатели в панели управления Railway в вкладках **Logs** и **Metrics**.
+
+---
+
+## Устранение неполадок (Troubleshooting)
+
+### Контейнер перезапускается из-за нехватки памяти
+Railway на бесплатном тарифе предоставляет ограниченный объем ОЗУ.
+*   Уменьшите буфер прокрутки: `TERMINAL_SCROLLBACK=2000`, `FLY_TERMINAL_TMUX_HISTORY_LIMIT=2000`.
+*   Уменьшите время жизни неактивных сессий: `FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=60`, чтобы неиспользуемые процессы tmux вовремя завершались.
+
+### Не работает прокрутка колесиком мыши
+Интерфейс веб-оболочки принудительно перехватывает событие прокрутки мыши, направляя его в буфер xterm, а не страницы. Если прокрутка выглядит некорректной:
+1.  Сделайте очистку кэша браузера (Hard Reload: `Ctrl + F5` или `Cmd + Shift + R`). Фронтенд-скрипты кэшируются отдельно от ttyd.
+2.  Убедитесь, что в файле конфигурации tmux отключен встроенный режим мыши (`set -g mouse off`). В репозитории это настроено по умолчанию в `/etc/tmux.conf`.
+
+### Новая вкладка браузера дублирует существующий терминал
+Если вы открываете URL терминала в новой вкладке вручную, браузер может подключить вас к той же tmux-сессии. Для открытия изолированного сеанса:
+*   Используйте кнопку **Новое окно** в интерфейсе — она сгенерирует новый `sessionId`.

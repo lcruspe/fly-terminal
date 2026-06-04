@@ -1,0 +1,60 @@
+- main [ref=e2]:
+  - region "Terminal settings" [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - strong [ref=e6]: Fly Terminal
+        - generic [ref=e7]: Browser-first терминал без локального SSH-клиента
+      - generic "Terminal session details" [ref=e8]:
+        - generic [ref=e9]: Подключение
+    - generic [ref=e10]:
+      - generic "Режим отображения" [ref=e11]:
+        - button "Вкладки" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+          - text: Вкладки
+        - button "Сплит" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+          - text: Сплит
+      - button "Новая вкладка" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - text: Новая вкладка
+      - link "Новое окно" [ref=e22] [cursor=pointer]:
+        - /url: /terminal/?arg=39bc14df-04f0-4f52-a42a-71ba812dded4&theme=%7B%22background%22%3A%22%23f7f3e8%22%2C%22foreground%22%3A%22%2328231f%22%2C%22cursor%22%3A%22%23c65f2f%22%2C%22selectionBackground%22%3A%22%23e7d6b3%22%2C%22black%22%3A%22%2328231f%22%2C%22red%22%3A%22%23b84d43%22%2C%22green%22%3A%22%23587a45%22%2C%22yellow%22%3A%22%23a9762c%22%2C%22blue%22%3A%22%233f6f9f%22%2C%22magenta%22%3A%22%238a5c8f%22%2C%22cyan%22%3A%22%233f8585%22%2C%22white%22%3A%22%23f4ead8%22%2C%22brightBlack%22%3A%22%236f665c%22%2C%22brightRed%22%3A%22%23d85f4f%22%2C%22brightGreen%22%3A%22%236f934f%22%2C%22brightYellow%22%3A%22%23c89136%22%2C%22brightBlue%22%3A%22%235688bf%22%2C%22brightMagenta%22%3A%22%23a775aa%22%2C%22brightCyan%22%3A%22%2356a0a0%22%2C%22brightWhite%22%3A%22%23fff8eb%22%7D&fontSize=12&fontFamily=Menlo%2C+monospace&cursorBlink=true&disableLeaveAlert=true
+        - img [ref=e23]
+        - text: Новое окно
+      - button "Переподключить" [ref=e25] [cursor=pointer]:
+        - img [ref=e26]
+        - text: Переподключить
+      - button "Фокус" [ref=e29] [cursor=pointer]:
+        - img [ref=e30]
+        - text: Фокус
+      - button "Копировать" [ref=e32] [cursor=pointer]:
+        - img [ref=e33]
+        - text: Копировать
+      - group [ref=e36]:
+        - generic "Настройки ▾" [ref=e37] [cursor=pointer]
+        - option "8px"
+        - option "9px"
+        - option "10px"
+        - option "11px"
+        - option "12px" [selected]
+        - option "13px"
+        - option "14px"
+        - option "15px"
+        - option "16px"
+        - option "Menlo" [selected]
+        - option "Monaco"
+        - option "Courier New"
+        - option "Andale Mono"
+        - option "Consolas"
+        - option "SF Mono"
+        - option "Monospace"
+  - navigation [ref=e38]:
+    - generic [ref=e50] [cursor=pointer]:
+      - generic [ref=e51]: Terminal
+      - generic "Закрыть" [ref=e52]: ✕
+  - generic [ref=e43]:
+    - generic [ref=e45]:
+      - strong [ref=e46]: Terminal
+      - generic [ref=e47]: 167d2d81...
+    - iframe [active] [ref=e49]:
+      

@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     iptables \
+    python3 \
     wget \
     openssh-client \
     netcat-openbsd \
@@ -21,10 +22,13 @@ COPY entrypoint.sh /entrypoint.sh
 COPY ssh_config /etc/ssh/ssh_config.d/tailscale.conf
 COPY tmux.conf /etc/tmux.conf
 COPY terminal-session.sh /usr/local/bin/terminal-session.sh
+COPY session-control.py /usr/local/bin/session-control.py
+COPY run-ttyd-stack.sh /usr/local/bin/run-ttyd-stack.sh
 COPY terminal-bashrc.sh /etc/fly-terminal.bashrc
 COPY index.html /usr/share/nginx/html/index.html
 RUN chmod +x /entrypoint.sh
 RUN chmod +x /usr/local/bin/terminal-session.sh
+RUN chmod +x /usr/local/bin/run-ttyd-stack.sh
 
 # Railway использует переменную PORT
 ENV PORT=7681
