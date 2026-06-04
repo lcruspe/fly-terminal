@@ -46,7 +46,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/browser/config":
             enabled = os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
-            browser_url = os.environ.get("FLY_BROWSER_URL", "")
+            browser_url = os.environ.get("FLY_BROWSER_URL", "/browser/")
             send_json(
                 self,
                 200,

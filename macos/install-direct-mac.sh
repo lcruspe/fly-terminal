@@ -20,7 +20,7 @@ mkdir -p "${CONFIG_DIR}" "${LOG_DIR}" "${LAUNCH_AGENTS_DIR}" "${HOME}/.local/sha
 if [ ! -f "${ENV_FILE}" ]; then
   cat >"${ENV_FILE}" <<'EOF'
 TERMINAL_USER=admin
-TERMINAL_PASSWORD=dM5pozis
+TERMINAL_PASSWORD=change-me
 TTYD_PORT=7682
 CADDY_PORT=8080
 TERMINAL_SCROLLBACK=4000
@@ -32,7 +32,7 @@ FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES=120
 FLY_TERMINAL_TMUX_HISTORY_LIMIT=5000
 FLY_TERMINAL_HISTORY_DIR=$HOME/.local/share/fly-terminal/bash_history
 FLY_BROWSER_ENABLED=1
-FLY_BROWSER_URL=https://mac-mini.tail1c55c5.ts.net:10000/
+FLY_BROWSER_URL=/browser/
 FLY_BROWSER_IMAGE=kasmweb/chrome:1.17.0
 FLY_BROWSER_HOST_PORT=7690
 FLY_BROWSER_PROFILE_DIR=$HOME/.local/share/fly-terminal/browser-profile
@@ -50,11 +50,32 @@ ensure_env_line() {
 }
 
 ensure_env_line "FLY_BROWSER_ENABLED" "1"
-ensure_env_line "FLY_BROWSER_URL" "https://mac-mini.tail1c55c5.ts.net:10000/"
+ensure_env_line "FLY_BROWSER_URL" "/browser/"
 ensure_env_line "FLY_BROWSER_IMAGE" "kasmweb/chrome:1.17.0"
 ensure_env_line "FLY_BROWSER_HOST_PORT" "7690"
 ensure_env_line "FLY_BROWSER_PROFILE_DIR" "\$HOME/.local/share/fly-terminal/browser-profile"
 ensure_env_line "FLY_BROWSER_PROFILE_VOLUME" "fly-terminal-browser-profile"
+
+set -a
+. "${ENV_FILE}"
+set +a
+
+browser_basic_auth="$(printf 'kasm_user:%s' "${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}" | base64 | tr -d '\n')"
+if grep -q "^FLY_BROWSER_BASIC_AUTH=" "${ENV_FILE}"; then
+  python3 - "$ENV_FILE" "$browser_basic_auth" <<'PY'
+from pathlib import Path
+import sys
+env_path = Path(sys.argv[1])
+value = sys.argv[2]
+lines = env_path.read_text().splitlines()
+env_path.write_text("\n".join(
+    f"FLY_BROWSER_BASIC_AUTH={value}" if line.startswith("FLY_BROWSER_BASIC_AUTH=") else line
+    for line in lines
+) + "\n")
+PY
+else
+  printf 'FLY_BROWSER_BASIC_AUTH=%s\n' "${browser_basic_auth}" >>"${ENV_FILE}"
+fi
 
 chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/set-password.sh"
 

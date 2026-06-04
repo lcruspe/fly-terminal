@@ -160,11 +160,12 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_TERMINAL_DIAGNOSTICS` | `1` | Флаг включения вывода системной диагностики (лимиты cgroup, доступная ОЗУ, swap, процессы) в лог контейнера при запуске. |
 | `FLY_TERMINAL_HISTORY_DIR` | `/data/bash_history` (Docker) | Путь к директории хранения файла общей истории. |
 | `FLY_BROWSER_ENABLED` | `0` | Включает кнопку Browser в UI и endpoint `/api/browser/config`. Для direct macOS обычно `1`. |
-| `FLY_BROWSER_URL` | *Не задано* | Публичный URL remote browser, например `https://mac-mini.tail1c55c5.ts.net:10000/`. |
+| `FLY_BROWSER_URL` | `/browser/` | URL remote browser внутри shell UI. Для iframe используется same-origin proxy через Caddy. |
 | `FLY_BROWSER_IMAGE` | `kasmweb/chrome:1.17.0` | Docker image для Chromium/noVNC. |
 | `FLY_BROWSER_HOST_PORT` | `7690` | Локальный порт Mac mini, на который проброшен web UI контейнера browser. |
 | `FLY_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/browser-profile` | Persistent profile Chromium для cookies и настроек. |
 | `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с домашним каталогом `kasm-user`; используется вместо bind mount, чтобы не ломать права Kasm на macOS. |
+| `FLY_BROWSER_BASIC_AUTH` | *Вычисляется установщиком* | Base64 для upstream Basic Auth `kasm_user:<password>`, который Caddy подставляет при проксировании `/browser/`. |
 
 ---
 
@@ -176,7 +177,7 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 ### Описание кнопок управления:
 *   **Вкладки / Сплит**: Переключает режим отображения. Режим **Сплит** делит экран на равные области для всех открытых вкладок. Переключение фокуса в режиме Сплит происходит автоматически при наведении курсора мыши или по клику.
 *   **Новая вкладка**: Запускает новый независимый сеанс tmux и добавляет его в текущее окно.
-*   **Browser**: Добавляет панель с удаленным Chromium/noVNC. Закрытие browser-панели закрывает только UI-панель, контейнер продолжает работать.
+*   **Browser**: Добавляет панель с удаленным Chromium/noVNC через `/browser/`. Закрытие browser-панели закрывает только UI-панель, контейнер продолжает работать.
 *   **Новое окно**: Генерирует уникальный идентификатор сессии и открывает чистый терминал в новой вкладке браузера (сессии не будут пересекаться).
 *   **Переподключить**: Перезагружает iframe активного терминала (полезно при сбое сетевого соединения).
 *   **Фокус**: Программно возвращает фокус ввода на текстовое поле xterm (терминал готов к вводу команд).
@@ -227,3 +228,6 @@ Railway на бесплатном тарифе предоставляет огр
 ### Новая вкладка браузера дублирует существующий терминал
 Если вы открываете URL терминала в новой вкладке вручную, браузер может подключить вас к той же tmux-сессии. Для открытия изолированного сеанса:
 *   Используйте кнопку **Новое окно** в интерфейсе — она сгенерирует новый `sessionId`.
+
+### Browser-панель показывает пустой серый iframe
+Browser-панель должна использовать `/browser/`, а не прямой `https://mac-mini.tail1c55c5.ts.net:10000/` внутри iframe. Caddy проксирует `/browser/` в KasmVNC, добавляет upstream Basic Auth и снимает frame-blocking заголовки. Если открыт старый iframe на `:10000`, сделайте hard reload страницы и создайте browser-панель заново.
