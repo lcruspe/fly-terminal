@@ -59,11 +59,60 @@
     }
 
     .shell {
-      display: grid;
-      grid-template-rows: auto auto 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 12px;
-      height: 100%;
+      height: 100vh;
       padding: 14px;
+      position: relative;
+      box-sizing: border-box;
+    overflow: hidden; }
+
+    
+    .bottom-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      width: 100%;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    
+
+    /* Срабатывает при наведении ИЛИ если внутри панели активен элемент (например, открыты настройки) */
+    
+
+    /* Увеличиваем невидимую зону срабатывания над панелью */
+    
+
+
+    .bottom-panel.autohide {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      transform: translateY(100%);
+      padding: 0 14px 14px 14px;
+      z-index: 1000;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Создаем невидимую зону активации (триггер) внизу экрана */
+    .bottom-panel.autohide::before {
+      content: "";
+      position: absolute;
+      top: -15px;
+      left: 0;
+      right: 0;
+      height: 15px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .bottom-panel.autohide:hover {
+      transform: translateY(0);
     }
 
     .toolbar {
@@ -151,15 +200,7 @@
     }
 
     /* Tabs Bar */
-    .tab-bar {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      overflow-x: auto;
-      padding-bottom: 4px;
-      scrollbar-width: none;
-      z-index: 20;
-    }
+    .tab-bar {      display: flex;      gap: 6px;      align-items: center;      overflow-x: auto;      padding: 8px 12px;      scrollbar-width: none;      z-index: 20;      backdrop-filter: blur(20px);      background: var(--panel);      border: 1px solid var(--border);      border-radius: var(--panel-radius);      box-shadow: var(--shadow);    }
     .tab-bar::-webkit-scrollbar { display: none; }
     .mode-split #tabBar { display: none; }
 
@@ -203,6 +244,7 @@
       height: 100%;
       min-height: 0;
       gap: 12px;
+      flex: 1;
     }
 
     /* Modes */
@@ -308,7 +350,7 @@
       padding: 14px;
       position: absolute;
       right: 0;
-      top: calc(100% + 2px);
+      bottom: calc(100% + 2px);
       width: min(420px, calc(100vw - 28px));
       z-index: 40;
     }
@@ -659,96 +701,99 @@
   </style>
 </head>
 <body>
+
   <main class="shell">
-    <section class="toolbar" aria-label="Terminal settings">
-      <div class="toolbar-primary">
-        <div class="brand">
-          <strong>Fly Terminal</strong>
-          <span id="status">Browser-first терминал без локального SSH-клиента</span>
-        </div>
-        <div class="session-meta" aria-label="Terminal session details">
-          <span class="badge badge-neutral" id="sessionState">Подключение</span>
-        </div>
-      </div>
-      <div class="controls">
-        <div class="view-switch" aria-label="Режим отображения">
-          <button type="button" id="viewTabs" class="active" title="Вкладки">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M2 7h12"/></svg>
-            Вкладки
-          </button>
-          <button type="button" id="viewSplit" title="Сплит">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M8 2v12M2 8h12"/></svg>
-            Сплит
-          </button>
-        </div>
-        <div id="splitLayoutContainer" class="layout-presets-wrapper" style="display: none;">
-          <span class="hint" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-left: 4px;">Макет:</span>
-          <div id="splitLayoutPresets" style="display: inline-flex; gap: 4px; background: var(--control); border: 1px solid var(--border); border-radius: var(--control-radius); padding: 3px;">
-            <!-- Будет заполнено динамически в JS -->
+    <section class="terminal-container mode-tabs" id="terminalContainer"></section>
+
+    <div class="bottom-panel" id="bottomPanel">
+      <nav class="tab-bar" id="tabBar"></nav>
+      <section class="toolbar" aria-label="Terminal settings">
+        <div class="toolbar-primary">
+          <div class="brand">
+            <strong>Fly Terminal</strong>
+            <span id="status">Browser-first терминал без локального SSH-клиента</span>
+          </div>
+          <div class="session-meta" aria-label="Terminal session details">
+            <span class="badge badge-neutral" id="sessionState">Подключение</span>
           </div>
         </div>
-        <button type="button" id="addTab">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>
-          Новая вкладка
-        </button>
-        <button type="button" id="addBrowser" hidden>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/></svg>
-          Browser
-        </button>
-        <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
-          Новое окно
-        </a>
-        <button type="button" id="reloadSession" title="Переподключить активную вкладку">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 11.5-2.5M14 8a6 6 0 0 1-11.5 2.5"/><path d="M13.5 2v3.5H10M2.5 14v-3.5H6"/></svg>
-          Переподключить
-        </button>
-        <button type="button" id="focusTerminal" title="Вернуть фокус в терминал">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>
-          Фокус
-        </button>
-        <button type="button" id="copySelection" title="Скопировать выделенный текст">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="10" height="12" rx="1"/><path d="M2 5v9a1 1 0 0 0 1 1h7"/></svg>
-          Копировать
-        </button>
-        <details class="settings">
-          <summary class="button">Настройки</summary>
-          <div class="settings-panel">
-            <div class="settings-group">
-              <span class="settings-label">Цветовая схема</span>
-              <div class="theme-grid">
-                <button type="button" data-theme="paper"></button>
-                <button type="button" data-theme="linen"></button>
-                <button type="button" data-theme="ledger"></button>
-                <button type="button" data-theme="harbor"></button>
-                <button type="button" data-theme="sage"></button>
-                <button type="button" data-theme="graphite"></button>
-                <button type="button" data-theme="ink"></button>
-                <button type="button" data-theme="midnight"></button>
-                <button type="button" data-theme="nord"></button>
-                <button type="button" data-theme="forest"></button>
+        <div class="controls">
+          <button type="button" id="toggleAutohide" title="Переключить автоскрытие панели">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v-8M12 12v-8M8 12V4"/></svg>
+            Автоскрытие
+          </button>
+          <div class="view-switch" aria-label="Режим отображения">
+            <button type="button" id="viewTabs" class="active" title="Вкладки">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M2 7h12"/></svg>
+              Вкладки
+            </button>
+            <button type="button" id="viewSplit" title="Сплит">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M8 2v12M2 8h12"/></svg>
+              Сплит
+            </button>
+          </div>
+          
+          <div id="splitLayoutContainer" class="layout-presets-wrapper" style="display: none;">
+            <div id="splitLayoutPresets"></div>
+          </div>
+
+          <button type="button" id="addTab">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>
+            Новая вкладка
+          </button>
+          <button type="button" id="addBrowser" hidden>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/></svg>
+            Browser
+          </button>
+          <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
+            Новое окно
+          </a>
+          <button type="button" id="reloadSession" title="Переподключить активную вкладку">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 11.5-2.5M14 8a6 6 0 0 1-11.5 2.5"/><path d="M13.5 2v3.5H10M2.5 14v-3.5H6"/></svg>
+            Переподключить
+          </button>
+          <button type="button" id="focusTerminal" title="Вернуть фокус в терминал">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>
+            Фокус
+          </button>
+          <button type="button" id="copySelection" title="Скопировать выделенный текст">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="10" height="12" rx="1"/><path d="M2 5v9a1 1 0 0 0 1 1h7"/></svg>
+            Копировать
+          </button>
+          <details class="settings">
+            <summary class="button">Настройки</summary>
+            <div class="settings-panel">
+              <div class="settings-group">
+                <span class="settings-label">Цветовая схема</span>
+                <div class="theme-grid">
+                  <button type="button" data-theme="paper"></button>
+                  <button type="button" data-theme="linen"></button>
+                  <button type="button" data-theme="ledger"></button>
+                  <button type="button" data-theme="harbor"></button>
+                  <button type="button" data-theme="sage"></button>
+                  <button type="button" data-theme="graphite"></button>
+                  <button type="button" data-theme="ink"></button>
+                  <button type="button" data-theme="midnight"></button>
+                  <button type="button" data-theme="nord"></button>
+                  <button type="button" data-theme="forest"></button>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label for="fontSize">Размер</label>
+                <select id="fontSize"></select>
+              </div>
+              <div class="settings-row">
+                <label for="fontFamily">Шрифт</label>
+                <select id="fontFamily"></select>
               </div>
             </div>
-
-            <div class="settings-row">
-              <label for="fontSize">Размер</label>
-              <select id="fontSize"></select>
-            </div>
-
-            <div class="settings-row">
-              <label for="fontFamily">Шрифт</label>
-              <select id="fontFamily"></select>
-            </div>
-          </div>
-        </details>
-      </div>
-    </section>
-
-    <nav class="tab-bar" id="tabBar"></nav>
-
-    <section class="terminal-container mode-tabs" id="terminalContainer"></section>
+          </details>
+        </div>
+      </section>
+    </div>
   </main>
-
+  
   <script>
     const STORAGE_KEY = "fly-terminal-preferences-v2";
     const SESSIONS_STORE_KEY = "fly-terminal-active-sessions-v1";
@@ -1269,10 +1314,11 @@
           theme: themes[raw.theme] ? raw.theme : "paper",
           fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
           fontFamily: fontFamilies.some(f => f.value === raw.fontFamily) ? raw.fontFamily : fontFamilies[0].value,
-          splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid"
+          splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid",
+          autohide: !!raw.autohide
         };
       } catch {
-        return { theme: "paper", fontSize: 12, fontFamily: fontFamilies[0].value, splitLayout: "grid" };
+        return { theme: "paper", fontSize: 12, fontFamily: fontFamilies[0].value, splitLayout: "grid", autohide: false };
       }
     }
 
@@ -1596,6 +1642,36 @@
 
       wrapper.querySelector("iframe").addEventListener("load", () => {
         setSessionState("badge-ok", "Browser готов");
+        // Inject error suppressor into KasmVNC iframe to swallow the
+        // "Cannot read properties of undefined (reading 'lastActiveAt')" crash
+        // that KasmVNC throws when session state is transiently null on first load.
+        try {
+          const win = wrapper.querySelector("iframe").contentWindow;
+          if (!win) return;
+          // Patch onerror so the KasmVNC error modal is never shown
+          const origOnError = win.onerror;
+          win.onerror = function(msg, src, line, col, err) {
+            const s = String(msg || "");
+            if (s.includes("lastActiveAt") || s.includes("Cannot read properties of undefined")) {
+              // Silently swallow — KasmVNC recovers on its own after init
+              return true;
+            }
+            return origOnError ? origOnError.apply(this, arguments) : false;
+          };
+          // Also hide any already-rendered KasmVNC error dialog
+          const doc = win.document;
+          const hideKasmError = () => {
+            doc.querySelectorAll(
+              ".kasm-error, .error-dialog, [class*=\"ErrorDialog\"], [class*=\"error-dialog\"]"
+            ).forEach(el => { el.style.display = "none"; });
+          };
+          hideKasmError();
+          // Observe DOM mutations so the dialog is hidden as soon as it appears
+          const obs = new win.MutationObserver(hideKasmError);
+          obs.observe(doc.body || doc.documentElement, { childList: true, subtree: true });
+          // Stop watching after 15 s — by then KasmVNC init is done
+          setTimeout(() => obs.disconnect(), 15000);
+        } catch (_) {}
       });
 
       renderTabs();
@@ -1841,6 +1917,28 @@
     refreshDirectLink();
     loadBrowserConfig().finally(loadSessions);
     setInterval(updateTabLabels, 10000);
+
+    // Autohide logic
+    const bottomPanel = document.getElementById('bottomPanel');
+    const toggleAutohideBtn = document.getElementById('toggleAutohide');
+    
+    function saveAutohidePref() {
+      preferences.autohide = preferences.autohide !== undefined ? preferences.autohide : false;
+      savePreferences();
+    }
+
+    function applyAutohidePref() {
+      bottomPanel.classList.toggle('autohide', !!preferences.autohide);
+      toggleAutohideBtn.classList.toggle('active', !!preferences.autohide);
+    }
+
+    toggleAutohideBtn.onclick = () => {
+      preferences.autohide = !preferences.autohide;
+      saveAutohidePref();
+      applyAutohidePref();
+    };
+
+    applyAutohidePref();
 
     document.addEventListener('click', (e) => {
       document.querySelectorAll('.settings[open]').forEach((details) => {

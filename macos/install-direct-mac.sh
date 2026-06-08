@@ -33,8 +33,10 @@ FLY_TERMINAL_TMUX_HISTORY_LIMIT=5000
 FLY_TERMINAL_HISTORY_DIR=$HOME/.local/share/fly-terminal/bash_history
 FLY_BROWSER_ENABLED=1
 FLY_BROWSER_URL=/browser/
-FLY_BROWSER_IMAGE=kasmweb/chrome:1.17.0
+FLY_BROWSER_IMAGE=lscr.io/linuxserver/chromium:latest
 FLY_BROWSER_HOST_PORT=7690
+FLY_BROWSER_CONTAINER_PORT=3000
+FLY_BROWSER_UPSTREAM=http://127.0.0.1:7690
 FLY_BROWSER_PROFILE_DIR=$HOME/.local/share/fly-terminal/browser-profile
 FLY_BROWSER_PROFILE_VOLUME=fly-terminal-browser-profile
 EOF
@@ -51,8 +53,10 @@ ensure_env_line() {
 
 ensure_env_line "FLY_BROWSER_ENABLED" "1"
 ensure_env_line "FLY_BROWSER_URL" "/browser/"
-ensure_env_line "FLY_BROWSER_IMAGE" "kasmweb/chrome:1.17.0"
+ensure_env_line "FLY_BROWSER_IMAGE" "lscr.io/linuxserver/chromium:latest"
 ensure_env_line "FLY_BROWSER_HOST_PORT" "7690"
+ensure_env_line "FLY_BROWSER_CONTAINER_PORT" "3000"
+ensure_env_line "FLY_BROWSER_UPSTREAM" "http://127.0.0.1:7690"
 ensure_env_line "FLY_BROWSER_PROFILE_DIR" "\$HOME/.local/share/fly-terminal/browser-profile"
 ensure_env_line "FLY_BROWSER_PROFILE_VOLUME" "fly-terminal-browser-profile"
 

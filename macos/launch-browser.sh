@@ -19,12 +19,150 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 FLY_BROWSER_ENABLED="${FLY_BROWSER_ENABLED:-0}"
 [ "${FLY_BROWSER_ENABLED}" = "1" ] || exit 0
 
-FLY_BROWSER_IMAGE="${FLY_BROWSER_IMAGE:-kasmweb/chrome:1.17.0}"
+FLY_BROWSER_IMAGE="${FLY_BROWSER_IMAGE:-lscr.io/linuxserver/chromium:latest}"
 FLY_BROWSER_HOST_PORT="${FLY_BROWSER_HOST_PORT:-7690}"
+FLY_BROWSER_CONTAINER_PORT="${FLY_BROWSER_CONTAINER_PORT:-3000}"
 FLY_BROWSER_PROFILE_DIR="${FLY_BROWSER_PROFILE_DIR:-${HOME}/.local/share/fly-terminal/browser-profile}"
 FLY_BROWSER_CONTAINER_NAME="${FLY_BROWSER_CONTAINER_NAME:-fly-terminal-browser}"
 FLY_BROWSER_PROFILE_VOLUME="${FLY_BROWSER_PROFILE_VOLUME:-fly-terminal-browser-profile}"
 FLY_BROWSER_PASSWORD="${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}"
+
+patch_kasmvnc_html() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /usr/share/kasmvnc/www/index.html || return 0
+  docker exec -i -u root "${FLY_BROWSER_CONTAINER_NAME}" python3 - <<'PY'
+from pathlib import Path
+
+path = Path("/usr/share/kasmvnc/www/index.html")
+html = path.read_text()
+marker = "fly-terminal-kasmvnc-error-suppressor"
+if marker in html:
+    raise SystemExit(0)
+
+target = '<script type="module" crossorigin src="./main.bundle.js"></script>'
+if target not in html:
+    raise SystemExit("KasmVNC main bundle tag not found")
+
+patch = '''<script id="fly-terminal-kasmvnc-error-suppressor">
+(function () {
+  function isKasmTransientError(value) {
+    var text = String(value && (value.message || value.reason || value.error || value) || "");
+    return text.indexOf("lastActiveAt") !== -1 ||
+      text.indexOf("Cannot read properties of undefined") !== -1;
+  }
+
+  function hideKasmErrorDialog() {
+    try {
+      var dialog = document.getElementById("noVNC_fallback_error");
+      var message = document.getElementById("noVNC_fallback_errormsg");
+      if (!dialog) return;
+      if (!message || isKasmTransientError(message.textContent)) {
+        dialog.style.setProperty("display", "none", "important");
+        dialog.setAttribute("aria-hidden", "true");
+      }
+    } catch (_) {}
+  }
+
+  window.addEventListener("error", function (event) {
+    if (!isKasmTransientError(event && (event.error || event.message))) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    hideKasmErrorDialog();
+    return true;
+  }, true);
+
+  window.addEventListener("unhandledrejection", function (event) {
+    if (!isKasmTransientError(event && event.reason)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    hideKasmErrorDialog();
+    return true;
+  }, true);
+
+  if (document.documentElement) {
+    new MutationObserver(hideKasmErrorDialog).observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
+})();
+</script>'''
+
+path.write_text(html.replace(target, patch + target, 1))
+PY
+}
+
+start_kasm_chrome() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /usr/share/kasmvnc/www/index.html || return 0
+  docker exec -d "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+export DISPLAY="${DISPLAY:-:1}"
+export HOME="${HOME:-/home/kasm-user}"
+
+for _ in $(seq 1 30); do
+  xset q >/dev/null 2>&1 && break
+  sleep 1
+done
+
+ps -eo pid=,args= |
+  awk "/systemctl --user list-jobs/ && !/awk/ { print \$1 }" |
+  xargs -r kill 2>/dev/null || true
+
+(
+  for _ in $(seq 1 30); do
+    ps -eo pid=,args= |
+      awk "/systemctl --user list-jobs/ && !/awk/ { print \$1 }" |
+      xargs -r kill 2>/dev/null || true
+    sleep 1
+  done
+) >/tmp/fly-terminal-systemctl-watchdog.log 2>&1 &
+
+if ps -eo args= |
+  awk "/\\/opt\\/google\\/chrome\\/chrome / && !/sh -lc/ && !/awk/ { found = 1 } END { exit found ? 0 : 1 }"; then
+  exit 0
+fi
+
+exec /usr/bin/google-chrome \
+  --no-first-run \
+  --disable-dev-shm-usage \
+  --start-maximized \
+  --single-process \
+  --no-zygote \
+  --disable-gpu \
+  --disable-software-rasterizer \
+  --disable-crash-reporter \
+  --disable-crashpad \
+  --disable-breakpad \
+  --noerrdialogs \
+  >/tmp/fly-terminal-chrome.log 2>&1
+'
+}
+
+unblock_linuxserver_selkies() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /run/service/svc-selkies || return 0
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+touch /dev/shm/audio.lock
+s6-svc -r /run/service/svc-selkies 2>/dev/null || true
+'
+}
+
+patch_selkies_input() {
+  # Replace xdotool subprocess in Selkies input_handler.py with direct Xlib XTEST.
+  # Uses tools/patch_selkies_xtest.py copied into the container.
+  local script_src="${SCRIPT_DIR}/../tools/patch_selkies_xtest.py"
+  if [ ! -f "$script_src" ]; then
+    echo "WARNING: patch_selkies_xtest.py not found, skipping." >&2
+    return 0
+  fi
+  docker cp "$script_src" "${FLY_BROWSER_CONTAINER_NAME}:/tmp/patch_selkies_xtest.py" 2>/dev/null || true
+  if docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" python3 /tmp/patch_selkies_xtest.py 2>&1; then
+    echo "selkies input: xdotool -> XTEST patched"
+    # Restart svc-selkies to reload the patched module
+    if docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /run/service/svc-selkies 2>/dev/null; then
+      docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" s6-svc -r /run/service/svc-selkies 2>/dev/null || true
+    fi
+  else
+    echo "WARNING: selkies input patch skipped (already patched or file not found)" >&2
+  fi
+}
 
 mkdir -p "${FLY_BROWSER_PROFILE_DIR}"
 
@@ -34,6 +172,10 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if docker ps --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; then
+  patch_kasmvnc_html
+  patch_selkies_input
+  start_kasm_chrome
+  unblock_linuxserver_selkies
   exit 0
 fi
 
@@ -43,10 +185,33 @@ fi
 
 docker volume create "${FLY_BROWSER_PROFILE_VOLUME}" >/dev/null
 
-docker run -d \
-  --name "${FLY_BROWSER_CONTAINER_NAME}" \
-  --shm-size=1g \
-  -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:6901" \
-  -e "VNC_PW=${FLY_BROWSER_PASSWORD}" \
-  -v "${FLY_BROWSER_PROFILE_VOLUME}:/home/kasm-user" \
-  "${FLY_BROWSER_IMAGE}" >/dev/null
+case "${FLY_BROWSER_IMAGE}" in
+  lscr.io/linuxserver/chromium*|linuxserver/chromium*)
+    docker run -d \
+      --name "${FLY_BROWSER_CONTAINER_NAME}" \
+      --shm-size=1g \
+      -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:${FLY_BROWSER_CONTAINER_PORT}" \
+      -e "PUID=$(id -u)" \
+      -e "PGID=$(id -g)" \
+      -e "TZ=${TZ:-Europe/Moscow}" \
+      -e "TITLE=Chromium" \
+      -e "PIXELFLUX_WAYLAND=false" \
+      -v "${FLY_BROWSER_PROFILE_VOLUME}:/config" \
+      "${FLY_BROWSER_IMAGE}" >/dev/null
+    ;;
+  *)
+    docker run -d \
+      --name "${FLY_BROWSER_CONTAINER_NAME}" \
+      --shm-size=1g \
+      -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:6901" \
+      -e "VNC_PW=${FLY_BROWSER_PASSWORD}" \
+      -e "DISABLE_CUSTOM_STARTUP=1" \
+      -v "${FLY_BROWSER_PROFILE_VOLUME}:/home/kasm-user" \
+      "${FLY_BROWSER_IMAGE}" >/dev/null
+    ;;
+esac
+
+patch_kasmvnc_html
+patch_selkies_input
+start_kasm_chrome
+unblock_linuxserver_selkies

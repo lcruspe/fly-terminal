@@ -17,18 +17,19 @@ cleanup() {
     [ -n "${TTYD_PID:-}" ] && kill "${TTYD_PID}" 2>/dev/null || true
     [ -n "${CONTROL_PID:-}" ] && kill "${CONTROL_PID}" 2>/dev/null || true
 }
-
 trap cleanup INT TERM EXIT
 
 python3 "$CONTROL_SCRIPT" &
 CONTROL_PID=$!
 
 set -- \
+    -6 \
     -i 127.0.0.1 \
     -p "$TTYD_PORT" \
     -W \
     -a \
     -b "$TERMINAL_BASE_PATH" \
+    --ping-interval 30 \
     -t "theme=${TERMINAL_THEME}" \
     -t "fontSize=${TERMINAL_FONT_SIZE}" \
     -t "fontFamily=${TERMINAL_FONT_FAMILY}" \
@@ -43,9 +44,8 @@ fi
 
 "$TTYD_BIN" "$@" "$SESSION_SCRIPT" &
 TTYD_PID=$!
-
 wait "$TTYD_PID"
 TTYD_STATUS=$?
 [ -n "${CONTROL_PID:-}" ] && kill "${CONTROL_PID}" 2>/dev/null || true
-wait "$CONTROL_PID" 2>/dev/null || true
+wait "${CONTROL_PID}" 2>/dev/null || true
 exit "$TTYD_STATUS"

@@ -161,10 +161,12 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_TERMINAL_HISTORY_DIR` | `/data/bash_history` (Docker) | Путь к директории хранения файла общей истории. |
 | `FLY_BROWSER_ENABLED` | `0` | Включает кнопку Browser в UI и endpoint `/api/browser/config`. Для direct macOS обычно `1`. |
 | `FLY_BROWSER_URL` | `/browser/` | URL remote browser внутри shell UI. Для iframe используется same-origin proxy через Caddy. |
-| `FLY_BROWSER_IMAGE` | `kasmweb/chrome:1.17.0` | Docker image для Chromium/noVNC. |
+| `FLY_BROWSER_IMAGE` | `lscr.io/linuxserver/chromium:latest` | Docker image для remote Chromium. На Apple Silicon используется arm64 image без qemu. |
 | `FLY_BROWSER_HOST_PORT` | `7690` | Локальный порт Mac mini, на который проброшен web UI контейнера browser. |
+| `FLY_BROWSER_CONTAINER_PORT` | `3000` | Внутренний HTTP-порт browser-контейнера. Для legacy KasmVNC image не используется. |
+| `FLY_BROWSER_UPSTREAM` | `http://127.0.0.1:7690` | Upstream URL, куда Caddy проксирует `/browser/`. |
 | `FLY_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/browser-profile` | Persistent profile Chromium для cookies и настроек. |
-| `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с домашним каталогом `kasm-user`; используется вместо bind mount, чтобы не ломать права Kasm на macOS. |
+| `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с профилем Chromium. |
 | `FLY_BROWSER_BASIC_AUTH` | *Вычисляется установщиком* | Base64 для upstream Basic Auth `kasm_user:<password>`, который Caddy подставляет при проксировании `/browser/`. |
 
 ---
@@ -229,5 +231,5 @@ Railway на бесплатном тарифе предоставляет огр
 Если вы открываете URL терминала в новой вкладке вручную, браузер может подключить вас к той же tmux-сессии. Для открытия изолированного сеанса:
 *   Используйте кнопку **Новое окно** в интерфейсе — она сгенерирует новый `sessionId`.
 
-### Browser-панель показывает пустой серый iframe
-Browser-панель должна использовать `/browser/`, а не прямой `https://mac-mini.tail1c55c5.ts.net:10000/` внутри iframe. Caddy проксирует `/browser/` в KasmVNC, добавляет upstream Basic Auth и снимает frame-blocking заголовки. Если открыт старый iframe на `:10000`, сделайте hard reload страницы и создайте browser-панель заново.
+### Browser-панель показывает пустой iframe
+Browser-панель должна использовать `/browser/`, а не прямой `https://mac-mini.tail1c55c5.ts.net:10000/` внутри iframe. Caddy проксирует `/browser/` в локальный browser upstream и снимает frame-blocking заголовки. Если открыт старый iframe на `:10000`, сделайте hard reload страницы и создайте browser-панель заново.
