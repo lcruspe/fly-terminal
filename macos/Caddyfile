@@ -3,7 +3,7 @@
 	admin off
 }
 
-http://127.0.0.1:8080 {
+:8080 {
 	root * {$FLY_TERMINAL_REPO_ROOT}
 
 	@terminalRoot path /terminal
