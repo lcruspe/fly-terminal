@@ -1302,9 +1302,51 @@
     let preferences = readPreferences();
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "" };
+    let bootRecoveryAttempted = false;
 
     function createId() { return Math.random().toString(36).substr(2, 9); }
     function createSessionId() { return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-"); }
+
+    function resetStoredSessions() {
+      try {
+        sessionStorage.removeItem(SESSIONS_STORE_KEY);
+      } catch (e) {}
+    }
+
+    function recoverTerminalUi(reason = "recovery") {
+      if (bootRecoveryAttempted) return;
+      bootRecoveryAttempted = true;
+      resetStoredSessions();
+      tabs.forEach(tab => tab.wrapper?.remove());
+      tabs = [];
+      activeTabId = null;
+      addTab(null, "Terminal");
+      setViewMode("tabs");
+      setSessionState("badge-warn", "Вкладки сброшены");
+      setStatusText(`Восстановлено после ошибки: ${reason}`, 3200);
+    }
+
+    window.addEventListener("error", (event) => {
+      const message = String(event.message || "");
+      const recoverable =
+        message.includes("Cannot read properties") ||
+        message.includes("undefined") ||
+        message.includes("null") ||
+        message.includes("tabs") ||
+        message.includes("sessionStorage");
+      if (recoverable) {
+        event.preventDefault();
+        recoverTerminalUi("поврежденное состояние");
+      }
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = String(event.reason?.message || event.reason || "");
+      if (reason.includes("Cannot read properties") || reason.includes("undefined") || reason.includes("null")) {
+        event.preventDefault();
+        recoverTerminalUi("ошибка загрузки");
+      }
+    });
 
     function readPreferences() {
       try {
@@ -1798,12 +1840,14 @@
     }
 
     function saveSessions() {
-      const data = tabs.map(t => ({
-        type: t.type || "terminal",
-        sessionId: t.sessionId,
-        customLabel: t.customLabel,
-        label: t.label
-      }));
+      const data = tabs
+        .filter(t => (t.type || "terminal") === "terminal" && t.sessionId)
+        .map(t => ({
+          type: "terminal",
+          sessionId: t.sessionId,
+          customLabel: t.customLabel,
+          label: t.label
+        }));
       sessionStorage.setItem(SESSIONS_STORE_KEY, JSON.stringify(data));
     }
 
@@ -1812,9 +1856,7 @@
         const data = JSON.parse(sessionStorage.getItem(SESSIONS_STORE_KEY));
         if (data && Array.isArray(data) && data.length > 0) {
           data.forEach(s => {
-            if (s.type === "browser") {
-              if (browserConfig.enabled) addBrowserTab(s.label || "Browser", s.customLabel || null);
-            } else {
+            if ((s.type || "terminal") === "terminal" && s.sessionId) {
               addTab(s.sessionId, s.customLabel || "Terminal");
             }
           });
@@ -1823,6 +1865,14 @@
         }
       } catch (e) {}
       addTab();
+    }
+
+    function verifyBootUi() {
+      const activeWrapper = terminalContainer.querySelector(".terminal-frame-wrapper.active");
+      const activeIframe = activeWrapper?.querySelector("iframe");
+      if (!tabs.length || !activeTabId || !activeWrapper || !activeIframe) {
+        recoverTerminalUi("пустой экран");
+      }
     }
 
     // Initialize Selects
@@ -1915,7 +1965,10 @@
     // Initial load
     applyShellTheme();
     refreshDirectLink();
-    loadBrowserConfig().finally(loadSessions);
+    loadBrowserConfig().finally(() => {
+      loadSessions();
+      setTimeout(verifyBootUi, 2000);
+    });
     setInterval(updateTabLabels, 10000);
 
     // Autohide logic
