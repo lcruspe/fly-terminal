@@ -38,7 +38,7 @@ set -- \
     -t "disableLeaveAlert=true" \
     -t "titleFixed=Terminal"
 
-if [ -n "${TERMINAL_USER:-}" ] && [ -n "${TERMINAL_PASSWORD:-}" ]; then
+if [ "${FLY_TERMINAL_TTYD_AUTH:-0}" = "1" ] && [ -n "${TERMINAL_USER:-}" ] && [ -n "${TERMINAL_PASSWORD:-}" ]; then
     set -- "$@" -c "${TERMINAL_USER}:${TERMINAL_PASSWORD}"
 fi
 

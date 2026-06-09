@@ -20,6 +20,14 @@ export FLY_TERMINAL_REPO_ROOT="${REPO_ROOT}"
 export XDG_DATA_HOME="${HOME}/.local/share/caddy"
 mkdir -p "${XDG_DATA_HOME}"
 
+if [ -z "${TERMINAL_USER:-}" ] || [ -z "${TERMINAL_PASSWORD:-}" ]; then
+  echo "TERMINAL_USER and TERMINAL_PASSWORD are required for Caddy basic auth" >&2
+  exit 1
+fi
+
+export CADDY_BASIC_AUTH_USER="${TERMINAL_USER}"
+export CADDY_BASIC_AUTH_HASH="$(printf '%s\n' "${TERMINAL_PASSWORD}" | /opt/homebrew/bin/caddy hash-password --algorithm bcrypt)"
+
 exec /opt/homebrew/bin/caddy run \
   --config "${SCRIPT_DIR}/Caddyfile" \
   --adapter caddyfile
