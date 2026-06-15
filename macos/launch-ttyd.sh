@@ -22,7 +22,7 @@ export LC_CTYPE="${LC_CTYPE:-C.UTF-8}"
 export TERM="${TERM:-xterm-256color}"
 export FLY_TERMINAL_HISTORY_DIR="${FLY_TERMINAL_HISTORY_DIR:-${HOME}/.local/share/fly-terminal/bash_history}"
 export FLY_TERMINAL_CONTROL_SCRIPT="${REPO_ROOT}/session-control.py"
-export FLY_TERMINAL_SESSION_SCRIPT="${REPO_ROOT}/terminal-session.sh"
+export FLY_TERMINAL_SESSION_SCRIPT="${REPO_ROOT}/zsh-terminal-session.sh"
 export TTYD_BIN="/opt/homebrew/bin/ttyd"
 
 mkdir -p "${FLY_TERMINAL_HISTORY_DIR}"
