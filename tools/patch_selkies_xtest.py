@@ -90,6 +90,15 @@ def patch():
         src = f.read()
     original = src
 
+    # Current Selkies releases route printable alphabetic input through a
+    # persistent pynput keyboard instead of spawning xdotool per key event.
+    # The legacy rewrite below targets older handlers and would corrupt this
+    # newer control flow, so keep the native optimized implementation intact.
+    if "use_pynput_for_printable" in src and "self.keyboard.press" in src:
+        open(MARKER, "w").close()
+        print(f"Native optimized input detected in {FP}; no XTEST patch needed")
+        return True
+
     # 1. Add _is_cyr helper function — insert after CYRILLIC_TO_QWERTY_KEYSYM dict
     mark = "CYRILLIC_TO_QWERTY_KEYSYM = {"
     idx = src.find(mark)

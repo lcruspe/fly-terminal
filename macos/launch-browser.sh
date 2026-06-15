@@ -27,6 +27,78 @@ FLY_BROWSER_CONTAINER_NAME="${FLY_BROWSER_CONTAINER_NAME:-fly-terminal-browser}"
 FLY_BROWSER_PROFILE_VOLUME="${FLY_BROWSER_PROFILE_VOLUME:-fly-terminal-browser-profile}"
 FLY_BROWSER_PASSWORD="${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}"
 
+patch_selkies_performance_profile() {
+  local attempt
+  for attempt in {1..30}; do
+    if docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /usr/share/selkies/web/index.html 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /usr/share/selkies/web/index.html || {
+    echo "WARNING: Selkies HTML not ready, performance profile was not applied." >&2
+    return 0
+  }
+  docker exec -i -u root "${FLY_BROWSER_CONTAINER_NAME}" python3 - <<'PY'
+from pathlib import Path
+
+path = Path("/usr/share/selkies/web/index.html")
+html = path.read_text()
+marker = "fly-terminal-performance-profile-v1"
+if marker in html:
+    raise SystemExit(0)
+
+target = '<script type="module" crossorigin src="./assets/'
+target_index = html.find(target)
+if target_index < 0:
+    raise SystemExit("Selkies module bundle tag not found")
+
+patch = '''<script id="fly-terminal-performance-profile-v1">
+(function () {
+  var localHosts = { "127.0.0.1": true, "localhost": true, "::1": true };
+  var isLocal = Boolean(localHosts[window.location.hostname]);
+  var storagePrefix = window.location.href
+    .split("#")[0]
+    .replace(/[^a-zA-Z0-9.-_]/g, "_");
+  var profile = isLocal ? {
+    framerate: "60",
+    h264_crf: "22",
+    useCssScaling: "false",
+    use_css_scaling: "false",
+    use_browser_cursors: "false"
+  } : {
+    framerate: "30",
+    h264_crf: "30",
+    useCssScaling: "true",
+    use_css_scaling: "true",
+    use_browser_cursors: "true"
+  };
+
+  profile.encoder = "x264enc";
+  profile.rate_control_mode = "crf";
+  profile.h264_fullcolor = "false";
+  profile.h264_streaming_mode = "false";
+  profile.scaleLocallyManual = "true";
+
+  Object.keys(profile).forEach(function (key) {
+    window.localStorage.setItem(storagePrefix + "_" + key, profile[key]);
+  });
+  window.__flyTerminalBrowserProfile = isLocal ? "quality" : "speed";
+})();
+</script>'''
+
+path.write_text(html[:target_index] + patch + html[target_index:])
+PY
+}
+
+container_has_required_settings() {
+  local env_dump
+  env_dump="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)" || return 1
+  grep -qx 'SELKIES_AUDIO_ENABLED=false|locked' <<<"${env_dump}" &&
+    grep -qx 'SELKIES_MICROPHONE_ENABLED=false|locked' <<<"${env_dump}" &&
+    grep -qx 'SELKIES_USE_BROWSER_CURSORS=true' <<<"${env_dump}"
+}
+
 patch_kasmvnc_html() {
   docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /usr/share/kasmvnc/www/index.html || return 0
   docker exec -i -u root "${FLY_BROWSER_CONTAINER_NAME}" python3 - <<'PY'
@@ -154,7 +226,7 @@ patch_selkies_input() {
   fi
   docker cp "$script_src" "${FLY_BROWSER_CONTAINER_NAME}:/tmp/patch_selkies_xtest.py" 2>/dev/null || true
   if docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" python3 /tmp/patch_selkies_xtest.py 2>&1; then
-    echo "selkies input: xdotool -> XTEST patched"
+    echo "selkies input: optimized handler ready"
     # Restart svc-selkies to reload the patched module
     if docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /run/service/svc-selkies 2>/dev/null; then
       docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" s6-svc -r /run/service/svc-selkies 2>/dev/null || true
@@ -172,11 +244,15 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if docker ps --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; then
-  patch_kasmvnc_html
-  patch_selkies_input
-  start_kasm_chrome
-  unblock_linuxserver_selkies
-  exit 0
+  if container_has_required_settings; then
+    patch_kasmvnc_html
+    patch_selkies_performance_profile
+    patch_selkies_input
+    start_kasm_chrome
+    unblock_linuxserver_selkies
+    exit 0
+  fi
+  docker rm -f "${FLY_BROWSER_CONTAINER_NAME}" >/dev/null
 fi
 
 if docker ps -a --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; then
@@ -196,6 +272,9 @@ case "${FLY_BROWSER_IMAGE}" in
       -e "TZ=${TZ:-Europe/Moscow}" \
       -e "TITLE=Chromium" \
       -e "PIXELFLUX_WAYLAND=false" \
+      -e "SELKIES_AUDIO_ENABLED=false|locked" \
+      -e "SELKIES_MICROPHONE_ENABLED=false|locked" \
+      -e "SELKIES_USE_BROWSER_CURSORS=true" \
       -v "${FLY_BROWSER_PROFILE_VOLUME}:/config" \
       "${FLY_BROWSER_IMAGE}" >/dev/null
     ;;
@@ -212,6 +291,7 @@ case "${FLY_BROWSER_IMAGE}" in
 esac
 
 patch_kasmvnc_html
+patch_selkies_performance_profile
 patch_selkies_input
 start_kasm_chrome
 unblock_linuxserver_selkies

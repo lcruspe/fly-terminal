@@ -169,6 +169,13 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с профилем Chromium. |
 | `FLY_BROWSER_BASIC_AUTH` | *Вычисляется установщиком* | Base64 для upstream Basic Auth `kasm_user:<password>`, который Caddy подставляет при проксировании `/browser/`. |
 
+Browser-модуль автоматически использует два независимых профиля Selkies:
+
+*   **Локальный** (`127.0.0.1`, `localhost`, `::1`): 60 FPS, H.264 CRF 22 и нативное разрешение для максимально четкого изображения.
+*   **Внешний** (включая Tailscale Funnel): 30 FPS, H.264 CRF 30 и CSS scaling для уменьшения задержки, трафика и нагрузки на клиентский компьютер.
+
+Настройки разделяются по полному URL Selkies в `localStorage` и принудительно восстанавливаются до загрузки клиента. Звук и микрофон отключены в обоих профилях, чтобы не создавать лишний медиапоток.
+
 ---
 
 ## Использование и возможности UI
@@ -233,3 +240,6 @@ Railway на бесплатном тарифе предоставляет огр
 
 ### Browser-панель показывает пустой iframe
 Browser-панель должна использовать `/browser/`, а не прямой `https://mac-mini.tail1c55c5.ts.net:10000/` внутри iframe. Caddy проксирует `/browser/` в локальный browser upstream и снимает frame-blocking заголовки. Если открыт старый iframe на `:10000`, сделайте hard reload страницы и создайте browser-панель заново.
+
+### Внешний Browser работает рывками
+Проверьте в логах browser-контейнера строку `Stream settings active`. Для внешнего URL ожидается `FPS: 30.0` и `CRF: 30`; для локального URL — `FPS: 60.0` и `CRF: 22`. После обновления сделайте hard reload. Для одновременной работы Chromium и CPU-кодирования рекомендуется выделить Docker runtime не менее 4 CPU и 4 GiB памяти (для Colima: `colima start --cpus 4 --memory 4`).
