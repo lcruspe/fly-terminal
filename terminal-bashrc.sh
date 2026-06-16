@@ -24,3 +24,11 @@ export PROMPT_COMMAND
 
 # Disable flow control (Ctrl+S/Q) - common cause of frozen input in browser terminals
 stty -ixon 2>/dev/null || true
+
+# --- Modern prompt ---
+export PS1='\[\e[38;5;208m\]\u\[\e[0m\] \[\e[38;5;245m\]\w\[\e[0m\] \[\e[38;5;208m\]›\[\e[0m\] '
+export CLICOLOR=1
+export LSCOLORS=GxFxCxDxBxegedabagaced
+alias ls='ls -G'
+alias ll='ls -G -lh'
+alias la='ls -G -A'

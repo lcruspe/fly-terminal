@@ -73,6 +73,7 @@ apply_tmux_runtime_limits() {
 
     tmux start-server >/dev/null 2>&1 || true
     tmux set-option -g history-limit "$tmux_history_limit" >/dev/null 2>&1 || true
+    tmux set-option -g mouse on >/dev/null 2>&1 || true
 }
 
 # Robust SESSION_ID extraction

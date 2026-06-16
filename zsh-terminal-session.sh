@@ -21,4 +21,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PA
 TMUX_BIN="${TMUX_BIN:-$(command -v tmux)}"
 ZSH_BIN="${ZSH_BIN:-/bin/zsh}"
 
+"$TMUX_BIN" start-server >/dev/null 2>&1 || true
+"$TMUX_BIN" set-option -g mouse on >/dev/null 2>&1 || true
+
 exec "$TMUX_BIN" -u new-session -A -s "fly-terminal-$SESSION_ID" "$ZSH_BIN" -l

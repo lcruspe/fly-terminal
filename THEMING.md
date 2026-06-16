@@ -60,7 +60,7 @@ This keeps the terminal state attached to the same `tmux` session instead of cre
 
 ## Mouse wheel
 
-The container keeps `/etc/tmux.conf` with mouse mode disabled. The shell UI overrides the embedded ttyd wheel path on several levels: direct xterm hook when available, iframe/document `wheel` listeners, and a `.xterm-viewport` fallback. The wheel path now tries both the public xterm scroll API and older internal viewport hooks used by legacy builds before falling back to raw `.xterm-viewport` scrolling. The xterm hook only cancels native processing when the shell UI actually moved the buffer; otherwise it lets xterm handle the wheel normally instead of swallowing the event. After frontend updates, do a hard reload if wheel behavior looks stale because the shell HTML/script and ttyd assets can be cached separately.
+The container keeps `/etc/tmux.conf` with mouse mode enabled. ttyd runs inside tmux, so the browser terminal is usually in the terminal alternate screen and xterm's own scrollback is not the authoritative buffer. Letting wheel events reach tmux makes the wheel scroll tmux history instead of sending Up/Down keys to the shell prompt.
 
 ## Separate tabs
 
