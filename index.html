@@ -317,6 +317,24 @@
       transition: outline 140ms ease, box-shadow 140ms ease;
     }
 
+    body.frame-fullscreen-active {
+      overflow: hidden;
+    }
+
+    .terminal-frame-wrapper.fullscreen {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      inset: 0;
+      outline: 0;
+      position: fixed;
+      z-index: 2000;
+    }
+
+    .terminal-frame-wrapper.fullscreen .terminal-topbar {
+      min-height: 42px;
+    }
+
     /* Restore Original Button styles */
     button,
     a.button,
@@ -510,6 +528,27 @@
       color: var(--terminal-topbar-ink);
       font-size: 11px;
       opacity: 0.8;
+    }
+
+    .terminal-actions {
+      align-items: center;
+      display: inline-flex;
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .frame-control {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.14);
+      color: var(--terminal-topbar-ink);
+      height: 28px;
+      justify-content: center;
+      padding: 0;
+      width: 28px;
+    }
+
+    .frame-control:hover {
+      background: rgba(255, 255, 255, 0.2);
     }
 
     .terminal-tools {
@@ -1351,6 +1390,7 @@
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "" };
     let bootRecoveryAttempted = false;
+    let fullscreenTabId = null;
 
     function createId() { return Math.random().toString(36).substr(2, 9); }
     function createSessionId() { return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-"); }
@@ -1527,6 +1567,17 @@
     }
 
     function applySplitLayout() {
+      if (fullscreenTabId) {
+        terminalContainer.style.display = '';
+        terminalContainer.style.gridTemplateColumns = '';
+        terminalContainer.style.gridTemplateRows = '';
+        tabs.forEach(tab => {
+          tab.wrapper.style.gridRow = '';
+          tab.wrapper.style.gridColumn = '';
+        });
+        return;
+      }
+
       if (viewMode !== 'split') {
         terminalContainer.style.display = '';
         terminalContainer.style.gridTemplateColumns = '';
@@ -1573,6 +1624,63 @@
 
     function buildBrowserUrl() {
       return browserConfig.url || "about:blank";
+    }
+
+    function fullscreenIcon(expanded = false) {
+      return expanded
+        ? '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v4H2"/><path d="M10 2v4h4"/><path d="M6 14v-4H2"/><path d="M10 14v-4h4"/></svg>'
+        : '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2H2v4"/><path d="M10 2h4v4"/><path d="M6 14H2v-4"/><path d="M10 14h4v-4"/></svg>';
+    }
+
+    function updateFullscreenButtons() {
+      tabs.forEach(tab => {
+        const isFullscreen = fullscreenTabId === tab.id;
+        const button = tab.wrapper.querySelector(".frame-fullscreen-btn");
+        if (!button) return;
+        button.classList.toggle("active", isFullscreen);
+        button.title = isFullscreen ? "Свернуть" : "На весь экран";
+        button.setAttribute("aria-label", button.title);
+        button.setAttribute("aria-pressed", String(isFullscreen));
+        button.innerHTML = fullscreenIcon(isFullscreen);
+      });
+    }
+
+    function setFrameFullscreen(id, enabled) {
+      const tab = tabs.find(t => t.id === id);
+      if (!tab && enabled) return;
+
+      fullscreenTabId = enabled ? id : null;
+      document.body.classList.toggle("frame-fullscreen-active", Boolean(fullscreenTabId));
+
+      tabs.forEach(t => {
+        t.wrapper.classList.toggle("fullscreen", fullscreenTabId === t.id);
+      });
+
+      updateFullscreenButtons();
+      applySplitLayout();
+
+      if (fullscreenTabId) {
+        switchTab(fullscreenTabId);
+        setStatusText("Развернуто на весь экран", 1600);
+      } else {
+        setStatusText("Обычный режим", 1200);
+      }
+
+      const activeTab = tabs.find(t => t.id === activeTabId);
+      const iframe = activeTab?.wrapper.querySelector("iframe");
+      setTimeout(() => {
+        try {
+          iframe?.contentWindow?.focus();
+        } catch (e) {}
+      }, 80);
+    }
+
+    function toggleFrameFullscreen(id, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      setFrameFullscreen(id, fullscreenTabId !== id);
     }
 
     function refreshDirectLink() {
@@ -1674,9 +1782,14 @@
             <strong class="tab-label-text">${label}</strong>
             <span class="tab-subtext">${sId.slice(0, 8)}...</span>
           </div>
+          <div class="terminal-actions">
+            <button type="button" class="frame-control frame-fullscreen-btn" title="На весь экран" aria-label="На весь экран" aria-pressed="false">
+              ${fullscreenIcon(false)}
+            </button>
+          </div>
         </div>
         <div class="terminal-stage">
-          <iframe src="${buildTerminalUrl(sId)}" allow="clipboard-read; clipboard-write"></iframe>
+          <iframe src="${buildTerminalUrl(sId)}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
         </div>
       `;
       
@@ -1686,6 +1799,7 @@
       
       // Handle activation on click for Split Mode
       wrapper.addEventListener('mousedown', () => switchTab(id));
+      wrapper.querySelector(".frame-fullscreen-btn").onclick = (event) => toggleFrameFullscreen(id, event);
 
       const iframe = wrapper.querySelector("iframe");
       iframe.addEventListener("load", () => {
@@ -1712,6 +1826,11 @@
             <strong class="tab-label-text">${customLabel || label}</strong>
             <span class="tab-subtext">remote chromium</span>
           </div>
+          <div class="terminal-actions">
+            <button type="button" class="frame-control frame-fullscreen-btn" title="На весь экран" aria-label="На весь экран" aria-pressed="false">
+              ${fullscreenIcon(false)}
+            </button>
+          </div>
         </div>
         <div class="terminal-stage">
           <iframe src="${buildBrowserUrl()}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
@@ -1723,6 +1842,7 @@
       terminalContainer.appendChild(wrapper);
 
       wrapper.addEventListener('mousedown', () => switchTab(id));
+      wrapper.querySelector(".frame-fullscreen-btn").onclick = (event) => toggleFrameFullscreen(id, event);
 
       wrapper.querySelector("iframe").addEventListener("load", () => {
         setSessionState("badge-ok", "Browser готов");
@@ -1795,6 +1915,10 @@
       if (index === -1) return;
       
       const tab = tabs[index];
+      if (fullscreenTabId === id) {
+        setFrameFullscreen(id, false);
+      }
+
       if (tab.type === "terminal" && tab.sessionId) {
         fetch("/api/session/terminate", {
           method: "POST",
@@ -1976,6 +2100,12 @@
     };
     viewTabsBtn.onclick = () => setViewMode('tabs');
     viewSplitBtn.onclick = () => setViewMode('split');
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && fullscreenTabId) {
+        setFrameFullscreen(fullscreenTabId, false);
+      }
+    });
     
     fontSizeSelect.onchange = () => { preferences.fontSize = Number(fontSizeSelect.value); savePreferences(); applyAllThemes(); };
     fontFamilySelect.onchange = () => { preferences.fontFamily = fontFamilySelect.value; savePreferences(); applyAllThemes(); };

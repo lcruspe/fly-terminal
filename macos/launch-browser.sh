@@ -27,6 +27,22 @@ FLY_BROWSER_CONTAINER_NAME="${FLY_BROWSER_CONTAINER_NAME:-fly-terminal-browser}"
 FLY_BROWSER_PROFILE_VOLUME="${FLY_BROWSER_PROFILE_VOLUME:-fly-terminal-browser-profile}"
 FLY_BROWSER_PASSWORD="${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}"
 
+wait_for_docker() {
+  local timeout="${FLY_BROWSER_DOCKER_WAIT_SECONDS:-180}"
+  local start now
+  start="$(date +%s)"
+
+  while ! docker info >/dev/null 2>&1; do
+    now="$(date +%s)"
+    if [ $((now - start)) -ge "$timeout" ]; then
+      echo "Docker daemon is not ready after ${timeout}s." >&2
+      docker info >/dev/null
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 patch_selkies_performance_profile() {
   local attempt
   for attempt in {1..30}; do
@@ -242,6 +258,8 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required for fly-terminal browser module." >&2
   exit 1
 fi
+
+wait_for_docker
 
 if docker ps --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; then
   if container_has_required_settings; then
