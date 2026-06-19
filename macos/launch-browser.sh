@@ -26,6 +26,8 @@ FLY_BROWSER_PROFILE_DIR="${FLY_BROWSER_PROFILE_DIR:-${HOME}/.local/share/fly-ter
 FLY_BROWSER_CONTAINER_NAME="${FLY_BROWSER_CONTAINER_NAME:-fly-terminal-browser}"
 FLY_BROWSER_PROFILE_VOLUME="${FLY_BROWSER_PROFILE_VOLUME:-fly-terminal-browser-profile}"
 FLY_BROWSER_PASSWORD="${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}"
+FLY_BROWSER_CHROME_PROFILE_DIR="${FLY_BROWSER_CHROME_PROFILE_DIR:-/config/.config/chromium}"
+FLY_BROWSER_CHROME_CLI="${FLY_BROWSER_CHROME_CLI:-${FLY_BROWSER_CHROME_PROFILE_DIR} --no-default-browser-check --disable-dev-shm-usage --disable-field-trial-config --password-store=basic}"
 
 wait_for_docker() {
   local timeout="${FLY_BROWSER_DOCKER_WAIT_SECONDS:-180}"
@@ -112,7 +114,8 @@ container_has_required_settings() {
   env_dump="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)" || return 1
   grep -qx 'SELKIES_AUDIO_ENABLED=false|locked' <<<"${env_dump}" &&
     grep -qx 'SELKIES_MICROPHONE_ENABLED=false|locked' <<<"${env_dump}" &&
-    grep -qx 'SELKIES_USE_BROWSER_CURSORS=true' <<<"${env_dump}"
+    grep -qx 'SELKIES_USE_BROWSER_CURSORS=true' <<<"${env_dump}" &&
+    grep -qx "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" <<<"${env_dump}"
 }
 
 patch_kasmvnc_html() {
@@ -233,7 +236,7 @@ s6-svc -r /run/service/svc-selkies 2>/dev/null || true
 }
 
 patch_selkies_input() {
-  # Replace xdotool subprocess in Selkies input_handler.py with direct Xlib XTEST.
+  # Patch Selkies input_handler.py so Cyrillic text is batched and not dropped.
   # Uses tools/patch_selkies_xtest.py copied into the container.
   local script_src="${SCRIPT_DIR}/../tools/patch_selkies_xtest.py"
   if [ ! -f "$script_src" ]; then
@@ -293,6 +296,7 @@ case "${FLY_BROWSER_IMAGE}" in
       -e "SELKIES_AUDIO_ENABLED=false|locked" \
       -e "SELKIES_MICROPHONE_ENABLED=false|locked" \
       -e "SELKIES_USE_BROWSER_CURSORS=true" \
+      -e "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" \
       -v "${FLY_BROWSER_PROFILE_VOLUME}:/config" \
       "${FLY_BROWSER_IMAGE}" >/dev/null
     ;;

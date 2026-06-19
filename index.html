@@ -25,6 +25,7 @@
       --ok: #2f7a52;
       --warn: #a66d27;
       --danger: #9f4d46;
+      --info: #3f6f9f;
       --terminal-shell: #181511;
       --terminal-edge: rgba(39, 34, 29, 0.28);
       --terminal-topbar-bg: rgba(0, 0, 0, 0.18);
@@ -603,6 +604,21 @@
       width: 100%;
     }
 
+    .drop-target::after {
+      align-items: center;
+      background: rgba(0, 0, 0, 0.32);
+      color: #fff8eb;
+      content: "Отпустите изображение";
+      display: flex;
+      font: 700 15px/1 "Avenir Next", "Segoe UI", sans-serif;
+      inset: 0;
+      justify-content: center;
+      letter-spacing: 0;
+      pointer-events: none;
+      position: absolute;
+      z-index: 4;
+    }
+
     .hint {
       color: var(--muted);
       font-size: 12px;
@@ -884,6 +900,16 @@
     const STORAGE_KEY = "fly-terminal-preferences-v2";
     const SESSIONS_STORE_KEY = "fly-terminal-active-sessions-v1";
     const FRAME_STYLE_ID = "fly-terminal-frame-style";
+    const IMAGE_EXTENSIONS = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/gif": ".gif",
+      "image/webp": ".webp",
+      "image/tiff": ".tiff",
+      "image/bmp": ".bmp",
+      "image/svg+xml": ".svg"
+    };
     
     const fontFamilies = [
       { label: "Menlo", value: "Menlo, monospace" },
@@ -1717,6 +1743,7 @@
       root.setProperty("--ok", theme.mode === "light" ? "#2f7a52" : "#7fc598");
       root.setProperty("--warn", theme.mode === "light" ? "#a66d27" : "#e7c384");
       root.setProperty("--danger", theme.mode === "light" ? "#9f4d46" : "#ef8d8d");
+      root.setProperty("--info", theme.colors.blue || "#3f6f9f");
       
       themeButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.theme === preferences.theme));
     }
@@ -1765,6 +1792,164 @@
       addBrowserBtn.hidden = !browserConfig.enabled;
     }
 
+    function getActiveTab() {
+      return tabs.find(t => t.id === activeTabId) || null;
+    }
+
+    function imageFileFromItems(items) {
+      if (!items) return null;
+      for (const item of Array.from(items)) {
+        if (item.kind === "file" && item.type && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) return file;
+        }
+      }
+      return null;
+    }
+
+    function hasImageItem(items) {
+      return Boolean(items && Array.from(items).some(item => item.kind === "file" && item.type && item.type.startsWith("image/")));
+    }
+
+    function imageFileFromFileList(files) {
+      if (!files) return null;
+      return Array.from(files).find(file => file.type && file.type.startsWith("image/")) || null;
+    }
+
+    function ensureImageFileName(file) {
+      if (file.name) return file.name;
+      const ext = IMAGE_EXTENSIONS[file.type] || ".png";
+      return `clipboard-image${ext}`;
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const comma = result.indexOf(",");
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error("read_failed"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadImageToTerminal(tab, file) {
+      const data = await readFileAsBase64(file);
+      const response = await fetch("/api/session/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: tab.sessionId,
+          fileName: ensureImageFileName(file),
+          mimeType: file.type || "image/png",
+          data
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || `upload_failed_${response.status}`);
+      }
+      return result;
+    }
+
+    function dispatchImageDropToBrowser(tab, file) {
+      const iframe = tab.wrapper.querySelector("iframe");
+      const win = iframe?.contentWindow;
+      const doc = iframe?.contentDocument;
+      if (!win || !doc) throw new Error("browser_frame_unavailable");
+
+      const transfer = new win.DataTransfer();
+      const remoteFile = new win.File([file], ensureImageFileName(file), {
+        type: file.type || "image/png",
+        lastModified: file.lastModified || Date.now()
+      });
+      transfer.items.add(remoteFile);
+
+      const target = doc.querySelector("canvas") || doc.body || doc.documentElement;
+      if (!target) throw new Error("browser_drop_target_unavailable");
+
+      ["dragenter", "dragover", "drop"].forEach(type => {
+        const event = new win.DragEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer
+        });
+        target.dispatchEvent(event);
+      });
+    }
+
+    async function handleIncomingImage(file, source) {
+      const tab = getActiveTab();
+      if (!tab || !file) return false;
+
+      if (tab.type === "terminal") {
+        try {
+          setSessionState("badge-warn", "Загрузка изображения");
+          const result = await uploadImageToTerminal(tab, file);
+          setSessionState("badge-ok", "Готово");
+          setStatusText(`Файл сохранен и путь вставлен: ${result.path}`, 3600);
+        } catch (error) {
+          setSessionState("badge-warn", "Ошибка загрузки");
+          setStatusText(`Не удалось вставить изображение: ${error.message || error}`, 4200);
+        }
+        return true;
+      }
+
+      if (tab.type === "browser") {
+        try {
+          dispatchImageDropToBrowser(tab, file);
+          setStatusText("Изображение передано в browser как файл", 3200);
+        } catch (error) {
+          setStatusText(`Browser не принял изображение: ${error.message || error}`, 4200);
+        }
+        return true;
+      }
+
+      return false;
+    }
+
+    function bindFrameImageHandlers(tab, iframe) {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc || doc.__flyTerminalImageHandlersBound) return;
+        doc.__flyTerminalImageHandlersBound = true;
+
+        doc.addEventListener("paste", (event) => {
+          const file = imageFileFromItems(event.clipboardData?.items);
+          if (!file) return;
+          event.preventDefault();
+          event.stopPropagation();
+          handleIncomingImage(file, "frame-paste");
+        }, true);
+
+        doc.addEventListener("dragover", (event) => {
+          if (tab.type !== "terminal" || !hasImageItem(event.dataTransfer?.items)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "copy";
+          tab.wrapper.classList.add("drop-target");
+        }, true);
+
+        doc.addEventListener("dragleave", (event) => {
+          if (tab.type === "terminal" && !event.relatedTarget) {
+            tab.wrapper.classList.remove("drop-target");
+          }
+        }, true);
+
+        doc.addEventListener("drop", (event) => {
+          if (tab.type !== "terminal") return;
+          const file = imageFileFromItems(event.dataTransfer?.items) || imageFileFromFileList(event.dataTransfer?.files);
+          if (!file) return;
+          event.preventDefault();
+          event.stopPropagation();
+          tab.wrapper.classList.remove("drop-target");
+          handleIncomingImage(file, "frame-drop");
+        }, true);
+      } catch (e) {}
+    }
+
     function addTab(sessionId = null, label = "Terminal") {
       const id = createId();
       // Ensure we don't accidentally reuse a session ID if it's already open
@@ -1804,6 +1989,7 @@
       const iframe = wrapper.querySelector("iframe");
       iframe.addEventListener("load", () => {
         syncIframe(iframe, tab.type);
+        bindFrameImageHandlers(tab, iframe);
         setSessionState("badge-ok", "Готово");
       });
 
@@ -1845,6 +2031,7 @@
       wrapper.querySelector(".frame-fullscreen-btn").onclick = (event) => toggleFrameFullscreen(id, event);
 
       wrapper.querySelector("iframe").addEventListener("load", () => {
+        bindFrameImageHandlers(tab, wrapper.querySelector("iframe"));
         setSessionState("badge-ok", "Browser готов");
         // Inject error suppressor into KasmVNC iframe to swallow the
         // "Cannot read properties of undefined (reading 'lastActiveAt')" crash
@@ -2105,6 +2292,34 @@
       if (event.key === "Escape" && fullscreenTabId) {
         setFrameFullscreen(fullscreenTabId, false);
       }
+    });
+
+    document.addEventListener("paste", (event) => {
+      const file = imageFileFromItems(event.clipboardData?.items);
+      if (!file) return;
+      event.preventDefault();
+      handleIncomingImage(file, "paste");
+    });
+
+    document.addEventListener("dragover", (event) => {
+      if (!hasImageItem(event.dataTransfer?.items)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      getActiveTab()?.wrapper.classList.add("drop-target");
+    });
+
+    document.addEventListener("dragleave", (event) => {
+      if (!event.relatedTarget) {
+        tabs.forEach(tab => tab.wrapper.classList.remove("drop-target"));
+      }
+    });
+
+    document.addEventListener("drop", (event) => {
+      tabs.forEach(tab => tab.wrapper.classList.remove("drop-target"));
+      const file = imageFileFromItems(event.dataTransfer?.items) || imageFileFromFileList(event.dataTransfer?.files);
+      if (!file) return;
+      event.preventDefault();
+      handleIncomingImage(file, "drop");
     });
     
     fontSizeSelect.onchange = () => { preferences.fontSize = Number(fontSizeSelect.value); savePreferences(); applyAllThemes(); };

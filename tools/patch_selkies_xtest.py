@@ -1,291 +1,448 @@
 #!/usr/bin/env python3
 """
-Patches Selkies input_handler.py to eliminate Cyrillic character loss.
+Patch Selkies keyboard input so Cyrillic text is injected as ordered text, not
+as independent keydown/keyup events.
 
-Problem:
-  English: XTEST fast-path works (keysym_to_keycode maps to keycodes) → instant
-  Cyrillic: XTEST fails (US X11 layout, keysym_to_keycode returns 0) → falls
-            to xdotool keydown + keyup subprocess (10-50ms per call, 2 per char)
-            → characters dropped during fast typing
-
-Fix:
-  Latin chars: XTEST fast-path (already patched, no subprocess)
-  Cyrillic 'kd': use xdotool type --clearmodifiers <char> (1 subprocess per char)
-                 instead of send_x11_keypress (2 subprocesses per char)
-  Add to atomically_typed_keys → 'ku' handler skips the keyup automatically
-
-Usage:
-  docker cp tools/patch_selkies_xtest.py <container>:/tmp/
-  docker exec -u root <container> python3 /tmp/patch_selkies_xtest.py
+The linuxserver Chromium image currently runs Selkies on X11. Newer Selkies
+routes alphabetic printable input through pynput or xdotool key events; for
+Cyrillic this can race under fast typing and characters are dropped. The patch
+keeps shortcuts and Latin key events intact, but batches Cyrillic characters
+and sends each batch with one `xdotool type` call.
 """
 
-import os, sys, re, py_compile
+import os
+import py_compile
+import re
+import sys
+from pathlib import Path
 
-MARKER = "/tmp/fly-terminal-selkies-xtest-patched"
-FP = None
 
-for p in [
+PATCH_MARKER = "fly-terminal-cyrillic-batch-input-v2"
+LEGACY_MARKER = "/tmp/fly-terminal-selkies-xtest-patched"
+MARKER = "/tmp/fly-terminal-selkies-cyrillic-batch-v2"
+
+SEARCH_PATHS = [
     "/lsiopy/lib/python3.13/site-packages/selkies/input_handler.py",
     "/lsiopy/lib/python3.12/site-packages/selkies/input_handler.py",
     "/lsiopy/lib/python3.11/site-packages/selkies/input_handler.py",
+    "/lsiopy/lib64/python3.13/site-packages/selkies/input_handler.py",
+    "/lsiopy/lib64/python3.12/site-packages/selkies/input_handler.py",
+    "/lsiopy/lib64/python3.11/site-packages/selkies/input_handler.py",
     "/usr/local/lib/python3.13/dist-packages/selkies/input_handler.py",
+    "/usr/local/lib/python3.12/dist-packages/selkies/input_handler.py",
+    "/usr/local/lib/python3.11/dist-packages/selkies/input_handler.py",
     "/usr/lib/python3/dist-packages/selkies/input_handler.py",
     "/usr/local/lib/python3.11/dist-packages/selkies_gstreamer/webrtc_input.py",
     "/usr/lib/python3/dist-packages/selkies_gstreamer/webrtc_input.py",
-]:
-    if os.path.isfile(p):
-        FP = p
-        break
+]
 
-if not FP:
-    print("Selkies input handler not found.", file=sys.stderr)
-    sys.exit(0)
 
-# Inline Cyrillic check — will be added to input_handler.py
-CYRILLIC_CHECK_FUNC = """
-## fly-terminal: cyrillic check helper ##
-def _is_cyr(ks):
-    return 0x0400 <= ks <= 0x04FF or 0x0500 <= ks <= 0x052F or 0x2DE0 <= ks <= 0x2DFF or 0xA640 <= ks <= 0xA69F
-"""
+HELPERS = f'''
+## {PATCH_MARKER}: helpers ##
+def _fly_terminal_is_cyrillic_char(ch):
+    if not ch:
+        return False
+    cp = ord(ch[0])
+    return (
+        0x0400 <= cp <= 0x04FF or
+        0x0500 <= cp <= 0x052F or
+        0x2DE0 <= cp <= 0x2DFF or
+        0xA640 <= cp <= 0xA69F
+    )
 
-# XTEST fast-path template for Latin characters
-XTEST_PRESS = """\
-## fly-terminal: xtest fast-path ##
-if hasattr(self, 'xdisplay') and self.xdisplay:
-    try:
-        from Xlib.ext import xtest as _xt
-        import Xlib as _Xl
-        _kc = self.xdisplay.keysym_to_keycode({ks})
-        if _kc:
-            _xt.fake_input(self.xdisplay, _Xl.KeyPress if {d} else _Xl.KeyRelease, _kc)
-            self.xdisplay.sync()
+
+def _fly_terminal_keysym_to_cyrillic_text(keysym):
+    candidates = []
+
+    if (keysym & 0xFF000000) == 0x01000000:
+        cp = keysym & 0x00FFFFFF
+        if 0 <= cp <= 0x10FFFF:
+            try:
+                candidates.append(chr(cp))
+            except ValueError:
+                pass
+    elif 0x0400 <= keysym <= 0x04FF or 0x0500 <= keysym <= 0x052F:
+        try:
+            candidates.append(chr(keysym))
+        except ValueError:
+            pass
+
+    if libxkb is not None:
+        try:
+            buf = ctypes.create_string_buffer(16)
+            result = libxkb.xkb_keysym_to_utf8(keysym, buf, 16)
+            if result > 0:
+                candidates.append(buf.value.decode("utf-8"))
+        except Exception:
+            pass
+
+    if XK is not None:
+        try:
+            value = XK.keysym_to_string(keysym)
+            if value:
+                candidates.append(value)
+        except Exception:
+            pass
+
+    for value in candidates:
+        if len(value) == 1 and _fly_terminal_is_cyrillic_char(value):
+            return value
+    return None
+## end {PATCH_MARKER}: helpers ##
+'''
+
+
+X11_TYPE_METHOD = f'''
+    ## {PATCH_MARKER}: x11 text batching ##
+    async def _fly_terminal_type_text_x11(self, text_to_type):
+        if not text_to_type:
             return
-    except Exception:
-        pass
-## fallback: xdotool subprocess ##"""
 
-# Cyrillic kd handler — single xdotool type call instead of send_x11_keypress
-CYRILLIC_KD = """\
-## fly-terminal: cyrillic kd -> xdotool type ##
-            if _is_cyr(keysym):
-                try:
-                    _cp = keysym & 0xFFFFFF if (keysym & 0xFF000000) == 0x01000000 else keysym
-                    _ch = chr(_cp)
+        currently_active_mods = list(self.active_modifiers)
+
+        try:
+            for mod_keysym in currently_active_mods:
+                await self.send_x11_keypress(mod_keysym, down=False)
+
+            process = await subprocess.create_subprocess_exec(
+                "xdotool", "type", "--clearmodifiers", "--delay", "1", "--", text_to_type,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            timeout = max(1.0, min(5.0, 0.03 * len(text_to_type) + 1.0))
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+            if process.returncode == 0:
+                return
+
+            logger_webrtc_input.warning(
+                "Batched xdotool Cyrillic input failed: %s",
+                stderr.decode("utf-8", "replace").strip(),
+            )
+            await self._inject_unicode_via_clipboard(text_to_type)
+        except Exception as e:
+            logger_webrtc_input.warning(f"Batched xdotool Cyrillic input failed: {{e}}")
+            await self._inject_unicode_via_clipboard(text_to_type)
+        finally:
+            for mod_keysym in currently_active_mods:
+                if mod_keysym in self.active_modifiers:
+                    await self.send_x11_keypress(mod_keysym, down=True)
+    ## end {PATCH_MARKER}: x11 text batching ##
+'''
+
+
+def unique_existing_paths():
+    seen = set()
+    for raw_path in SEARCH_PATHS:
+        path = Path(raw_path)
+        if not path.is_file():
+            continue
+        key = path.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        yield path
+
+
+def find_dict_insert_point(src):
+    anchor = "CYRILLIC_TO_QWERTY_KEYSYM = {"
+    start = src.find(anchor)
+    if start < 0:
+        return -1
+
+    depth = 0
+    for idx in range(start, len(src)):
+        char = src[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return src.find("\n", idx)
+    return -1
+
+
+def patch_helpers(src):
+    if f"## {PATCH_MARKER}: helpers ##" in src:
+        return src, False
+
+    insert_at = find_dict_insert_point(src)
+    if insert_at < 0:
+        raise RuntimeError("CYRILLIC_TO_QWERTY_KEYSYM anchor not found")
+
+    return src[:insert_at] + "\n" + HELPERS + src[insert_at:], True
+
+
+def patch_init(src):
+    old = "        self.keyboard_queue = asyncio.Queue()\n        self.keyboard_worker_task = None\n"
+    new = (
+        "        self.keyboard_queue = asyncio.Queue()\n"
+        "        self.keyboard_worker_task = None\n"
+        f"        self.fly_terminal_cyrillic_batch_input = True  # {PATCH_MARKER}\n"
+    )
+    if f"self.fly_terminal_cyrillic_batch_input = True  # {PATCH_MARKER}" in src:
+        return src, False
+    if old not in src:
+        raise RuntimeError("keyboard queue initializer anchor not found")
+    return src.replace(old, new, 1), True
+
+
+def patch_connect(src):
+    old = (
+        "        if self.is_wayland:\n"
+        "            self.keyboard_worker_task = asyncio.create_task(self._keyboard_worker())        \n"
+    )
+    new = (
+        "        if self.is_wayland or getattr(self, 'fly_terminal_cyrillic_batch_input', False):\n"
+        "            self.keyboard_worker_task = asyncio.create_task(self._keyboard_worker())        \n"
+    )
+    if "if self.is_wayland or getattr(self, 'fly_terminal_cyrillic_batch_input', False):" in src:
+        return src, False
+    if old not in src:
+        raise RuntimeError("keyboard worker startup anchor not found")
+    return src.replace(old, new, 1), True
+
+
+def patch_keyboard_worker_flush(src):
+    if f"await self._fly_terminal_type_text_x11(combined_text)" in src:
+        return src, False
+
+    old = '''                if getattr(self, 'use_clipboard_fallback', False):
+                    await self._inject_unicode_via_clipboard(combined_text)
+                else:
+                    try:
+                        cmd = ["wtype", "--", combined_text]
+                        proc = await subprocess.create_subprocess_exec(
+                            *cmd,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            env=self._get_wl_env()
+                        )
+                        await asyncio.wait_for(proc.communicate(), timeout=2.0)
+                    except Exception as e:
+                        logger_webrtc_input.warning(f"Batched wtype failed: {e}")'''
+
+    new = '''                if self.is_wayland:
+                    if getattr(self, 'use_clipboard_fallback', False):
+                        await self._inject_unicode_via_clipboard(combined_text)
+                    else:
+                        try:
+                            cmd = ["wtype", "--", combined_text]
+                            proc = await subprocess.create_subprocess_exec(
+                                *cmd,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                env=self._get_wl_env()
+                            )
+                            await asyncio.wait_for(proc.communicate(), timeout=2.0)
+                        except Exception as e:
+                            logger_webrtc_input.warning(f"Batched wtype failed: {e}")
+                else:
+                    await self._fly_terminal_type_text_x11(combined_text)'''
+
+    if old not in src:
+        raise RuntimeError("keyboard worker flush anchor not found")
+    return src.replace(old, new, 1), True
+
+
+def patch_keyboard_worker_text_message(src):
+    if 'elif msg_type == "text":\n                        unicode_buffer.append(data)' in src:
+        return src, False
+
+    old = '''                    elif msg_type == "co_end":
+                        unicode_buffer.append(data)'''
+    new = '''                    elif msg_type == "co_end":
+                        unicode_buffer.append(data)
+
+                    elif msg_type == "text":
+                        unicode_buffer.append(data)'''
+
+    if old not in src:
+        raise RuntimeError("keyboard worker co_end anchor not found")
+    return src.replace(old, new, 1), True
+
+
+def patch_x11_type_method(src):
+    if f"## {PATCH_MARKER}: x11 text batching ##" in src:
+        return src, False
+
+    anchor = "    async def _keyboard_worker(self):\n"
+    idx = src.find(anchor)
+    if idx < 0:
+        raise RuntimeError("_keyboard_worker anchor not found")
+    return src[:idx] + X11_TYPE_METHOD + "\n" + src[idx:], True
+
+
+def patch_on_message_keydown(src):
+    if "cyrillic_text = _fly_terminal_keysym_to_cyrillic_text(keysym)" in src:
+        return src, False
+
+    old = '''            else:
+                is_printable = (0x20 <= keysym <= 0xFF) or ((keysym & 0xFF000000) == 0x01000000)
+                if keysym in self.MODIFIER_KEYSYMS:
+                    self.active_modifiers.add(keysym)
+                if is_printable and not self.active_modifiers:
+                    unicode_codepoint = keysym & 0x00FFFFFF if (keysym & 0xFF000000) == 0x01000000 else keysym
+                    try:
+                        char_to_type = chr(unicode_codepoint)
+                        if not char_to_type.isalpha() and char_to_type != ' ':
+                            await self.on_message(f"co,end,{char_to_type}")
+                            self.atomically_typed_keys.add(keysym)
+                        else:
+                            await self.send_x11_keypress(keysym, down=True)
+                    except (ValueError, TypeError):
+                        await self.send_x11_keypress(keysym, down=True)
+                else:
+                    await self.send_x11_keypress(keysym, down=True)'''
+
+    new = '''            else:
+                is_printable = (0x20 <= keysym <= 0xFF) or ((keysym & 0xFF000000) == 0x01000000)
+                if keysym in self.MODIFIER_KEYSYMS:
+                    self.active_modifiers.add(keysym)
+
+                cyrillic_text = None
+                if not (self.active_modifiers & self.ACTION_MODIFIER_KEYSYMS):
+                    cyrillic_text = _fly_terminal_keysym_to_cyrillic_text(keysym)
+
+                if cyrillic_text:
+                    self.keyboard_queue.put_nowait(("text", cyrillic_text))
                     self.atomically_typed_keys.add(keysym)
-                    _proc = await subprocess.create_subprocess_exec(
-                        "xdotool", "type", "--clearmodifiers", _ch,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    await asyncio.wait_for(_proc.communicate(), timeout=0.5)
-                except Exception:
-                    await self.send_x11_keypress(keysym, down=True)
-            else"""
+                elif keysym == 65288:
+                    self.keyboard_queue.put_nowait(("kd", keysym))
+                elif is_printable and not self.active_modifiers:
+                    unicode_codepoint = keysym & 0x00FFFFFF if (keysym & 0xFF000000) == 0x01000000 else keysym
+                    try:
+                        char_to_type = chr(unicode_codepoint)
+                        if not char_to_type.isalpha() and char_to_type != ' ':
+                            await self.on_message(f"co,end,{char_to_type}")
+                            self.atomically_typed_keys.add(keysym)
+                        else:
+                            await self.send_x11_keypress(keysym, down=True)
+                    except (ValueError, TypeError):
+                        await self.send_x11_keypress(keysym, down=True)
+                else:
+                    await self.send_x11_keypress(keysym, down=True)'''
+
+    if old not in src:
+        raise RuntimeError("X11 keydown branch anchor not found")
+    return src.replace(old, new, 1), True
 
 
-def patch():
-    if os.path.exists(MARKER):
-        print("Already patched.")
-        return True
+def patch_on_message_keyup(src):
+    if 'elif keysym == 65288:\n                    self.keyboard_queue.put_nowait(("ku", keysym))' in src:
+        return src, False
 
-    with open(FP) as f:
-        src = f.read()
+    old = '''                if keysym in self.atomically_typed_keys:
+                    self.atomically_typed_keys.discard(keysym)
+                    pass
+                else:
+                    await self.send_x11_keypress(keysym, down=False)'''
+    new = '''                if keysym in self.atomically_typed_keys:
+                    self.atomically_typed_keys.discard(keysym)
+                    pass
+                elif keysym == 65288:
+                    self.keyboard_queue.put_nowait(("ku", keysym))
+                else:
+                    await self.send_x11_keypress(keysym, down=False)'''
+
+    if old not in src:
+        raise RuntimeError("X11 keyup branch anchor not found")
+    return src.replace(old, new, 1), True
+
+
+def patch_co_end(src):
+    if 'self.keyboard_queue.put_nowait(("co_end", text_to_type))\n                else:\n                    self.keyboard_queue.put_nowait(("co_end", text_to_type))' in src:
+        return src, False
+
+    old = '''                if self.is_wayland:
+                    self.keyboard_queue.put_nowait(("co_end", text_to_type))
+                else:
+                    cmd = ["xdotool", "type", text_to_type]
+                    process = await subprocess.create_subprocess_exec(
+                        *cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    await asyncio.wait_for(process.communicate(), timeout=0.5)'''
+    new = '''                if self.is_wayland:
+                    self.keyboard_queue.put_nowait(("co_end", text_to_type))
+                else:
+                    self.keyboard_queue.put_nowait(("co_end", text_to_type))'''
+
+    if old not in src:
+        raise RuntimeError("co,end branch anchor not found")
+    return src.replace(old, new, 1), True
+
+
+def validate_source(path, src):
+    tmp = path.with_suffix(path.suffix + ".validate")
+    tmp.write_text(src)
+    try:
+        py_compile.compile(str(tmp), doraise=True)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def patch_file(path):
+    src = path.read_text()
     original = src
 
-    # Current Selkies releases route printable alphabetic input through a
-    # persistent pynput keyboard instead of spawning xdotool per key event.
-    # The legacy rewrite below targets older handlers and would corrupt this
-    # newer control flow, so keep the native optimized implementation intact.
-    if "use_pynput_for_printable" in src and "self.keyboard.press" in src:
-        open(MARKER, "w").close()
-        print(f"Native optimized input detected in {FP}; no XTEST patch needed")
+    patchers = [
+        patch_helpers,
+        patch_init,
+        patch_connect,
+        patch_keyboard_worker_flush,
+        patch_keyboard_worker_text_message,
+        patch_x11_type_method,
+        patch_on_message_keydown,
+        patch_on_message_keyup,
+        patch_co_end,
+    ]
+
+    changes = []
+    for patcher in patchers:
+        src, changed = patcher(src)
+        if changed:
+            changes.append(patcher.__name__)
+
+    if src == original:
+        print(f"{path}: already patched")
         return True
 
-    # 1. Add _is_cyr helper function — insert after CYRILLIC_TO_QWERTY_KEYSYM dict
-    mark = "CYRILLIC_TO_QWERTY_KEYSYM = {"
-    idx = src.find(mark)
-    if idx == -1:
-        print("Cannot find CYRILLIC_TO_QWERTY_KEYSYM anchor")
-        return False
-    # Find the end of the dict
-    dict_end = src.find("}", idx)
-    if dict_end == -1:
-        return False
-    insert_point = src.find("\n", dict_end)
-    if insert_point == -1:
-        return False
-    src = src[:insert_point] + "\n" + CYRILLIC_CHECK_FUNC + src[insert_point:]
-    changed_1 = True
-
-    # 2. Add XTEST before each xdotool keydown/keyup subprocess
-    # Replace standalone xdotool command blocks
-    lines = src.split("\n")
-    new_lines = []
-    i = 0
-    changed_2 = False
-
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-
-        # XTEST for: command = ["xdotool", "keydown"/"keyup"/"key", ...]
-        m = re.match(r'^(\s*)(?:command|proc|process)\s*=\s*\["xdotool",\s*("(?:keydown|keyup|key)")', stripped)
-        if m and "## fly-terminal" not in line:
-            indent = m.group(1)
-            action = m.group(2)
-            down_val = "True" if '"keydown"' in action or '"key"' in action else "False"
-
-            # Find end of subprocess block
-            j = i + 1
-            while j < len(lines) and "communicate(" not in lines[j]:
-                j += 1
-            if j < len(lines):
-                j += 1
-            while j < len(lines) and re.match(r'^\s*(except|pass|continue|else:|logger_|#)', lines[j]):
-                j += 1
-
-            xtest = XTEST_PRESS.format(ks="keysym", d=down_val)
-            new_lines.append(xtest)
-            new_lines.extend(lines[i:j])
-            changed_2 = True
-            i = j
-            continue
-
-        # XTEST for: await self._xdotool_fallback(...)
-        m = re.match(r'^(\s*)await\s+self\._xdotool_fallback\(', stripped)
-        if m and "## fly-terminal" not in line:
-            indent = m.group(1)
-            args_str = line[line.index("_xdotool_fallback(") + len("_xdotool_fallback("):line.rindex(")")]
-            args = [a.strip() for a in args_str.split(",")]
-            ks_var = args[0] if len(args) > 0 else "keysym"
-            d_var = args[1] if len(args) > 1 else "down"
-
-            xtest = f"""\
-{indent}## fly-terminal: xtest fast-path ##
-{indent}if hasattr(self, 'xdisplay') and self.xdisplay:
-{indent}    try:
-{indent}        from Xlib.ext import xtest as _xt
-{indent}        import Xlib as _Xl
-{indent}        _kc = self.xdisplay.keysym_to_keycode({ks_var})
-{indent}        if _kc:
-{indent}            _xt.fake_input(self.xdisplay, _Xl.KeyPress if {d_var} else _Xl.KeyRelease, _kc)
-{indent}            self.xdisplay.sync()
-{indent}            return
-{indent}    except Exception:
-{indent}        pass
-{indent}## fallback: _xdotool_fallback ##"""
-            new_lines.append(xtest)
-            new_lines.append(line)
-            changed_2 = True
-            i += 1
-            continue
-
-        new_lines.append(line)
-        i += 1
-
-    if not changed_2:
-        print("No xdotool calls found to patch with XTEST")
-        # Still continue — the Cyrillic fix is the important part
-    else:
-        src = "\n".join(new_lines)
-
-    # 3. Add Cyrillic interception in on_message 'kd' handler
-    # Find the specific line in on_message that calls send_x11_keypress for non-printable keys
-    # Pattern: in the 'else:' path: await self.send_x11_keypress(keysym, down=True)
-    # But we need to target the ONE in on_message, not the one in send_x11_keypress itself
-    
-    # Better approach: find lines like: await self.send_x11_keypress(keysym, down=True)
-    # and check if they're in on_message by looking at surrounding context
-    
-    lines = src.split("\n")
-    new_lines2 = []
-    i = 0
-    changed_3 = False
-    
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-        
-        # Find: await self.send_x11_keypress(keysym, down=True) in on_message context
-        m = re.match(r'^(\s*)await\s+self\.send_x11_keypress\(keysym,\s*down=True\)', stripped)
-        if m and "## fly-terminal" not in line:
-            indent = m.group(1)
-            # Check if this is inside on_message by looking at context
-            ctx_start = max(0, i - 8)
-            ctx = "\n".join(lines[ctx_start:i])
-            
-            # on_message kd handler has: keysym = ...
-            # We need to identify the SECOND send_x11_keypress call (for non-printable)
-            # The first one is for printable alpha chars, the second for non-printable
-            # Both need Cyrillic handling, so we wrap both
-            
-            # Check context clues
-            is_on_msg = any(x in ctx for x in ["active_modifiers", "is_printable", "char_to_type", 'msg_type == "kd"'])
-            
-            if is_on_msg:
-                # This is in on_message — add Cyrillic kd interception
-                cyr_block = f"""\
-{indent}## fly-terminal: cyrillic kd -> xdotool type ##
-{indent}if _is_cyr(keysym):
-{indent}    try:
-{indent}        _cp = keysym & 0xFFFFFF if (keysym & 0xFF000000) == 0x01000000 else keysym
-{indent}        _ch = chr(_cp)
-{indent}        self.atomically_typed_keys.add(keysym)
-{indent}        _p = await subprocess.create_subprocess_exec(
-{indent}            "xdotool", "type", "--clearmodifiers", _ch,
-{indent}            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-{indent}        await asyncio.wait_for(_p.communicate(), timeout=0.5)
-{indent}    except Exception:
-{indent}        await self.send_x11_keypress(keysym, down=True)
-{indent}else:
-{indent}    await self.send_x11_keypress(keysym, down=True)"""
-                new_lines2.append(cyr_block)
-                changed_3 = True
-                i += 1
-                continue
-        
-        new_lines2.append(line)
-        i += 1
-
-    if not changed_3:
-        print("Warning: Could not add Cyrillic interception to on_message")
-        # Still apply other changes if any
-    
-    src = "\n".join(new_lines2)
-    
-    if not (changed_1 or changed_2 or changed_3):
-        print("No changes made.")
-        return True
-    
-    # Validate syntax
-    tmp = FP + ".validate"
     try:
-        with open(tmp, "w") as f:
-            f.write(src)
-        py_compile.compile(tmp, doraise=True)
-        os.unlink(tmp)
-    except py_compile.PyCompileError as e:
-        os.unlink(tmp)
-        print(f"SYNTAX ERROR - rolled back: {e}", file=sys.stderr)
-        ln = 0
-        if "line " in str(e):
-            try: ln = int(str(e).split("line ")[1].split(",")[0])
-            except: pass
-        if ln:
-            ctxt = src.split("\n")
-            start = max(0, ln - 5)
-            end = min(len(ctxt), ln + 3)
-            for n in range(start, end):
-                m = ">>>" if n == ln - 1 else "   "
-                print(f"  {m} {n+1}: {ctxt[n]}", file=sys.stderr)
-        with open(FP, "w") as f:
-            f.write(original)
+        validate_source(path, src)
+    except py_compile.PyCompileError as exc:
+        print(f"{path}: syntax validation failed: {exc}", file=sys.stderr)
         return False
 
-    with open(FP, "w") as f:
-        f.write(src)
-    open(MARKER, "w").close()
-    print(f"Patched {FP}: Latin=XTEST, Cyrillic=single xdotool type")
+    backup = path.with_suffix(path.suffix + ".fly-terminal-bak")
+    if not backup.exists():
+        backup.write_text(original)
+    path.write_text(src)
+    print(f"{path}: patched {', '.join(changes)}")
     return True
 
 
+def main():
+    paths = list(unique_existing_paths())
+    if not paths:
+        print("Selkies input handler not found.", file=sys.stderr)
+        return 0
+
+    ok = True
+    for path in paths:
+        try:
+            ok = patch_file(path) and ok
+        except Exception as exc:
+            print(f"{path}: patch failed: {exc}", file=sys.stderr)
+            ok = False
+
+    if ok:
+        Path(MARKER).write_text("ok\n")
+        # Keep the legacy marker for older launch scripts/log readers, but never
+        # trust it as the idempotency condition.
+        Path(LEGACY_MARKER).write_text("ok\n")
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
-    sys.exit(0 if patch() else 1)
+    sys.exit(main())
