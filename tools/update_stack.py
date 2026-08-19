@@ -75,10 +75,22 @@ class Updater:
         domain = f"gui/{uid}"
         for label in LABELS:
             self.run(f"restart-{label}", ["launchctl", "kickstart", "-k", f"{domain}/{label}"], timeout=30)
-        # The ttyd agent owns session-control; give launchd a moment to respawn it.
-        time.sleep(2)
+        # The ttyd agent owns session-control; allow launchd and Caddy time to respawn.
         for port in (8080, 7682, 7683):
-            self.run(f"check-port-{port}", ["sh", "-c", f"lsof -nP -iTCP:{port} -sTCP:LISTEN"], timeout=10)
+            deadline = time.monotonic() + 30
+            while True:
+                probe = subprocess.run(
+                    ["sh", "-c", f"lsof -nP -iTCP:{port} -sTCP:LISTEN"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False, timeout=10,
+                )
+                if probe.returncode == 0:
+                    self.entries.append({"time": now(), "step": f"check-port-{port}", "ok": True, "message": f"port {port} is listening", "output": (probe.stdout or "")[-4000:]})
+                    self.write("running", f"Порт {port} готов", f"check-port-{port}")
+                    break
+                if time.monotonic() >= deadline:
+                    self.entries.append({"time": now(), "step": f"check-port-{port}", "ok": False, "message": f"port {port} did not become ready"})
+                    raise RuntimeError(f"port {port} did not become ready")
+                time.sleep(1)
 
     def execute(self):
         self.write("running", "Проверяю локальные изменения", "preflight")
