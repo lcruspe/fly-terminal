@@ -27,6 +27,11 @@ fi
 
 export CADDY_BASIC_AUTH_USER="${TERMINAL_USER}"
 export CADDY_BASIC_AUTH_HASH="$(printf '%s\n' "${TERMINAL_PASSWORD}" | /opt/homebrew/bin/caddy hash-password --algorithm bcrypt)"
+export FLY_BROWSER_SESSION_TOKEN="$(
+  printf '%s:%s:%s' "${TERMINAL_USER}" "${TERMINAL_PASSWORD}" "${FLY_BROWSER_BASIC_AUTH:-}" |
+    /usr/bin/shasum -a 256 |
+    /usr/bin/awk '{print $1}'
+)"
 
 exec /opt/homebrew/bin/caddy run \
   --config "${SCRIPT_DIR}/Caddyfile" \

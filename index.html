@@ -43,6 +43,10 @@
       box-sizing: border-box;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     html,
     body {
       height: 100%;
@@ -180,14 +184,17 @@
     .controls {
       align-items: center;
       display: flex;
-      flex-wrap: wrap;
+      flex: 1 1 auto;
+      flex-wrap: nowrap;
       gap: 6px;
       justify-content: flex-end;
+      min-width: 0;
     }
 
     .control-group {
       align-items: center;
       display: inline-flex;
+      flex: 0 0 auto;
       gap: 6px;
     }
 
@@ -403,13 +410,13 @@
       box-shadow: 0 18px 44px rgba(63, 45, 25, 0.2);
       display: grid;
       gap: 14px;
-      margin-top: 10px;
+      margin: 0;
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
       padding: 14px;
-      position: absolute;
-      right: 0;
-      bottom: calc(100% + 2px);
+      position: fixed;
       width: min(420px, calc(100vw - 28px));
-      z-index: 40;
+      z-index: 4000;
     }
 
     button svg,
@@ -472,6 +479,46 @@
       font-weight: 700;
     }
 
+    .settings-action {
+      border-top: 1px solid var(--border);
+      display: grid;
+      gap: 8px;
+      padding-top: 12px;
+    }
+
+    .settings-action button {
+      justify-content: center;
+      min-height: 38px;
+      width: 100%;
+    }
+
+    .settings-action-status {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      min-height: 16px;
+    }
+
+    .settings-action-status.ok {
+      color: var(--ok);
+    }
+
+    .settings-action-status.warn {
+      color: var(--warn);
+    }
+
+    .settings-action-status.danger {
+      color: var(--danger);
+    }
+
+    .tools-menu .settings-panel {
+      width: min(360px, calc(100vw - 28px));
+    }
+
+    .tools-menu select {
+      min-width: 0;
+    }
+
     select {
       appearance: none;
       background:
@@ -490,6 +537,21 @@
       font: 600 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
       padding: 10px 36px 10px 12px;
       width: 100%;
+    }
+
+    input[type="text"] {
+      background: var(--select-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      color: var(--ink);
+      font: 600 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      padding: 10px 12px;
+      width: 100%;
+    }
+
+    input[type="text"]:focus {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
 
     select:focus,
@@ -546,6 +608,14 @@
       justify-content: center;
       padding: 0;
       width: 28px;
+    }
+
+    a.frame-control {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: var(--control-radius);
     }
 
     .frame-control:hover {
@@ -662,13 +732,13 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      margin-top: 6px;
+      margin: 0;
+      max-height: calc(100vh - 24px);
       min-width: 190px;
+      overflow-y: auto;
       padding: 4px;
-      position: absolute;
-      right: 0;
-      top: calc(100% + 2px);
-      z-index: 40;
+      position: fixed;
+      z-index: 4000;
     }
 
     .dropdown-menu button,
@@ -705,6 +775,74 @@
     .dropdown-menu .divider {
       border-top: 1px solid var(--border);
       margin: 2px 8px;
+    }
+
+    .apps-menu .dropdown-menu {
+      max-height: min(360px, calc(100vh - 160px));
+      min-width: 240px;
+    }
+
+    .overflow-menu {
+      flex: 0 0 auto;
+    }
+
+    .overflow-menu .dropdown-menu {
+      min-width: min(300px, calc(100vw - 28px));
+    }
+
+    .overflow-menu-list > button,
+    .overflow-menu-list > a.button,
+    .overflow-menu-list > details > summary,
+    .overflow-menu-list > .control-group {
+      box-sizing: border-box;
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .overflow-menu-list > .control-group {
+      align-items: stretch;
+      flex-wrap: wrap;
+      padding: 6px;
+    }
+
+    .overflow-menu-list > .layout-controls {
+      background: transparent;
+      border: 0;
+    }
+
+    .overflow-menu-list > details {
+      width: 100%;
+    }
+
+    .app-menu-item {
+      display: grid !important;
+      gap: 3px !important;
+      grid-template-columns: 18px minmax(0, 1fr);
+      line-height: 1.1 !important;
+    }
+
+    .app-menu-icon {
+      align-items: center;
+      color: var(--muted);
+      display: inline-flex;
+      font-size: 14px;
+      justify-content: center;
+    }
+
+    .app-menu-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .app-menu-meta {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      grid-column: 2;
+      letter-spacing: 0.04em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
     }
 
     @media (max-width: 760px) {
@@ -810,7 +948,7 @@
 
     <div class="bottom-panel" id="bottomPanel">
       <nav class="tab-bar" id="tabBar"></nav>
-      <section class="toolbar" aria-label="Terminal settings">
+      <section class="toolbar" id="toolbar" aria-label="Terminal settings">
         <div class="toolbar-primary">
           <div class="brand">
             <strong>Fly Terminal</strong>
@@ -820,7 +958,7 @@
             <span class="badge badge-neutral" id="sessionState">Подключение</span>
           </div>
         </div>
-        <div class="controls">
+        <div class="controls" id="toolbarControls">
           <div class="control-group panel-toggle-group">
             <button type="button" id="togglePanel" title="Свернуть панель">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l4 4 4-4"/><path d="M4 4h8"/></svg>
@@ -828,7 +966,7 @@
             </button>
           </div>
 
-          <div class="control-group layout-controls" aria-label="Режим и компоновка">
+          <div class="control-group layout-controls" id="layoutControls" aria-label="Режим и компоновка">
             <span class="control-label">Вид</span>
             <div class="view-switch" aria-label="Режим отображения">
               <button type="button" id="viewTabs" class="active" title="Вкладки">
@@ -845,11 +983,24 @@
             </div>
           </div>
 
-          <div class="control-group session-controls">
+          <div class="control-group session-controls" id="sessionControls">
             <button type="button" id="addBrowser" hidden>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/></svg>
               Browser
             </button>
+            <a class="button" id="openBrowserTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Remote Browser в отдельной вкладке">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/><path d="M11 5l3-3M11 2h3v3" stroke-width="1.3"/></svg>
+              ↗ Browser
+            </a>
+            <details class="dropdown apps-menu" id="appsMenu" hidden>
+              <summary class="button">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
+                Приложения
+              </summary>
+              <div class="dropdown-menu" id="appsList">
+                <button type="button" disabled>Загрузка...</button>
+              </div>
+            </details>
             <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
               Новое окно
@@ -858,12 +1009,12 @@
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 11.5-2.5M14 8a6 6 0 0 1-11.5 2.5"/><path d="M13.5 2v3.5H10M2.5 14v-3.5H6"/></svg>
               Переподключить
             </button>
-            <button type="button" id="copySelection" title="Скопировать выделенный текст">
+            <button type="button" id="copySelection" title="Скопировать последний ответ целиком">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="10" height="12" rx="1"/><path d="M2 5v9a1 1 0 0 0 1 1h7"/></svg>
               Копировать
             </button>
           </div>
-          <details class="settings">
+          <details class="settings" id="settingsMenu">
             <summary class="button">Настройки</summary>
             <div class="settings-panel">
               <div class="settings-group">
@@ -889,7 +1040,52 @@
                 <label for="fontFamily">Шрифт</label>
                 <select id="fontFamily"></select>
               </div>
+              <div class="settings-row">
+                <label for="windowTitle">Заголовок вкладки</label>
+                <input type="text" id="windowTitle" placeholder="Terminal" maxlength="80" autocomplete="off" />
+              </div>
             </div>
+          </details>
+          <details class="settings tools-menu" id="toolsMenu">
+            <summary class="button">Tools</summary>
+            <div class="settings-panel">
+              <div class="settings-group">
+                <span class="settings-label">Локация Happ</span>
+                <select id="happLocation" aria-label="Локация Happ"><option value="">Загрузка...</option></select>
+                <div class="settings-action-status" id="happLocationStatus"></div>
+              </div>
+              <div class="settings-group settings-action">
+                <span class="settings-label">VPN Happ</span>
+                <button type="button" id="reconnectHapp" title="Отключить и снова подключить активную конфигурацию Happ Plus через macOS scutil">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>
+                  Переподключить Happ
+                </button>
+                <div class="settings-action-status" id="happStatus">Проверяю подключение...</div>
+              </div>
+              <div class="settings-group settings-action">
+                <span class="settings-label">Chromium</span>
+                <button type="button" id="recoverStack" title="Перезапустить Colima/Docker, browser-контейнер, Caddy и ttyd через штатные LaunchAgents">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>
+                  Восстановить стек Chromium
+                </button>
+                <div class="settings-action-status" id="recoveryStatus">Готово к запуску</div>
+              </div>
+              <div class="settings-group settings-action">
+                <span class="settings-label">Обновление</span>
+                <button type="button" id="updateStack" title="Забрать последнюю версию из origin/main и перезапустить стек">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5A6 6 0 0 1 13.5 3L15 4.5"/><path d="M15 1.5v3h-3"/><path d="M13 11.5A6 6 0 0 1 2.5 13L1 11.5"/><path d="M1 14.5v-3h3"/></svg>
+                  Обновить из репозитория
+                </button>
+                <div class="settings-action-status" id="updateStatus">Готово к запуску</div>
+              </div>
+            </div>
+          </details>
+          <details class="dropdown overflow-menu" id="overflowMenu" hidden>
+            <summary class="button" title="Дополнительные действия">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="13" cy="8" r="1.3"/></svg>
+              Ещё
+            </summary>
+            <div class="dropdown-menu overflow-menu-list" id="overflowMenuList"></div>
           </details>
         </div>
       </section>
@@ -1393,12 +1589,23 @@
     const sessionState = document.getElementById("sessionState");
     const fontSizeSelect = document.getElementById("fontSize");
     const fontFamilySelect = document.getElementById("fontFamily");
+    const windowTitleInput = document.getElementById("windowTitle");
     const themeButtons = Array.from(document.querySelectorAll("[data-theme]"));
     const splitLayoutContainer = document.getElementById("splitLayoutContainer");
     const splitLayoutPresets = document.getElementById("splitLayoutPresets");
+    const toolbar = document.getElementById("toolbar");
+    const toolbarControls = document.getElementById("toolbarControls");
+    const layoutControls = document.getElementById("layoutControls");
+    const sessionControls = document.getElementById("sessionControls");
+    const settingsMenu = document.getElementById("settingsMenu");
+    const toolsMenu = document.getElementById("toolsMenu");
+    const overflowMenu = document.getElementById("overflowMenu");
+    const overflowMenuList = document.getElementById("overflowMenuList");
     
     // Buttons
     const addBrowserBtn = document.getElementById("addBrowser");
+    const appsMenu = document.getElementById("appsMenu");
+    const appsList = document.getElementById("appsList");
     const reloadActiveBtn = document.getElementById("reloadSession");
     const copySelectionBtn = document.getElementById("copySelection");
     const viewTabsBtn = document.getElementById("viewTabs");
@@ -1407,6 +1614,14 @@
     const bottomPanel = document.getElementById("bottomPanel");
     const togglePanelBtn = document.getElementById("togglePanel");
     const togglePanelLabel = togglePanelBtn?.querySelector(".button-label");
+    const recoverStackBtn = document.getElementById("recoverStack");
+    const recoveryStatus = document.getElementById("recoveryStatus");
+    const updateStackBtn = document.getElementById("updateStack");
+    const updateStatus = document.getElementById("updateStatus");
+    const reconnectHappBtn = document.getElementById("reconnectHapp");
+    const happStatus = document.getElementById("happStatus");
+    const happLocationSelect = document.getElementById("happLocation");
+    const happLocationStatus = document.getElementById("happLocationStatus");
 
     // State
     let tabs = []; // { id, type, sessionId, label, customLabel, active, wrapper }
@@ -1415,8 +1630,17 @@
     let preferences = readPreferences();
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "" };
+    let browserApps = [];
+    let browserAppsError = "";
     let bootRecoveryAttempted = false;
     let fullscreenTabId = null;
+    let recoveryPollTimer = null;
+    let updatePollTimer = null;
+    let floatingMenuResizeObserver = null;
+    let responsiveToolbarResizeObserver = null;
+    let responsiveToolbarMutationObserver = null;
+    let responsiveToolbarFrame = null;
+    let responsiveToolbarItems = [];
 
     function createId() { return Math.random().toString(36).substr(2, 9); }
     function createSessionId() { return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-"); }
@@ -1462,6 +1686,11 @@
       }
     });
 
+    function normalizeWindowTitle(value) {
+      const title = String(value || "").trim();
+      return title ? title.slice(0, 80) : "Terminal";
+    }
+
     function readPreferences() {
       try {
         const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
@@ -1470,17 +1699,19 @@
           theme: themes[raw.theme] ? raw.theme : "paper",
           fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
           fontFamily: fontFamilies.some(f => f.value === raw.fontFamily) ? raw.fontFamily : fontFamilies[0].value,
+          windowTitle: normalizeWindowTitle(raw.windowTitle),
           splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid",
           panelCollapsed: !!raw.panelCollapsed
         };
       } catch {
-        return { theme: "paper", fontSize: 12, fontFamily: fontFamilies[0].value, splitLayout: "grid", panelCollapsed: false };
+        return { theme: "paper", fontSize: 12, fontFamily: fontFamilies[0].value, windowTitle: "Terminal", splitLayout: "grid", panelCollapsed: false };
       }
     }
 
     function savePreferences() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
       applyAllThemes();
+      applyWindowTitle();
     }
 
     function setStatusText(message, duration = 0) {
@@ -1492,6 +1723,22 @@
           status.textContent = `${theme.label}, ${preferences.fontSize}px. ${tabs.length} сессий.`;
         }, duration);
       }
+    }
+
+    function localApiFetch(path, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      if (window.location.username) {
+        headers.Authorization = `Basic ${btoa(`${window.location.username}:${window.location.password}`)}`;
+      }
+      const url = new URL(path, window.location.href);
+      url.username = "";
+      url.password = "";
+      return fetch(url.toString(), {
+        cache: "no-store",
+        credentials: "include",
+        ...options,
+        headers
+      });
     }
 
     function getLayoutStyles(layout, N) {
@@ -1643,6 +1890,7 @@
       params.set("theme", JSON.stringify(theme.colors));
       params.set("fontSize", String(preferences.fontSize));
       params.set("fontFamily", preferences.fontFamily);
+      params.set("titleFixed", preferences.windowTitle);
       params.set("cursorBlink", "true");
       params.set("disableLeaveAlert", "true");
       return `/terminal/?${params.toString()}`;
@@ -1748,6 +1996,63 @@
       themeButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.theme === preferences.theme));
     }
 
+    function keepTerminalTextSelectionEnabled(iframe, attempt = 0) {
+      try {
+        const terminal = iframe.contentWindow?.term;
+        const mouseService = terminal?._core?.coreMouseService;
+        if (!terminal || !mouseService?.reset) {
+          if (attempt < 20) {
+            setTimeout(() => keepTerminalTextSelectionEnabled(iframe, attempt + 1), 100);
+          }
+          return;
+        }
+
+        if (terminal.__flyTerminalSelectionGuard) return;
+
+        const doc = iframe.contentDocument;
+        const restoreMouseMode = () => {
+          const previous = terminal.__flyTerminalSuspendedMouseMode;
+          if (!previous) return;
+          terminal.__flyTerminalSuspendedMouseMode = null;
+          if (mouseService.activeProtocol !== "NONE") return;
+          mouseService.activeEncoding = previous.encoding;
+          mouseService.activeProtocol = previous.protocol;
+        };
+
+        const suspendMouseMode = (event) => {
+          if (event.button !== 0 || !event.target?.closest?.(".xterm-screen")) return;
+          restoreMouseMode();
+          if (mouseService.activeProtocol === "NONE") return;
+          terminal.__flyTerminalSuspendedMouseMode = {
+            protocol: mouseService.activeProtocol,
+            encoding: mouseService.activeEncoding
+          };
+          mouseService.reset();
+        };
+
+        doc.addEventListener("mousedown", suspendMouseMode, true);
+        doc.addEventListener("mouseup", (event) => {
+          if (event.button !== 0) return;
+          const selection = terminal.getSelection?.() || "";
+          if (!selection) return;
+          writeClipboardText(selection)
+            .then(() => setStatusText("Выделенный текст скопирован", 1800))
+            .catch(() => setStatusText("Браузер запретил доступ к буферу обмена", 3200));
+        });
+        doc.addEventListener("wheel", restoreMouseMode, true);
+        doc.addEventListener("pointercancel", restoreMouseMode, true);
+        terminal.__flyTerminalRestoreMouseMode = restoreMouseMode;
+        terminal.__flyTerminalSelectionGuard = true;
+      } catch (e) {}
+    }
+
+    function restoreTerminalMouseMode(tab) {
+      if (!tab || tab.type !== "terminal") return;
+      try {
+        tab.wrapper.querySelector("iframe")?.contentWindow?.term?.__flyTerminalRestoreMouseMode?.();
+      } catch (e) {}
+    }
+
     function syncIframe(iframe, type = "terminal") {
       if (type !== "terminal") return;
       try {
@@ -1766,6 +2071,7 @@
           #terminal-container { padding: 0 !important; height: 100% !important; width: 100% !important; max-width: none !important; }
           .xterm-viewport { scrollbar-width: thin; scrollbar-color: ${theme.colors.brightBlack} ${theme.colors.background}; }
         `;
+        keepTerminalTextSelectionEnabled(iframe);
       } catch (e) {}
     }
 
@@ -1779,7 +2085,7 @@
 
     async function loadBrowserConfig() {
       try {
-        const response = await fetch("/api/browser/config", { cache: "no-store" });
+        const response = await localApiFetch("/api/browser/config");
         const config = await response.json();
         browserConfig = {
           enabled: Boolean(config.enabled && config.url),
@@ -1790,6 +2096,472 @@
       }
 
       addBrowserBtn.hidden = !browserConfig.enabled;
+      const openBrowserTabBtn = document.getElementById("openBrowserTab");
+      if (openBrowserTabBtn) {
+        openBrowserTabBtn.hidden = !browserConfig.enabled;
+        if (browserConfig.enabled && browserConfig.url) {
+          openBrowserTabBtn.href = browserConfig.url;
+        }
+      }
+    }
+
+    function appCategoryLabel(app) {
+      if (app.categories?.includes("WebBrowser")) return "Browser";
+      if (app.categories?.includes("InstantMessaging") || app.categories?.includes("Chat")) return "Chat";
+      if (app.categories?.includes("TerminalEmulator")) return "Terminal";
+      if (app.categories?.includes("Development")) return "Development";
+      if (app.noDisplay) return "System";
+      return "Application";
+    }
+
+    function renderAppsMenu() {
+      appsList.replaceChildren();
+      if (!browserApps.length) {
+        const empty = document.createElement("button");
+        empty.type = "button";
+        empty.textContent = browserAppsError ? `Обновить список: ${browserAppsError}` : "Обновить список";
+        empty.onclick = loadBrowserApps;
+        appsList.appendChild(empty);
+        requestAnimationFrame(positionOpenFloatingMenus);
+        return;
+      }
+
+      browserApps.forEach((app) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "app-menu-item";
+        button.dataset.appId = app.id;
+        button.title = app.exec || app.name;
+
+        const icon = document.createElement("span");
+        icon.className = "app-menu-icon";
+        icon.textContent = appCategoryLabel(app).slice(0, 1);
+
+        const name = document.createElement("span");
+        name.className = "app-menu-name";
+        name.textContent = app.name;
+
+        const meta = document.createElement("span");
+        meta.className = "app-menu-meta";
+        meta.textContent = appCategoryLabel(app);
+
+        button.append(icon, name, meta);
+        button.onclick = () => launchApp(app.id, app.name);
+        appsList.appendChild(button);
+      });
+      requestAnimationFrame(positionOpenFloatingMenus);
+    }
+
+    async function loadBrowserApps(attempt = 0) {
+      appsMenu.hidden = false;
+      try {
+        const response = await localApiFetch("/api/apps/list");
+        const payload = await response.json();
+        browserApps = response.ok && Array.isArray(payload.apps) ? payload.apps : [];
+        browserAppsError = browserApps.length ? "" : (payload.error || `HTTP ${response.status}`);
+      } catch (e) {
+        browserApps = [];
+        browserAppsError = e.message || String(e);
+      }
+      renderAppsMenu();
+      if (!browserApps.length && attempt < 3) {
+        setTimeout(() => loadBrowserApps(attempt + 1), 400 * (attempt + 1));
+      }
+    }
+
+    async function launchApp(appId, appName) {
+      try {
+        setStatusText(`Запускаю ${appName}...`, 1800);
+        const response = await localApiFetch("/api/apps/launch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appId })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.details || payload.error || "launch_failed");
+        }
+        appsMenu.open = false;
+        addBrowserTab(appName, appName, "remote app");
+        setStatusText(`${appName} запущен во вкладке`, 2600);
+      } catch (error) {
+        setStatusText(`Не удалось запустить ${appName}: ${error.message || error}`, 4200);
+      }
+    }
+
+    function floatingMenuFor(details) {
+      return details?.querySelector(":scope > .settings-panel, :scope > .dropdown-menu");
+    }
+
+    function resetFloatingMenuPosition(details) {
+      const menu = floatingMenuFor(details);
+      if (!menu) return;
+      menu.style.left = "";
+      menu.style.top = "";
+      menu.style.maxHeight = "";
+      menu.style.transformOrigin = "";
+    }
+
+    function clampNumber(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function fixedPositionBaseFor(element) {
+      for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        const hasContainingBlock =
+          style.transform !== "none" ||
+          style.filter !== "none" ||
+          style.backdropFilter !== "none" ||
+          style.perspective !== "none" ||
+          style.contain.includes("layout") ||
+          style.contain.includes("paint");
+        if (hasContainingBlock) return parent.getBoundingClientRect();
+      }
+      return { left: 0, top: 0 };
+    }
+
+    function positionFloatingMenu(details) {
+      if (!details?.open) return;
+      const summary = details.querySelector(":scope > summary");
+      const menu = floatingMenuFor(details);
+      if (!summary || !menu) return;
+
+      const viewportPad = 10;
+      const gap = 8;
+      menu.style.left = "0px";
+      menu.style.top = "0px";
+      menu.style.maxHeight = "";
+
+      const buttonRect = summary.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const menuWidth = Math.min(menuRect.width, Math.max(120, viewportWidth - viewportPad * 2));
+      const naturalHeight = Math.min(menuRect.height, Math.max(120, viewportHeight - viewportPad * 2));
+      const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
+      const spaceAbove = buttonRect.top - gap - viewportPad;
+      const openDown = spaceBelow >= Math.min(naturalHeight, 260) || spaceBelow >= spaceAbove;
+      const availableHeight = Math.max(120, openDown ? spaceBelow : spaceAbove);
+      const menuHeight = Math.min(naturalHeight, availableHeight);
+
+      let left = buttonRect.right - menuWidth;
+      if (left < viewportPad) left = buttonRect.left;
+      left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
+
+      let top = openDown ? buttonRect.bottom + gap : buttonRect.top - gap - menuHeight;
+      top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
+
+      const baseRect = fixedPositionBaseFor(menu);
+      menu.style.left = `${Math.round(left - baseRect.left)}px`;
+      menu.style.top = `${Math.round(top - baseRect.top)}px`;
+      menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+      menu.style.transformOrigin = openDown ? "top right" : "bottom right";
+    }
+
+    function positionOpenFloatingMenus() {
+      document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach(positionFloatingMenu);
+    }
+
+    function bindFloatingMenus() {
+      floatingMenuResizeObserver = new ResizeObserver(() => positionOpenFloatingMenus());
+      document.querySelectorAll("details.settings, details.dropdown").forEach((details) => {
+        const menu = floatingMenuFor(details);
+        if (menu) floatingMenuResizeObserver.observe(menu);
+        details.addEventListener("toggle", () => {
+          if (details.open) {
+            requestAnimationFrame(() => positionFloatingMenu(details));
+          } else {
+            resetFloatingMenuPosition(details);
+          }
+        });
+      });
+      window.addEventListener("resize", positionOpenFloatingMenus, { passive: true });
+      window.addEventListener("scroll", positionOpenFloatingMenus, { passive: true });
+      document.addEventListener("click", (event) => {
+        document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach((details) => {
+          if (!details.contains(event.target)) details.removeAttribute("open");
+        });
+      });
+    }
+
+    function restoreResponsiveToolbarItems() {
+      responsiveToolbarItems.forEach(({ element, anchor }) => {
+        if (anchor.parentNode) anchor.parentNode.insertBefore(element, anchor.nextSibling);
+      });
+    }
+
+    function toolbarControlsOverflow() {
+      return toolbarControls.scrollWidth > toolbarControls.clientWidth + 1;
+    }
+
+    function layoutResponsiveToolbar() {
+      responsiveToolbarFrame = null;
+      if (!toolbarControls || !overflowMenu || !overflowMenuList) return;
+
+      restoreResponsiveToolbarItems();
+      overflowMenu.open = false;
+      overflowMenu.hidden = true;
+      if (bottomPanel?.classList.contains("collapsed")) return;
+
+      const visibleItems = responsiveToolbarItems.filter(({ element }) => {
+        return !element.hidden && getComputedStyle(element).display !== "none";
+      });
+      if (!toolbarControlsOverflow()) return;
+
+      overflowMenu.hidden = false;
+      for (let index = visibleItems.length - 1; index >= 0 && toolbarControlsOverflow(); index -= 1) {
+        const element = visibleItems[index].element;
+        if (element.open) element.open = false;
+        overflowMenuList.prepend(element);
+      }
+    }
+
+    function scheduleResponsiveToolbarLayout() {
+      if (responsiveToolbarFrame !== null) return;
+      responsiveToolbarFrame = requestAnimationFrame(layoutResponsiveToolbar);
+    }
+
+    function bindResponsiveToolbar() {
+      if (!toolbar || !toolbarControls || !layoutControls || !sessionControls || !settingsMenu || !toolsMenu) return;
+
+      const elements = [layoutControls, ...Array.from(sessionControls.children), settingsMenu, toolsMenu];
+      responsiveToolbarItems = elements.map((element, index) => {
+        const anchor = document.createComment(`toolbar-item-${index}`);
+        element.parentNode.insertBefore(anchor, element);
+        return { element, anchor };
+      });
+
+      responsiveToolbarResizeObserver = new ResizeObserver(scheduleResponsiveToolbarLayout);
+      responsiveToolbarResizeObserver.observe(toolbar);
+      responsiveToolbarResizeObserver.observe(toolbarControls);
+
+      responsiveToolbarMutationObserver = new MutationObserver(scheduleResponsiveToolbarLayout);
+      responsiveToolbarItems.forEach(({ element }) => {
+        responsiveToolbarMutationObserver.observe(element, {
+          attributes: true,
+          attributeFilter: ["hidden", "style", "class"]
+        });
+      });
+
+      overflowMenuList.addEventListener("click", (event) => {
+        const action = event.target.closest("button, a.button");
+        if (action && !action.closest("details.settings, details.apps-menu")) {
+          overflowMenu.open = false;
+        }
+      });
+      window.addEventListener("resize", scheduleResponsiveToolbarLayout, { passive: true });
+      scheduleResponsiveToolbarLayout();
+    }
+
+    function setRecoveryStatus(tone, message) {
+      if (!recoveryStatus) return;
+      recoveryStatus.className = `settings-action-status ${tone || ""}`.trim();
+      recoveryStatus.textContent = message;
+    }
+
+    function setHappStatus(tone, message) {
+      if (!happStatus) return;
+      happStatus.className = `settings-action-status ${tone || ""}`.trim();
+      happStatus.textContent = message;
+    }
+
+    function renderHappState(payload) {
+      const state = payload?.state || "Unknown";
+      if (payload?.location && happLocationStatus) happLocationStatus.textContent = `Сейчас: ${payload.location}`;
+      if (state === "Connected") {
+        setHappStatus("ok", `${payload?.service || "Happ Plus"}: подключено`);
+      } else if (state === "Connecting" || state === "Disconnecting") {
+        setHappStatus("warn", `${payload?.service || "Happ Plus"}: ${state}`);
+      } else {
+        setHappStatus(payload?.ok === false ? "danger" : "", `${payload?.service || "Happ Plus"}: ${state}`);
+      }
+    }
+
+    async function loadHappLocations() {
+      if (!happLocationSelect) return;
+      try {
+        const response = await localApiFetch("/api/vpn/happ/locations");
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+        happLocationSelect.innerHTML = "";
+        if (!payload.locations?.length) {
+          happLocationSelect.appendChild(new Option(payload.current || "Текущая локация", ""));
+          happLocationSelect.disabled = true;
+          happLocationStatus.textContent = "В кэше подписки Happ нет доступных локаций";
+          return;
+        }
+        happLocationSelect.appendChild(new Option("Выберите локацию…", ""));
+        payload.locations.forEach(location => happLocationSelect.appendChild(new Option(location.label, location.id)));
+        happLocationSelect.disabled = false;
+        happLocationStatus.textContent = payload.current ? `Сейчас: ${payload.current}` : "";
+      } catch (error) {
+        happLocationSelect.innerHTML = "";
+        happLocationSelect.appendChild(new Option("Недоступно", ""));
+        happLocationSelect.disabled = true;
+        happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
+      }
+    }
+
+    async function switchHappLocation() {
+      const locationId = happLocationSelect?.value;
+      if (!locationId) return;
+      const selectedLabel = happLocationSelect.options[happLocationSelect.selectedIndex]?.textContent || "локацию";
+      happLocationSelect.disabled = true;
+      reconnectHappBtn.disabled = true;
+      happLocationStatus.textContent = `Переключаю: ${selectedLabel}...`;
+      try {
+        const response = await localApiFetch("/api/vpn/happ/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ locationId })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.details || payload.error || `HTTP ${response.status}`);
+        renderHappState(payload);
+        setStatusText(`Happ: ${payload.location || selectedLabel}`, 2800);
+      } catch (error) {
+        happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
+        setStatusText("Не удалось переключить локацию Happ", 3600);
+      } finally {
+        reconnectHappBtn.disabled = false;
+        await loadHappLocations();
+      }
+    }
+
+    async function refreshHappStatus() {
+      if (!reconnectHappBtn) return;
+      try {
+        const response = await localApiFetch("/api/vpn/happ/status");
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.details || payload.error || `HTTP ${response.status}`);
+        renderHappState(payload);
+      } catch (error) {
+        setHappStatus("danger", `Happ недоступен: ${error.message || error}`);
+      }
+    }
+
+    async function reconnectHapp() {
+      if (!reconnectHappBtn) return;
+      reconnectHappBtn.disabled = true;
+      setHappStatus("warn", "Переподключаю Happ...");
+      setStatusText("Переподключение VPN Happ", 2400);
+      try {
+        const response = await localApiFetch("/api/vpn/happ/reconnect", { method: "POST" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.details || payload.error || `HTTP ${response.status}`);
+        renderHappState(payload);
+        setStatusText("VPN Happ переподключён", 2600);
+      } catch (error) {
+        setHappStatus("danger", `Ошибка: ${error.message || error}`);
+        setStatusText("Не удалось переподключить Happ", 3600);
+      } finally {
+        reconnectHappBtn.disabled = false;
+      }
+    }
+
+    function recoveryStateTone(state, ok) {
+      if (state === "success") return "ok";
+      if (state === "failed" || ok === false) return "danger";
+      if (state === "running" || state === "starting") return "warn";
+      return "";
+    }
+
+    function renderRecoveryStatus(payload) {
+      const state = payload?.state || "idle";
+      const latest = Array.isArray(payload?.entries) && payload.entries.length
+        ? payload.entries[payload.entries.length - 1]
+        : null;
+      const summary = (state === "success" || state === "failed")
+        ? (payload?.summary || latest?.message || "Готово к запуску")
+        : (latest?.message || payload?.summary || "Готово к запуску");
+      setRecoveryStatus(recoveryStateTone(state, payload?.ok), summary);
+      if (recoverStackBtn) {
+        recoverStackBtn.disabled = state === "running" || state === "starting";
+      }
+      return state;
+    }
+
+    async function pollRecoveryStatus(delay = 1400, attempts = 60) {
+      if (recoveryPollTimer) clearTimeout(recoveryPollTimer);
+      try {
+        const response = await localApiFetch("/api/system/recover/status");
+        const payload = await response.json().catch(() => ({}));
+        const state = renderRecoveryStatus(payload);
+        if ((state === "running" || state === "starting") && attempts > 0) {
+          recoveryPollTimer = setTimeout(() => pollRecoveryStatus(delay, attempts - 1), delay);
+        }
+      } catch (error) {
+        setRecoveryStatus("warn", "Control API перезапускается, жду статус...");
+        if (attempts > 0) {
+          recoveryPollTimer = setTimeout(() => pollRecoveryStatus(delay, attempts - 1), delay);
+        } else if (recoverStackBtn) {
+          recoverStackBtn.disabled = false;
+        }
+      }
+    }
+
+    async function runStackRecovery() {
+      if (!recoverStackBtn) return;
+      recoverStackBtn.disabled = true;
+      setRecoveryStatus("warn", "Запускаю восстановление...");
+      setStatusText("Восстановление Fly Terminal запущено", 2400);
+      try {
+        const response = await localApiFetch("/api/system/recover", { method: "POST" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok && payload.error !== "recovery_already_running") {
+          throw new Error(payload.details || payload.error || `HTTP ${response.status}`);
+        }
+        renderRecoveryStatus(payload.status || payload);
+        pollRecoveryStatus();
+      } catch (error) {
+        recoverStackBtn.disabled = false;
+        setRecoveryStatus("danger", `Не удалось запустить: ${error.message || error}`);
+        setStatusText("Восстановление не запустилось", 3600);
+      }
+    }
+
+    function setUpdateStatus(tone, message) {
+      if (!updateStatus) return;
+      updateStatus.className = `settings-action-status ${tone || ""}`.trim();
+      updateStatus.textContent = message;
+    }
+
+    async function pollUpdateStatus(delay = 1400, attempts = 90) {
+      if (updatePollTimer) clearTimeout(updatePollTimer);
+      try {
+        const response = await localApiFetch("/api/system/update/status");
+        const payload = await response.json().catch(() => ({}));
+        const state = payload?.state || "idle";
+        const latest = Array.isArray(payload?.entries) && payload.entries.length ? payload.entries[payload.entries.length - 1] : null;
+        setUpdateStatus(state === "success" ? "ok" : state === "failed" ? "danger" : state === "running" || state === "starting" ? "warn" : "", latest?.message || payload?.summary || "Готово к запуску");
+        if ((state === "running" || state === "starting") && attempts > 0) {
+          updatePollTimer = setTimeout(() => pollUpdateStatus(delay, attempts - 1), delay);
+        } else if (updateStackBtn) {
+          updateStackBtn.disabled = false;
+        }
+      } catch (error) {
+        setUpdateStatus("warn", "Control API перезапускается, жду статус...");
+        if (attempts > 0) updatePollTimer = setTimeout(() => pollUpdateStatus(delay, attempts - 1), delay);
+      }
+    }
+
+    async function runStackUpdate() {
+      if (!updateStackBtn) return;
+      updateStackBtn.disabled = true;
+      setUpdateStatus("warn", "Обновляю репозиторий и перезапускаю стек...");
+      setStatusText("Обновление Fly Terminal запущено", 2600);
+      try {
+        const response = await localApiFetch("/api/system/update", { method: "POST" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok && payload.error !== "update_already_running") throw new Error(payload.details || payload.error || `HTTP ${response.status}`);
+        setUpdateStatus("warn", payload.summary || "Обновление запущено");
+        pollUpdateStatus();
+      } catch (error) {
+        updateStackBtn.disabled = false;
+        setUpdateStatus("danger", `Не удалось запустить: ${error.message || error}`);
+        setStatusText("Обновление не запустилось", 3600);
+      }
     }
 
     function getActiveTab() {
@@ -2001,8 +2773,9 @@
       return tab;
     }
 
-    function addBrowserTab(label = "Browser", customLabel = null) {
+    function addBrowserTab(label = "Browser", customLabel = null, subtext = "remote chromium") {
       const id = createId();
+      const browserUrl = buildBrowserUrl();
       const wrapper = document.createElement("div");
       wrapper.className = "terminal-frame-wrapper";
       wrapper.id = `wrapper-${id}`;
@@ -2010,16 +2783,19 @@
         <div class="terminal-topbar">
           <div class="terminal-heading">
             <strong class="tab-label-text">${customLabel || label}</strong>
-            <span class="tab-subtext">remote chromium</span>
+            <span class="tab-subtext">${subtext}</span>
           </div>
           <div class="terminal-actions">
+            <a class="frame-control" href="${browserUrl}" target="_blank" rel="noreferrer noopener" title="Открыть в отдельной вкладке" aria-label="Открыть в отдельной вкладке" style="text-decoration:none;">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
+            </a>
             <button type="button" class="frame-control frame-fullscreen-btn" title="На весь экран" aria-label="На весь экран" aria-pressed="false">
               ${fullscreenIcon(false)}
             </button>
           </div>
         </div>
         <div class="terminal-stage">
-          <iframe src="${buildBrowserUrl()}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+          <iframe src="${browserUrl}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
         </div>
       `;
 
@@ -2058,10 +2834,13 @@
           };
           hideKasmError();
           // Observe DOM mutations so the dialog is hidden as soon as it appears
-          const obs = new win.MutationObserver(hideKasmError);
-          obs.observe(doc.body || doc.documentElement, { childList: true, subtree: true });
-          // Stop watching after 15 s — by then KasmVNC init is done
-          setTimeout(() => obs.disconnect(), 15000);
+          const observerTarget = doc.body || doc.documentElement;
+          if (observerTarget) {
+            const obs = new win.MutationObserver(hideKasmError);
+            obs.observe(observerTarget, { childList: true, subtree: true });
+            // Stop watching after 15 s — by then KasmVNC init is done
+            setTimeout(() => obs.disconnect(), 15000);
+          }
         } catch (_) {}
       });
 
@@ -2200,6 +2979,21 @@
       sessionState.textContent = message;
     }
 
+    function applyWindowTitle() {
+      const title = normalizeWindowTitle(preferences.windowTitle);
+      preferences.windowTitle = title;
+      document.title = title;
+      tabs
+        .filter(tab => tab.type === "terminal")
+        .forEach(tab => {
+          try {
+            const iframe = tab.wrapper.querySelector("iframe");
+            if (iframe?.contentDocument) iframe.contentDocument.title = title;
+          } catch (e) {}
+        });
+      refreshDirectLink();
+    }
+
     function saveSessions() {
       const data = tabs
         .filter(t => (t.type || "terminal") === "terminal" && t.sessionId)
@@ -2262,6 +3056,8 @@
 
     fontSizeSelect.value = preferences.fontSize;
     fontFamilySelect.value = preferences.fontFamily;
+    windowTitleInput.value = preferences.windowTitle;
+    applyWindowTitle();
 
     // Listeners
     addBrowserBtn.onclick = () => {
@@ -2324,19 +3120,84 @@
     
     fontSizeSelect.onchange = () => { preferences.fontSize = Number(fontSizeSelect.value); savePreferences(); applyAllThemes(); };
     fontFamilySelect.onchange = () => { preferences.fontFamily = fontFamilySelect.value; savePreferences(); applyAllThemes(); };
+    windowTitleInput.oninput = () => {
+      preferences.windowTitle = normalizeWindowTitle(windowTitleInput.value);
+      savePreferences();
+    };
+    windowTitleInput.onchange = () => {
+      windowTitleInput.value = preferences.windowTitle;
+    };
     themeButtons.forEach(btn => btn.onclick = () => { preferences.theme = btn.dataset.theme; savePreferences(); applyAllThemes(); });
+    bindFloatingMenus();
+    bindResponsiveToolbar();
+    if (recoverStackBtn) {
+      recoverStackBtn.onclick = runStackRecovery;
+      pollRecoveryStatus(1400, 1);
+    }
+    if (updateStackBtn) {
+      updateStackBtn.onclick = runStackUpdate;
+      pollUpdateStatus(1400, 1);
+    }
+    if (reconnectHappBtn) {
+      reconnectHappBtn.onclick = reconnectHapp;
+      refreshHappStatus();
+    }
+    if (happLocationSelect) {
+      happLocationSelect.onchange = switchHappLocation;
+      loadHappLocations();
+    }
     
+    async function writeClipboardText(text) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      if (!copied) throw new Error("clipboard_write_failed");
+    }
+
+    async function fetchLastTerminalAnswer(tab) {
+      const response = await localApiFetch("/api/session/last-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: tab.sessionId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok || !result.answer) {
+        throw new Error(result.error || `answer_fetch_failed_${response.status}`);
+      }
+      return result.answer;
+    }
+
     copySelectionBtn.onclick = async () => {
       const tab = tabs.find(t => t.id === activeTabId);
-      const iframe = tab?.wrapper.querySelector("iframe");
+      if (!tab || tab.type !== "terminal") {
+        setStatusText("Последний ответ доступен только в активном терминале", 3000);
+        return;
+      }
+
+      restoreTerminalMouseMode(tab);
+      copySelectionBtn.disabled = true;
       try {
-        const selection = iframe?.contentWindow?.getSelection()?.toString().trim();
-        if (selection) {
-          await navigator.clipboard.writeText(selection);
-          setStatusText("Скопировано", 2000);
-        }
+        const answer = await fetchLastTerminalAnswer(tab);
+        await writeClipboardText(answer);
+        setStatusText("Последний ответ скопирован целиком", 2200);
       } catch (e) {
-        setStatusText("Копирование доступно через панель remote browser", 2600);
+        const message = e?.message === "answer_not_found"
+          ? "Завершённый ответ Codex пока не найден"
+          : "Не удалось скопировать последний ответ";
+        setStatusText(message, 3200);
+      } finally {
+        copySelectionBtn.disabled = false;
       }
     };
 
@@ -2355,6 +3216,7 @@
     applyShellTheme();
     refreshDirectLink();
     loadBrowserConfig().finally(() => {
+      loadBrowserApps();
       loadSessions();
       setTimeout(verifyBootUi, 2000);
     });
@@ -2377,12 +3239,6 @@
     };
 
     applyPanelCollapsedPref();
-
-    document.addEventListener('click', (e) => {
-      document.querySelectorAll('.settings[open]').forEach((details) => {
-        if (!details.contains(e.target)) details.removeAttribute('open');
-      });
-    });
   </script>
 </body>
 </html>

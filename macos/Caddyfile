@@ -6,7 +6,13 @@
 :8080 {
 	root * {$FLY_TERMINAL_REPO_ROOT}
 
-	basic_auth {
+	@needsCaddyAuth {
+		not {
+			header Cookie *fly_terminal_browser_session={$FLY_BROWSER_SESSION_TOKEN}*
+		}
+	}
+
+	basic_auth @needsCaddyAuth {
 		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
 	}
 
@@ -19,12 +25,27 @@
 	redir @browserRoot /browser/ 302
 
 	@browser path /browser/*
-	@browserWebsocket path /websockify*
+	@browserWebsocket path /browser/websockets* /websockify*
+
+	# Selkies-GStreamer WebSocket endpoints — called without /browser/ prefix
+	# because JS inside the iframe uses window.location.host as base
+	@selkiesWs path /ws /data /health /metrics /signaling /webrtc /audio /video
 
 	route {
+		header Set-Cookie "fly_terminal_browser_session={$FLY_BROWSER_SESSION_TOKEN}; Path=/; HttpOnly; SameSite=Lax"
 		reverse_proxy @terminal 127.0.0.1:{$TTYD_PORT:7682}
 		reverse_proxy @api 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}
 		handle @browserWebsocket {
+			uri strip_prefix /browser
+			reverse_proxy {$FLY_BROWSER_UPSTREAM:http://127.0.0.1:7690} {
+				header_up Authorization "Basic {$FLY_BROWSER_BASIC_AUTH}"
+				header_down -Cross-Origin-Embedder-Policy
+				header_down -Cross-Origin-Opener-Policy
+				header_down -X-Frame-Options
+				header_down -Content-Security-Policy
+			}
+		}
+		handle @selkiesWs {
 			reverse_proxy {$FLY_BROWSER_UPSTREAM:http://127.0.0.1:7690} {
 				header_up Authorization "Basic {$FLY_BROWSER_BASIC_AUTH}"
 				header_down -Cross-Origin-Embedder-Policy

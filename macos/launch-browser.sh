@@ -109,6 +109,65 @@ path.write_text(html[:target_index] + patch + html[target_index:])
 PY
 }
 
+patch_selkies_browser_prefix() {
+  local attempt
+  for attempt in {1..30}; do
+    if docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /usr/share/selkies/web/assets 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /usr/share/selkies/web/assets || {
+    echo "WARNING: Selkies assets not ready, browser prefix patch was not applied." >&2
+    return 0
+  }
+  docker exec -i -u root "${FLY_BROWSER_CONTAINER_NAME}" python3 - <<'PY'
+from pathlib import Path
+
+marker = "fly-terminal-browser-prefix-websocket-v1"
+old = 'f=window.location.pathname.endsWith("/")&&window.location.pathname.split("/")[1]||"webrtc",'
+new = (
+    'f=function(){var p=window.location.pathname;'
+    'var v=p.endsWith("/")&&p.split("/")[1]||"webrtc";'
+    'return v==="browser"?"websocket":v}(),'
+    f"/*{marker}*/"
+)
+replacement = "".join(new)
+patched = False
+already = False
+
+for path in Path("/usr/share/selkies/web/assets").glob("*.js"):
+    text = path.read_text()
+    if marker in text:
+        already = True
+        continue
+    if old in text:
+        path.write_text(text.replace(old, replacement, 1))
+        patched = True
+
+if not patched and not already:
+    raise SystemExit("Selkies browser prefix patch target not found")
+PY
+}
+
+patch_selkies_nginx_websocket_port() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /etc/nginx/sites-enabled/default || return 0
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+if ss -ltn | grep -q ":8082 " && ! ss -ltn | grep -q ":8081 "; then
+  python3 - <<'"'"'PY'"'"'
+from pathlib import Path
+
+path = Path("/etc/nginx/sites-enabled/default")
+text = path.read_text()
+updated = text.replace("127.0.0.1:8081", "127.0.0.1:8082")
+if updated != text:
+    path.write_text(updated)
+PY
+  nginx -t >/dev/null 2>&1 && s6-svc -r /run/service/svc-nginx 2>/dev/null || nginx -s reload
+fi
+'
+}
+
 container_has_required_settings() {
   local env_dump
   env_dump="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)" || return 1
@@ -116,6 +175,10 @@ container_has_required_settings() {
     grep -qx 'SELKIES_MICROPHONE_ENABLED=false|locked' <<<"${env_dump}" &&
     grep -qx 'SELKIES_USE_BROWSER_CURSORS=true' <<<"${env_dump}" &&
     grep -qx "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" <<<"${env_dump}"
+}
+
+ensure_container_restart_policy() {
+  docker update --restart unless-stopped "${FLY_BROWSER_CONTAINER_NAME}" >/dev/null
 }
 
 patch_kasmvnc_html() {
@@ -227,6 +290,45 @@ exec /usr/bin/google-chrome \
 '
 }
 
+start_linuxserver_chromium() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -x /usr/bin/chromium || return 0
+  docker exec -d -u abc "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+export DISPLAY="${DISPLAY:-:1}"
+export HOME=/config
+
+for _ in $(seq 1 30); do
+  xset q >/dev/null 2>&1 && break
+  sleep 1
+done
+
+if ps -eo args= |
+  awk "/\/usr\/lib\/chromium\/chromium / && !/--type=/ && !/awk/ { found = 1 } END { exit found ? 0 : 1 }"; then
+  exit 0
+fi
+
+exec /usr/bin/chromium \
+  --user-data-dir=/config/.config/chromium \
+  --no-sandbox \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-dev-shm-usage \
+  --disable-field-trial-config \
+  --password-store=basic \
+  --start-maximized \
+  >/tmp/fly-terminal-chromium.log 2>&1
+'
+}
+
+ensure_linuxserver_download_directory() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -x /usr/bin/chromium || return 0
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+set -eu
+mkdir -p /config/Downloads
+chown abc:dialout /config/Downloads
+chmod u+rwx,go+rx /config/Downloads
+'
+}
+
 unblock_linuxserver_selkies() {
   docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /run/service/svc-selkies || return 0
   docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
@@ -266,10 +368,15 @@ wait_for_docker
 
 if docker ps --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; then
   if container_has_required_settings; then
+    ensure_container_restart_policy
     patch_kasmvnc_html
     patch_selkies_performance_profile
+    patch_selkies_browser_prefix
+    patch_selkies_nginx_websocket_port
     patch_selkies_input
+    ensure_linuxserver_download_directory
     start_kasm_chrome
+    start_linuxserver_chromium
     unblock_linuxserver_selkies
     exit 0
   fi
@@ -286,6 +393,7 @@ case "${FLY_BROWSER_IMAGE}" in
   lscr.io/linuxserver/chromium*|linuxserver/chromium*)
     docker run -d \
       --name "${FLY_BROWSER_CONTAINER_NAME}" \
+      --restart unless-stopped \
       --shm-size=1g \
       -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:${FLY_BROWSER_CONTAINER_PORT}" \
       -e "PUID=$(id -u)" \
@@ -303,6 +411,7 @@ case "${FLY_BROWSER_IMAGE}" in
   *)
     docker run -d \
       --name "${FLY_BROWSER_CONTAINER_NAME}" \
+      --restart unless-stopped \
       --shm-size=1g \
       -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:6901" \
       -e "VNC_PW=${FLY_BROWSER_PASSWORD}" \
@@ -314,6 +423,10 @@ esac
 
 patch_kasmvnc_html
 patch_selkies_performance_profile
+patch_selkies_browser_prefix
+patch_selkies_nginx_websocket_port
 patch_selkies_input
+ensure_linuxserver_download_directory
 start_kasm_chrome
+start_linuxserver_chromium
 unblock_linuxserver_selkies
