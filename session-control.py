@@ -44,6 +44,26 @@ HAPP_RECONNECT_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
 HAPP_CACHE_DIR = Path.home() / "Library/Containers/su.ffg.happ.plus/Data/Library/Caches/su.ffg.happ.plus/fsCachedData"
 
+TOOL_ERROR_MESSAGES = {
+    "invalid_json": "Сервер получил некорректный запрос. Обновите страницу и повторите действие.",
+    "not_found": "Запрошенная функция недоступна в текущей версии Fly Terminal.",
+    "recovery_already_running": "Восстановление Chromium уже выполняется.",
+    "recovery_script_missing": "Не найден штатный скрипт восстановления Chromium. Обновите Fly Terminal и повторите действие.",
+    "recovery_start_failed": "Не удалось запустить восстановление Chromium.",
+    "update_already_running": "Обновление Fly Terminal уже выполняется.",
+    "update_script_missing": "Не найден штатный скрипт обновления. Обновите установку Fly Terminal вручную и повторите действие.",
+    "update_start_failed": "Не удалось запустить обновление Fly Terminal.",
+    "reconnect_already_running": "Переподключение Happ уже выполняется.",
+    "happ_service_unavailable": "Системная служба Happ недоступна. Убедитесь, что Happ Plus установлен и запущен.",
+    "happ_disconnect_failed": "Не удалось отключить текущее VPN-соединение Happ.",
+    "happ_disconnect_timeout": "Happ не успел отключить VPN-соединение за отведённое время.",
+    "happ_connect_failed": "Не удалось запустить VPN-соединение Happ.",
+    "happ_connect_timeout": "Happ не подключился к VPN за отведённое время.",
+    "happ_location_not_found": "Выбранная локация Happ больше недоступна. Обновите список и выберите локацию заново.",
+    "happ_action_already_running": "Другая операция Happ уже выполняется. Дождитесь её завершения.",
+    "happ_location_switch_failed": "Не удалось переключить локацию Happ.",
+}
+
 
 def happ_current_location():
     try:
@@ -345,7 +365,99 @@ def focus_browser_app_window(app, existing_windows):
     return False
 
 
+def humanize_tool_error_payload(payload):
+    if not isinstance(payload, dict) or payload.get("ok") is not False:
+        return payload
+
+    error_code = payload.get("error")
+    message = TOOL_ERROR_MESSAGES.get(error_code)
+    if not message:
+        return payload
+
+    result = dict(payload)
+    technical_details = str(result.get("details") or "").strip()
+    if technical_details and technical_details != message:
+        result["technicalDetails"] = technical_details
+    result["details"] = message
+    result["message"] = message
+    result.setdefault("summary", message)
+    return result
+
+
+def operation_failure_message(operation, step):
+    step = str(step or "")
+    if operation == "recovery":
+        if step in {"docker-info", "docker-system-df"}:
+            return "Docker недоступен. Проверьте, что Colima и Docker запущены."
+        if step.startswith("colima-"):
+            return "Не удалось перезапустить Colima. Проверьте состояние виртуальной машины Docker."
+        if step == "launch-browser":
+            return "Не удалось запустить Chromium. Проверьте Docker и контейнер браузера."
+        if step.startswith("launchctl-bootstrap-"):
+            return "Не удалось загрузить одну из системных служб Fly Terminal."
+        if step == "wait-for-ports":
+            return "Не все компоненты Fly Terminal запустились за отведённое время."
+        if step == "http-browser":
+            return "Chromium запущен, но его веб-интерфейс недоступен."
+        if step == "ws-browser":
+            return "Chromium запущен, но WebSocket-соединение браузера недоступно."
+        if step == "ws-terminal":
+            return "Терминальный WebSocket не восстановился."
+        if step.startswith("launchctl-"):
+            return "Не удалось проверить состояние одной из системных служб Fly Terminal."
+        if step == "docker-ps-browser":
+            return "Не удалось проверить состояние контейнера Chromium."
+        if step == "disk-space":
+            return "Не удалось проверить свободное место на диске."
+        return "Восстановление Chromium завершилось с ошибкой. Подробности сохранены в журнале."
+
+    if operation == "update":
+        if step == "git-status":
+            return "Обновление остановлено: есть локальные изменения или не удалось проверить состояние репозитория."
+        if step == "git-fetch":
+            return "Не удалось получить обновления из origin/main. Проверьте доступ к GitHub."
+        if step == "git-pull":
+            return "Не удалось применить обновление из origin/main. Проверьте состояние локальной ветки."
+        if step.startswith("restart-"):
+            return "Не удалось перезапустить одну из системных служб Fly Terminal."
+        if step.startswith("check-port-"):
+            return "После обновления один из компонентов Fly Terminal не запустился за отведённое время."
+        return "Обновление Fly Terminal остановлено из-за ошибки. Подробности сохранены в журнале."
+
+    return "Операция завершилась с ошибкой."
+
+
+def humanize_operation_status(status, operation):
+    if not isinstance(status, dict):
+        return status
+
+    result = dict(status)
+    entries = []
+    for entry in status.get("entries") or []:
+        if not isinstance(entry, dict):
+            entries.append(entry)
+            continue
+        normalized = dict(entry)
+        if normalized.get("ok") is False:
+            technical_message = str(normalized.get("message") or "").strip()
+            if technical_message:
+                normalized["technicalMessage"] = technical_message
+            normalized["message"] = operation_failure_message(operation, normalized.get("step"))
+        entries.append(normalized)
+    result["entries"] = entries
+
+    if result.get("state") == "failed":
+        latest_failure = next(
+            (entry for entry in reversed(entries) if isinstance(entry, dict) and entry.get("ok") is False),
+            None,
+        )
+        if latest_failure:
+            result["summary"] = latest_failure.get("message") or result.get("summary")
+    return result
+
+
 def send_json(handler, status_code, payload):
+    payload = humanize_tool_error_payload(payload)
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status_code)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
@@ -418,7 +530,7 @@ def read_recovery_status():
         status["state"] = "failed"
         status["ok"] = False
         status["summary"] = "Процесс восстановления не найден"
-    return status
+    return humanize_operation_status(status, "recovery")
 
 
 def read_update_status():
@@ -432,7 +544,7 @@ def read_update_status():
         status["state"] = "failed"
         status["ok"] = False
         status["summary"] = "Процесс обновления не найден"
-    return status
+    return humanize_operation_status(status, "update")
 
 
 class SessionControlHandler(BaseHTTPRequestHandler):
@@ -488,11 +600,15 @@ class SessionControlHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/vpn/happ/status":
             state, error = happ_vpn_status()
-            send_json(
-                self,
-                200 if not error else 503,
-                {"ok": not error, "service": HAPP_VPN_SERVICE, "state": state, "location": happ_current_location(), "error": error},
-            )
+            payload = {
+                "ok": not error,
+                "service": HAPP_VPN_SERVICE,
+                "state": state,
+                "location": happ_current_location(),
+            }
+            if error:
+                payload.update({"error": "happ_service_unavailable", "details": error})
+            send_json(self, 200 if not error else 503, payload)
             return
 
         if self.path == "/api/vpn/happ/locations":
