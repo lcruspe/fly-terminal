@@ -39,6 +39,15 @@ UPDATE_STATUS_FILE = Path(os.environ.get(
     str(Path.home() / ".local/share/fly-terminal/update-status.json"),
 )).expanduser()
 UPDATE_SCRIPT = REPO_ROOT / "tools" / "update_stack.py"
+UI_PREFERENCES_FILE = Path(os.environ.get(
+    "FLY_TERMINAL_UI_PREFERENCES_FILE",
+    str(Path.home() / ".local/share/fly-terminal/ui-preferences.json"),
+)).expanduser()
+UI_PREFERENCES_LOCK = threading.Lock()
+VALID_UI_THEMES = frozenset({
+    "paper", "linen", "ledger", "harbor", "sage",
+    "graphite", "ink", "midnight", "nord", "forest",
+})
 HAPP_VPN_SERVICE = os.environ.get("FLY_TERMINAL_HAPP_SERVICE", "Happ Plus")
 HAPP_RECONNECT_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
@@ -53,6 +62,8 @@ TOOL_ERROR_MESSAGES = {
     "update_already_running": "Обновление Fly Terminal уже выполняется.",
     "update_script_missing": "Не найден штатный скрипт обновления. Обновите установку Fly Terminal вручную и повторите действие.",
     "update_start_failed": "Не удалось запустить обновление Fly Terminal.",
+    "invalid_theme": "Выбрана неизвестная тема оформления.",
+    "ui_preferences_write_failed": "Не удалось сохранить тему оформления.",
     "reconnect_already_running": "Переподключение Happ уже выполняется.",
     "happ_service_unavailable": "Системная служба Happ недоступна. Убедитесь, что Happ Plus установлен и запущен.",
     "happ_disconnect_failed": "Не удалось отключить текущее VPN-соединение Happ.",
@@ -547,6 +558,34 @@ def read_update_status():
     return humanize_operation_status(status, "update")
 
 
+def read_ui_preferences():
+    with UI_PREFERENCES_LOCK:
+        if not UI_PREFERENCES_FILE.exists():
+            return {"ok": True, "theme": None}
+        try:
+            payload = json.loads(UI_PREFERENCES_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"ok": True, "theme": None}
+
+    theme = str(payload.get("theme") or "").strip()
+    if theme not in VALID_UI_THEMES:
+        theme = ""
+    return {"ok": True, "theme": theme or None}
+
+
+def write_ui_preferences(theme):
+    payload = {
+        "theme": theme,
+        "updatedAt": datetime.now().isoformat(),
+    }
+    UI_PREFERENCES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = UI_PREFERENCES_FILE.with_name(f"{UI_PREFERENCES_FILE.name}.tmp")
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    with UI_PREFERENCES_LOCK:
+        temp_path.write_text(serialized, encoding="utf-8")
+        os.replace(temp_path, UI_PREFERENCES_FILE)
+
+
 class SessionControlHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         send_json(self, 200, {})
@@ -566,6 +605,10 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                     if line.startswith("fly-terminal-"):
                         sessions.append(line.replace("fly-terminal-", "", 1))
             send_json(self, 200, {"ok": True, "sessions": sessions})
+            return
+
+        if self.path == "/api/ui/preferences":
+            send_json(self, 200, read_ui_preferences())
             return
 
         if self.path == "/api/browser/config":
@@ -625,7 +668,9 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         send_json(self, 404, {"ok": False, "error": "not_found"})
 
     def do_POST(self):
-        if self.path == "/api/session/terminate":
+        if self.path == "/api/ui/preferences":
+            self._handle_ui_preferences()
+        elif self.path == "/api/session/terminate":
             self._handle_terminate()
         elif self.path == "/api/session/info":
             self._handle_info()
@@ -660,6 +705,25 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             return json.loads(raw_body or b"{}"), None
         except json.JSONDecodeError:
             return None, "invalid_json"
+
+    def _handle_ui_preferences(self):
+        payload, error = self._read_json_body()
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+
+        theme = str(payload.get("theme") or "").strip()
+        if theme not in VALID_UI_THEMES:
+            send_json(self, 400, {"ok": False, "error": "invalid_theme"})
+            return
+
+        try:
+            write_ui_preferences(theme)
+        except OSError as exc:
+            send_json(self, 500, {"ok": False, "error": "ui_preferences_write_failed", "details": str(exc)})
+            return
+
+        send_json(self, 200, {"ok": True, "theme": theme})
 
     def _handle_info(self):
         payload, error = self._read_json_body()
