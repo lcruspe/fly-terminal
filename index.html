@@ -2425,7 +2425,11 @@
       const controlsRect = toolbarControls.getBoundingClientRect();
       return Array.from(toolbarControls.children).some(element => {
         if (element.hidden || getComputedStyle(element).display === "none") return false;
-        return element.getBoundingClientRect().right > controlsRect.right + 1;
+        const elementRect = element.getBoundingClientRect();
+        return (
+          elementRect.left < controlsRect.left - 1 ||
+          elementRect.right > controlsRect.right + 1
+        );
       });
     }
 
