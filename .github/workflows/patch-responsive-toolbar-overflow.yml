@@ -1,0 +1,43 @@
+name: Patch responsive toolbar overflow
+
+on:
+  push:
+    branches:
+      - fix/responsive-toolbar-overflow
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/responsive-toolbar-overflow
+      - name: Patch overflow detection
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          old = '''        return element.getBoundingClientRect().right > controlsRect.right + 1;'''
+          new = '''        const elementRect = element.getBoundingClientRect();
+                  return (
+                    elementRect.left < controlsRect.left - 1 ||
+                    elementRect.right > controlsRect.right + 1
+                  );'''
+          if old not in text:
+              raise SystemExit('Expected toolbar overflow expression was not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m "Detect left-side toolbar overflow"
+          git push origin HEAD:fix/responsive-toolbar-overflow
