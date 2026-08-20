@@ -18,7 +18,9 @@ Open the `Настройки` menu in the toolbar and use:
 - font sizes from `8px` to `16px`
 - font families such as `Menlo`, `Monaco`, `Courier New`, `Andale Mono`, `Consolas`, `SF Mono`
 
-The choice is saved in browser `localStorage`, so the same browser opens the next session with the last selected theme, font size, and font family. The selected preset also drives the embedded ttyd/xterm colors.
+The selected **theme** is persisted in two layers. The backend stores the canonical value in `~/.local/share/fly-terminal/ui-preferences.json` (override with `FLY_TERMINAL_UI_PREFERENCES_FILE`), while browser `localStorage` remains a fast cache and fallback. On startup the backend value wins; if the backend has no saved theme yet, the browser's current local theme seeds it. This keeps the theme stable across terminal sessions, browser restarts, and different browser entry origins that point to the same Fly Terminal backend.
+
+Font size, font family, window title, layout and panel state remain browser-local preferences. The selected theme continues to drive the embedded ttyd/xterm colors.
 
 ## Direct terminal links
 

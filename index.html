@@ -1714,6 +1714,37 @@
       applyWindowTitle();
     }
 
+    async function persistThemePreference() {
+      try {
+        const response = await localApiFetch("/api/ui/preferences", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ theme: preferences.theme })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        console.warn("Unable to persist Fly Terminal theme on server", error);
+      }
+    }
+
+    async function loadPersistedTheme() {
+      try {
+        const response = await localApiFetch("/api/ui/preferences");
+        if (!response.ok) return;
+        const payload = await response.json().catch(() => ({}));
+        if (payload?.theme && themes[payload.theme]) {
+          preferences.theme = payload.theme;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+          return;
+        }
+        if (themes[preferences.theme]) {
+          await persistThemePreference();
+        }
+      } catch (error) {
+        console.warn("Unable to load persisted Fly Terminal theme", error);
+      }
+    }
+
     function setStatusText(message, duration = 0) {
       status.textContent = message;
       if (statusResetTimer) clearTimeout(statusResetTimer);
@@ -3284,7 +3315,11 @@
     windowTitleInput.onchange = () => {
       windowTitleInput.value = preferences.windowTitle;
     };
-    themeButtons.forEach(btn => btn.onclick = () => { preferences.theme = btn.dataset.theme; savePreferences(); applyAllThemes(); });
+    themeButtons.forEach(btn => btn.onclick = () => {
+      preferences.theme = btn.dataset.theme;
+      savePreferences();
+      persistThemePreference();
+    });
     bindFloatingMenus();
     bindResponsiveToolbar();
     if (recoverStackBtn) {
@@ -3370,13 +3405,20 @@
     resizeObserver.observe(document.body);
 
     // Initial load
-    applyShellTheme();
-    refreshDirectLink();
-    loadBrowserConfig().finally(() => {
-      loadBrowserApps();
-      loadSessions();
-      setTimeout(verifyBootUi, 2000);
-    });
+    async function initializeApp() {
+      await loadPersistedTheme();
+      applyShellTheme();
+      refreshDirectLink();
+      try {
+        await loadBrowserConfig();
+      } finally {
+        loadBrowserApps();
+        loadSessions();
+        setTimeout(verifyBootUi, 2000);
+      }
+    }
+
+    initializeApp();
     setInterval(updateTabLabels, 10000);
 
     // Manual panel collapse
