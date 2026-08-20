@@ -2285,6 +2285,133 @@
       });
     }
 
+    function wrapToolbarActionLabel(action) {
+      if (!action) return null;
+      const existingLabel = action.querySelector(":scope > .button-label, :scope > .toolbar-action-label");
+      if (existingLabel) {
+        existingLabel.classList.add("toolbar-action-label");
+        Array.from(action.childNodes)
+          .filter(node => node.nodeType === Node.TEXT_NODE)
+          .forEach(node => node.remove());
+        return existingLabel;
+      }
+
+      const textNodes = Array.from(action.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+      const labelText = textNodes
+        .map(node => node.textContent || "")
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      textNodes.forEach(node => node.remove());
+      if (!labelText) return null;
+
+      const label = document.createElement("span");
+      label.className = "toolbar-action-label";
+      label.textContent = labelText;
+      action.appendChild(label);
+      return label;
+    }
+
+    function ensureToolbarSummaryIcon(details, svgMarkup) {
+      const summary = details?.querySelector(":scope > summary");
+      if (!summary || summary.querySelector(":scope > svg")) return;
+      summary.insertAdjacentHTML("afterbegin", svgMarkup);
+    }
+
+    function ensureResponsiveToolbarPresentation() {
+      if (!toolbarControls) return;
+
+      let style = document.getElementById("fly-terminal-responsive-toolbar-style");
+      if (!style) {
+        style = document.createElement("style");
+        style.id = "fly-terminal-responsive-toolbar-style";
+        style.textContent = `
+          #toolbarControls .toolbar-icon-only > .toolbar-action-label,
+          #toolbarControls details.toolbar-icon-only > summary > .toolbar-action-label,
+          #toolbarControls .layout-controls.toolbar-icon-only > .control-label,
+          #toolbarControls .layout-controls.toolbar-icon-only .view-switch .toolbar-action-label {
+            display: none !important;
+          }
+
+          #toolbarControls button.toolbar-icon-only,
+          #toolbarControls a.button.toolbar-icon-only,
+          #toolbarControls details.toolbar-icon-only > summary.button {
+            gap: 0;
+            justify-content: center;
+            min-width: 32px;
+            padding-left: 8px;
+            padding-right: 8px;
+          }
+
+          #toolbarControls details.toolbar-icon-only > summary::after {
+            display: none;
+          }
+
+          #toolbarControls .layout-controls.toolbar-icon-only {
+            gap: 3px;
+          }
+
+          #toolbarControls .layout-controls.toolbar-icon-only .view-switch button {
+            gap: 0;
+          }
+
+          #overflowMenu > summary.button {
+            gap: 0;
+            justify-content: center;
+            min-width: 32px;
+            padding-left: 8px;
+            padding-right: 8px;
+          }
+
+          #overflowMenu > summary::after,
+          #overflowMenu > summary > .toolbar-action-label {
+            display: none !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      ensureToolbarSummaryIcon(
+        settingsMenu,
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/><circle cx="6" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="1" fill="currentColor" stroke="none"/></svg>'
+      );
+      ensureToolbarSummaryIcon(
+        toolsMenu,
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.4a3 3 0 0 0-3.7 3.7L2.3 9.6a1.6 1.6 0 0 0 2.2 2.2L8 8.3a3 3 0 0 0 3.7-3.7L9.9 6.4 8.2 4.7z"/></svg>'
+      );
+
+      const toolbarActions = [
+        togglePanelBtn,
+        viewTabsBtn,
+        viewSplitBtn,
+        addBrowserBtn,
+        document.getElementById("openBrowserTab"),
+        appsMenu?.querySelector(":scope > summary"),
+        directLink,
+        reloadActiveBtn,
+        copySelectionBtn,
+        settingsMenu?.querySelector(":scope > summary"),
+        toolsMenu?.querySelector(":scope > summary"),
+        overflowMenu?.querySelector(":scope > summary")
+      ].filter(Boolean);
+
+      toolbarActions.forEach(action => {
+        const label = wrapToolbarActionLabel(action);
+        const accessibleLabel = action.getAttribute("aria-label") || action.title || label?.textContent?.trim();
+        if (accessibleLabel) {
+          if (!action.title) action.title = accessibleLabel;
+          if (!action.getAttribute("aria-label")) action.setAttribute("aria-label", accessibleLabel);
+        }
+      });
+    }
+
+    function setResponsiveToolbarIconOnly(enabled) {
+      togglePanelBtn?.classList.toggle("toolbar-icon-only", enabled);
+      responsiveToolbarItems.forEach(({ element }) => {
+        element.classList.toggle("toolbar-icon-only", enabled);
+      });
+    }
+
     function restoreResponsiveToolbarItems() {
       responsiveToolbarItems.forEach(({ element, anchor }) => {
         if (anchor.parentNode) anchor.parentNode.insertBefore(element, anchor.nextSibling);
@@ -2292,7 +2419,18 @@
     }
 
     function toolbarControlsOverflow() {
-      return toolbarControls.scrollWidth > toolbarControls.clientWidth + 1;
+      if (!toolbarControls) return false;
+      if (toolbarControls.scrollWidth > toolbarControls.clientWidth + 1) return true;
+
+      const controlsRect = toolbarControls.getBoundingClientRect();
+      return Array.from(toolbarControls.children).some(element => {
+        if (element.hidden || getComputedStyle(element).display === "none") return false;
+        const elementRect = element.getBoundingClientRect();
+        return (
+          elementRect.left < controlsRect.left - 1 ||
+          elementRect.right > controlsRect.right + 1
+        );
+      });
     }
 
     function layoutResponsiveToolbar() {
@@ -2300,6 +2438,7 @@
       if (!toolbarControls || !overflowMenu || !overflowMenuList) return;
 
       restoreResponsiveToolbarItems();
+      setResponsiveToolbarIconOnly(false);
       overflowMenu.open = false;
       overflowMenu.hidden = true;
       if (bottomPanel?.classList.contains("collapsed")) return;
@@ -2309,9 +2448,13 @@
       });
       if (!toolbarControlsOverflow()) return;
 
+      setResponsiveToolbarIconOnly(true);
+      if (!toolbarControlsOverflow()) return;
+
       overflowMenu.hidden = false;
       for (let index = visibleItems.length - 1; index >= 0 && toolbarControlsOverflow(); index -= 1) {
         const element = visibleItems[index].element;
+        element.classList.remove("toolbar-icon-only");
         if (element.open) element.open = false;
         overflowMenuList.prepend(element);
       }
@@ -2324,6 +2467,8 @@
 
     function bindResponsiveToolbar() {
       if (!toolbar || !toolbarControls || !layoutControls || !sessionControls || !settingsMenu || !toolsMenu) return;
+
+      ensureResponsiveToolbarPresentation();
 
       const elements = [layoutControls, ...Array.from(sessionControls.children), settingsMenu, toolsMenu];
       responsiveToolbarItems = elements.map((element, index) => {
@@ -2340,9 +2485,21 @@
       responsiveToolbarItems.forEach(({ element }) => {
         responsiveToolbarMutationObserver.observe(element, {
           attributes: true,
-          attributeFilter: ["hidden", "style", "class"]
+          attributeFilter: ["hidden", "style"]
         });
       });
+      if (splitLayoutContainer) {
+        responsiveToolbarMutationObserver.observe(splitLayoutContainer, {
+          attributes: true,
+          attributeFilter: ["hidden", "style"]
+        });
+      }
+      if (bottomPanel) {
+        responsiveToolbarMutationObserver.observe(bottomPanel, {
+          attributes: true,
+          attributeFilter: ["class"]
+        });
+      }
 
       overflowMenuList.addEventListener("click", (event) => {
         const action = event.target.closest("button, a.button");
