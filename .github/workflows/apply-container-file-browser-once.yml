@@ -1,0 +1,52 @@
+name: Apply container file browser once
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  apply:
+    if: github.event.issue.title == 'Trigger: apply container file browser'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply implementation
+        run: python tools/_apply_container_file_browser_once.py
+
+      - name: Validate Python
+        run: |
+          python -m py_compile session-control.py
+          python -c "import importlib.util; s=importlib.util.spec_from_file_location('sc','session-control.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); assert m.normalize_container_browser_path('/') == '/'; assert m.normalize_container_browser_path('/config/../etc') == '/etc'; assert m.normalize_container_browser_path('etc') == ''; assert m.container_browser_path_blocked('/proc/1'); assert not m.container_browser_path_blocked('/config')"
+
+      - name: Validate JavaScript
+        run: |
+          python -c "from pathlib import Path; h=Path('index.html').read_text(encoding='utf-8'); a=h.rfind('<script>'); b=h.rfind('</script>'); assert a >= 0 and b > a; Path('/tmp/fly-terminal-index.js').write_text(h[a+8:b], encoding='utf-8')"
+          node --check /tmp/fly-terminal-index.js
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Clean one-shot files and push
+        run: |
+          rm tools/_apply_container_file_browser_once.py
+          rm .github/workflows/apply-container-file-browser-once.yml
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add container file browser downloads'
+          git push origin HEAD:main
+
+      - name: Close trigger issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --reason completed
