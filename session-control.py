@@ -986,15 +986,29 @@ def get_running_mac_apps():
 
 
 def focus_mac_app(app_name):
-    clean_name = str(app_name or "").strip().replace('"', '\\"')
+    clean_name = str(app_name or "").strip()
     if not clean_name:
         return False, "invalid_app_name"
-    script = f'tell application "{clean_name}" to activate'
     try:
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3)
-        return res.returncode == 0, res.stderr.strip()
+        subprocess.Popen(["open", "-a", clean_name])
     except Exception as exc:
         return False, str(exc)
+
+    def _isolate():
+        escaped = clean_name.replace('"', '\\"')
+        script = f"""
+        tell application "{escaped}" to activate
+        tell application "System Events"
+            set visible of (every process whose name is not "{escaped}" and name is not "Finder" and name is not "Dock" and name is not "System Events") to false
+        end tell
+        """
+        try:
+            subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=5)
+        except Exception:
+            pass
+
+    threading.Thread(target=_isolate, daemon=True).start()
+    return True, ""
 
 
 def humanize_tool_error_payload(payload):
