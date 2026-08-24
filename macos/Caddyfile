@@ -24,8 +24,13 @@
 	@browserRoot path /browser
 	redir @browserRoot /browser/ 302
 
+	@desktopRoot path /desktop
+	redir @desktopRoot /desktop/ 302
+
 	@browser path /browser/*
 	@browserWebsocket path /browser/websockets* /websockify*
+	@desktop path /desktop/*
+	@desktopWs path /desktop-ws /desktop-ws/*
 
 	# Selkies-GStreamer WebSocket endpoints — called without /browser/ prefix
 	# because JS inside the iframe uses window.location.host as base
@@ -35,6 +40,15 @@
 		header Set-Cookie "fly_terminal_browser_session={$FLY_BROWSER_SESSION_TOKEN}; Path=/; HttpOnly; SameSite=Lax"
 		reverse_proxy @terminal 127.0.0.1:{$TTYD_PORT:7682}
 		reverse_proxy @api 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}
+		handle @desktopWs {
+			uri strip_prefix /desktop-ws
+			reverse_proxy 127.0.0.1:{$FLY_DESKTOP_PORT:5901}
+		}
+		handle @desktop {
+			uri strip_prefix /desktop
+			root * {$FLY_TERMINAL_REPO_ROOT}/vendor/novnc
+			file_server
+		}
 		handle @browserWebsocket {
 			uri strip_prefix /browser
 			reverse_proxy {$FLY_BROWSER_UPSTREAM:http://127.0.0.1:7690} {

@@ -1293,6 +1293,14 @@
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/><path d="M11 5l3-3M11 2h3v3" stroke-width="1.3"/></svg>
               ↗ Browser
             </a>
+            <button type="button" id="addDesktop" hidden title="Открыть рабочий стол Mac mini">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/></svg>
+              Desktop
+            </button>
+            <a class="button" id="openDesktopTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Mac Desktop в отдельной вкладке">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/><path d="M11 5l3-3M11 2h3v3" stroke-width="1.3"/></svg>
+              ↗ Desktop
+            </a>
             <details class="dropdown apps-menu" id="appsMenu" hidden>
               <summary class="button">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
@@ -1952,6 +1960,7 @@
     
     // Buttons
     const addBrowserBtn = document.getElementById("addBrowser");
+    const addDesktopBtn = document.getElementById("addDesktop");
     const appsMenu = document.getElementById("appsMenu");
     const appsList = document.getElementById("appsList");
     const reloadActiveBtn = document.getElementById("reloadSession");
@@ -1994,6 +2003,7 @@
     let preferences = readPreferences();
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "" };
+    let desktopConfig = { enabled: false, url: "" };
     let browserApps = [];
     let browserAppsError = "";
     let happSubscriptions = [];
@@ -2291,6 +2301,10 @@
       return browserConfig.url || "about:blank";
     }
 
+    function buildDesktopUrl() {
+      return desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
+    }
+
     function viewModeSwitchMarkup() {
       const tabsActive = viewMode === "tabs";
       const splitActive = viewMode === "split";
@@ -2514,6 +2528,28 @@
         openBrowserTabBtn.hidden = !browserConfig.enabled;
         if (browserConfig.enabled && browserConfig.url) {
           openBrowserTabBtn.href = browserConfig.url;
+        }
+      }
+    }
+
+    async function loadDesktopConfig() {
+      try {
+        const response = await localApiFetch("/api/desktop/config");
+        const config = await response.json();
+        desktopConfig = {
+          enabled: Boolean(config.enabled && config.url),
+          url: typeof config.url === "string" ? config.url : ""
+        };
+      } catch (e) {
+        desktopConfig = { enabled: false, url: "" };
+      }
+
+      if (addDesktopBtn) addDesktopBtn.hidden = !desktopConfig.enabled;
+      const openDesktopTabBtn = document.getElementById("openDesktopTab");
+      if (openDesktopTabBtn) {
+        openDesktopTabBtn.hidden = !desktopConfig.enabled;
+        if (desktopConfig.enabled && desktopConfig.url) {
+          openDesktopTabBtn.href = desktopConfig.url;
         }
       }
     }
@@ -2797,6 +2833,8 @@
         togglePanelBtn,
         addBrowserBtn,
         document.getElementById("openBrowserTab"),
+        addDesktopBtn,
+        document.getElementById("openDesktopTab"),
         appsMenu?.querySelector(":scope > summary"),
         directLink,
         reloadActiveBtn,
@@ -3776,6 +3814,52 @@
       return tab;
     }
 
+    function addDesktopTab(label = "Mac Desktop", customLabel = null, subtext = "macOS Screen Sharing") {
+      const id = createId();
+      const desktopUrl = buildDesktopUrl();
+      const wrapper = document.createElement("div");
+      wrapper.className = "terminal-frame-wrapper";
+      wrapper.id = `wrapper-${id}`;
+      wrapper.innerHTML = `
+        <div class="terminal-topbar">
+          <div class="terminal-heading">
+            <strong class="tab-label-text">${customLabel || label}</strong>
+            <span class="tab-subtext">${subtext}</span>
+          </div>
+          <div class="terminal-actions">
+            <a class="frame-control" href="${desktopUrl}" target="_blank" rel="noreferrer noopener" title="Открыть в отдельной вкладке" aria-label="Открыть в отдельной вкладке" style="text-decoration:none;">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
+            </a>
+            <button type="button" class="frame-control frame-fullscreen-btn" title="На весь экран" aria-label="На весь экран" aria-pressed="false">
+              ${fullscreenIcon(false)}
+            </button>
+            ${viewModeSwitchMarkup()}
+          </div>
+        </div>
+        <div class="terminal-stage">
+          <iframe src="${desktopUrl}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+        </div>
+      `;
+
+      const tab = { id, type: "desktop", sessionId: null, label, customLabel, wrapper };
+      tabs.push(tab);
+      terminalContainer.appendChild(wrapper);
+
+      wrapper.addEventListener('mousedown', () => switchTab(id));
+      wrapper.querySelector(".frame-fullscreen-btn").onclick = (event) => toggleFrameFullscreen(id, event);
+
+      wrapper.querySelector("iframe").addEventListener("load", () => {
+        setSessionState("badge-ok", "Desktop готов");
+      });
+
+      renderTabs();
+      switchTab(id);
+      renderSplitLayoutPresets();
+      applySplitLayout();
+      saveSessions();
+      return tab;
+    }
+
     function switchTab(id) {
       if (!id) return;
       activeTabId = id;
@@ -3990,6 +4074,15 @@
       }
       addBrowserTab();
     };
+    if (addDesktopBtn) {
+      addDesktopBtn.onclick = () => {
+        if (!desktopConfig.enabled) {
+          setStatusText("Desktop module disabled", 2200);
+          return;
+        }
+        addDesktopTab();
+      };
+    }
     directLink.onclick = (event) => {
       event.preventDefault();
       window.open(buildTerminalUrl(createSessionId()), "_blank", "noopener,noreferrer");
@@ -4001,7 +4094,13 @@
       const tab = tabs.find(t => t.id === activeTabId);
       if (tab) {
         const iframe = tab.wrapper.querySelector("iframe");
-        iframe.src = tab.type === "browser" ? buildBrowserUrl() : buildTerminalUrl(tab.sessionId);
+        if (tab.type === "browser") {
+          iframe.src = buildBrowserUrl();
+        } else if (tab.type === "desktop") {
+          iframe.src = buildDesktopUrl();
+        } else {
+          iframe.src = buildTerminalUrl(tab.sessionId);
+        }
       }
     };
     document.addEventListener("click", (event) => {
@@ -4164,7 +4263,7 @@
       applyShellTheme();
       refreshDirectLink();
       try {
-        await loadBrowserConfig();
+        await Promise.allSettled([loadBrowserConfig(), loadDesktopConfig()]);
       } finally {
         loadBrowserApps();
         loadSessions();

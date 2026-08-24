@@ -2,3 +2,7 @@
 gha-creds-*.json
 __pycache__/
 *.pyc
+.playwright-cli/
+output/
+
+

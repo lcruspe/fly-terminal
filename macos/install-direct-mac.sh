@@ -10,9 +10,11 @@ ENV_FILE="${CONFIG_DIR}/fly-terminal.env"
 TTYD_LABEL="ai.kruspe.fly-terminal.ttyd"
 CADDY_LABEL="ai.kruspe.fly-terminal.caddy"
 BROWSER_LABEL="ai.kruspe.fly-terminal.browser"
+WEBSOCKIFY_LABEL="ai.kruspe.fly-terminal.websockify"
 TTYD_PLIST="${LAUNCH_AGENTS_DIR}/${TTYD_LABEL}.plist"
 CADDY_PLIST="${LAUNCH_AGENTS_DIR}/${CADDY_LABEL}.plist"
 BROWSER_PLIST="${LAUNCH_AGENTS_DIR}/${BROWSER_LABEL}.plist"
+WEBSOCKIFY_PLIST="${LAUNCH_AGENTS_DIR}/${WEBSOCKIFY_LABEL}.plist"
 UID_VALUE="$(id -u)"
 
 mkdir -p "${CONFIG_DIR}" "${LOG_DIR}" "${LAUNCH_AGENTS_DIR}" "${HOME}/.local/share/fly-terminal/bash_history" "${HOME}/.local/share/fly-terminal/browser-profile" "${HOME}/.local/share/caddy"
@@ -39,6 +41,11 @@ FLY_BROWSER_CONTAINER_PORT=3000
 FLY_BROWSER_UPSTREAM=http://127.0.0.1:7690
 FLY_BROWSER_PROFILE_DIR=$HOME/.local/share/fly-terminal/browser-profile
 FLY_BROWSER_PROFILE_VOLUME=fly-terminal-browser-profile
+FLY_DESKTOP_ENABLED=1
+FLY_DESKTOP_URL=/desktop/
+FLY_DESKTOP_PORT=5901
+FLY_DESKTOP_TARGET=127.0.0.1:5900
+FLY_DESKTOP_PASSWORD=
 EOF
   chmod 600 "${ENV_FILE}"
 fi
@@ -59,6 +66,11 @@ ensure_env_line "FLY_BROWSER_CONTAINER_PORT" "3000"
 ensure_env_line "FLY_BROWSER_UPSTREAM" "http://127.0.0.1:7690"
 ensure_env_line "FLY_BROWSER_PROFILE_DIR" "\$HOME/.local/share/fly-terminal/browser-profile"
 ensure_env_line "FLY_BROWSER_PROFILE_VOLUME" "fly-terminal-browser-profile"
+ensure_env_line "FLY_DESKTOP_ENABLED" "1"
+ensure_env_line "FLY_DESKTOP_URL" "/desktop/"
+ensure_env_line "FLY_DESKTOP_PORT" "5901"
+ensure_env_line "FLY_DESKTOP_TARGET" "127.0.0.1:5900"
+ensure_env_line "FLY_DESKTOP_PASSWORD" ""
 
 set -a
 . "${ENV_FILE}"
@@ -81,7 +93,7 @@ else
   printf 'FLY_BROWSER_BASIC_AUTH=%s\n' "${browser_basic_auth}" >>"${ENV_FILE}"
 fi
 
-chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/set-password.sh"
+chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/set-password.sh"
 
 cat >"${TTYD_PLIST}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -179,16 +191,51 @@ cat >"${BROWSER_PLIST}" <<EOF
 </plist>
 EOF
 
+cat >"${WEBSOCKIFY_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${WEBSOCKIFY_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${SCRIPT_DIR}/launch-websockify.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${REPO_ROOT}</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/websockify.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/websockify.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>${HOME}</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
 launchctl bootout "gui/${UID_VALUE}/${TTYD_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${CADDY_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${BROWSER_LABEL}" 2>/dev/null || true
+launchctl bootout "gui/${UID_VALUE}/${WEBSOCKIFY_LABEL}" 2>/dev/null || true
 
 launchctl bootstrap "gui/${UID_VALUE}" "${TTYD_PLIST}"
 launchctl bootstrap "gui/${UID_VALUE}" "${CADDY_PLIST}"
 launchctl bootstrap "gui/${UID_VALUE}" "${BROWSER_PLIST}"
+launchctl bootstrap "gui/${UID_VALUE}" "${WEBSOCKIFY_PLIST}"
 launchctl kickstart -k "gui/${UID_VALUE}/${TTYD_LABEL}"
 launchctl kickstart -k "gui/${UID_VALUE}/${CADDY_LABEL}"
 launchctl kickstart -k "gui/${UID_VALUE}/${BROWSER_LABEL}"
+launchctl kickstart -k "gui/${UID_VALUE}/${WEBSOCKIFY_LABEL}"
 
 tailscale funnel --bg --yes 8080
 tailscale funnel --https=10000 --bg --yes "https+insecure://127.0.0.1:7690"

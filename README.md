@@ -5,6 +5,7 @@
 ## Особенности проекта
 
 *   **Двухпанельный интерфейс**: переключение между вкладками (Tabs) и разделением экрана (Split Screen) выполняется компактным одноуровневым переключателем в верхней панели каждой рабочей области, сразу справа от кнопки полноэкранного режима. Параметры компоновки Split Mode остаются в основной панели и показываются только в разделённом режиме.
+*   **Mac Desktop (Дистанционное управление macOS)**: отдельная вкладка с полнофункциональным удаленным рабочим столом Mac mini через noVNC и websockify. Оптимизировано под слабые каналы (Zlib сжатие, JPEG качество, локальный курсор, масштабирование).
 *   **Remote Browser для macOS**: отдельная browser-панель открывает Chromium в Docker/noVNC через сеть Mac mini, не смешиваясь с терминальными tmux-сессиями.
 *   **Умное именование вкладок**: автоматическое отслеживание текущей рабочей директории (`cwd`) каждого tmux-сеанса с обновлением заголовка. Возможность ручного переименования по двойному клику.
 *   **Кастомизация UI**: 10 профессионально подобранных цветовых схем (5 светлых и 5 темных), выбор размера шрифта (8px - 16px) и шрифтового семейства с сохранением настроек в `localStorage`.
@@ -25,6 +26,8 @@ graph TD
     Proxy -->|Статический фронтенд /| IndexHtml[index.html]
     Proxy -->|Управление сессиями /api/*| ControlPy[session-control.py]
     Proxy -->|Терминальный поток /terminal/| Ttyd[ttyd]
+    Proxy -->|noVNC /desktop/* & /desktop-ws| Websockify[websockify :5901]
+    Websockify -->|RFB :5900| MacScreen[macOS Screen Sharing]
     User -->|HTTPS :10000| Browser[Remote Chromium / noVNC]
     
     ControlPy -->|tmux list-panes / kill-session| Tmux[tmux]
@@ -168,6 +171,11 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/browser-profile` | Persistent profile Chromium для cookies и настроек. |
 | `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с профилем Chromium. |
 | `FLY_BROWSER_BASIC_AUTH` | *Вычисляется установщиком* | Base64 для upstream Basic Auth `kasm_user:<password>`, который Caddy подставляет при проксировании `/browser/`. |
+| `FLY_DESKTOP_ENABLED` | `1` | Включает кнопку Mac Desktop в UI и endpoint `/api/desktop/config`. |
+| `FLY_DESKTOP_URL` | `/desktop/` | URL noVNC веб-клиента для удаленного управления Mac mini. |
+| `FLY_DESKTOP_PORT` | `5901` | Порт WebSocket-моста `websockify`. |
+| `FLY_DESKTOP_TARGET` | `127.0.0.1:5900` | Внутренний целевой VNC-порт macOS Screen Sharing. |
+| `FLY_DESKTOP_PASSWORD` | *Не задано* | Пароль VNC для автоматической авторизации при открытии вкладки. |
 
 Browser-модуль автоматически использует два независимых профиля Selkies:
 

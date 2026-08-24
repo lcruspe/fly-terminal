@@ -1355,6 +1355,26 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/api/desktop/config":
+            enabled = os.environ.get("FLY_DESKTOP_ENABLED", "1") == "1"
+            desktop_url = os.environ.get("FLY_DESKTOP_URL", "/desktop/")
+            password = os.environ.get("FLY_DESKTOP_PASSWORD", "")
+            params = "path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true"
+            if password:
+                params += f"&password={quote(password)}"
+            full_url = f"{desktop_url.rstrip('/')}/vnc.html?{params}"
+            send_json(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "enabled": enabled,
+                    "url": full_url if enabled else "",
+                    "rawUrl": desktop_url if enabled else "",
+                },
+            )
+            return
+
         if self.path == "/api/apps/list":
             apps, error = discover_browser_apps()
             if error:
