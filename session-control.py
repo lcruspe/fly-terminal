@@ -6,6 +6,7 @@ import base64
 import hashlib
 import mimetypes
 import shlex
+import stat
 import subprocess
 import sys
 import threading
@@ -477,28 +478,48 @@ def reserve_document_file(root, file_name):
     raise OSError("too_many_name_collisions")
 
 
-def resolve_document_download(file_name):
+def open_document_download(file_name):
+    """Open one regular Documents file without following a final symlink."""
     name = normalize_document_file_name(file_name)
     if not name:
-        return None, "file_name_invalid", ""
+        return None, "", "file_name_invalid", ""
 
     root, root_error = documents_root()
     if root_error:
-        return None, "documents_unavailable", root_error
+        return None, "", "documents_unavailable", root_error
 
-    candidate = root / name
+    root_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
     try:
-        if candidate.is_symlink():
-            return None, "file_access_denied", "symlink"
-        resolved = candidate.resolve(strict=True)
-    except FileNotFoundError:
-        return None, "file_not_found", ""
-    except (OSError, RuntimeError) as exc:
-        return None, "file_access_denied", str(exc)
+        root_fd = os.open(root, root_flags)
+    except OSError as exc:
+        return None, "", "documents_unavailable", str(exc)
 
-    if resolved.parent != root or not resolved.is_file():
-        return None, "file_access_denied", "outside_documents_or_not_regular_file"
-    return resolved, "", ""
+    try:
+        file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            file_fd = os.open(name, file_flags, dir_fd=root_fd)
+        except FileNotFoundError:
+            return None, "", "file_not_found", ""
+        except OSError as exc:
+            return None, "", "file_access_denied", str(exc)
+    finally:
+        os.close(root_fd)
+
+    try:
+        file_stat = os.fstat(file_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            os.close(file_fd)
+            return None, "", "file_access_denied", "not_regular_file"
+        source = os.fdopen(file_fd, "rb")
+    except OSError as exc:
+        try:
+            os.close(file_fd)
+        except OSError:
+            pass
+        return None, "", "file_read_failed", str(exc)
+
+    return source, name, "", ""
+
 
 def operation_failure_message(operation, step):
     step = str(step or "")
@@ -999,7 +1020,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
     def _handle_document_download(self):
         query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
         file_name = (query.get("name") or [""])[0]
-        target_path, error_code, technical_details = resolve_document_download(file_name)
+        source, safe_name, error_code, technical_details = open_document_download(file_name)
         if error_code:
             if error_code == "file_not_found":
                 status = 404
@@ -1016,28 +1037,22 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             )
             return
 
-        try:
-            source = target_path.open("rb")
-        except OSError as exc:
-            send_json(self, 500, {"ok": False, "error": "file_read_failed", "details": str(exc)})
-            return
-
         with source:
             try:
-                stat = os.fstat(source.fileno())
+                file_stat = os.fstat(source.fileno())
             except OSError as exc:
                 send_json(self, 500, {"ok": False, "error": "file_read_failed", "details": str(exc)})
                 return
 
-            mime_type = mimetypes.guess_type(target_path.name)[0] or "application/octet-stream"
-            suffix = target_path.suffix
+            mime_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+            suffix = Path(safe_name).suffix
             safe_suffix = suffix if re.fullmatch(r"\.[A-Za-z0-9]{1,12}", suffix or "") else ""
             fallback_name = f"download{safe_suffix}"
-            encoded_name = quote(target_path.name, safe="")
+            encoded_name = quote(safe_name, safe="")
             self.send_response(200)
             self.send_header("Content-Type", mime_type)
             self.send_header("Content-Disposition", f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_name}")
-            self.send_header("Content-Length", str(stat.st_size))
+            self.send_header("Content-Length", str(file_stat.st_size))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Access-Control-Allow-Origin", "*")
