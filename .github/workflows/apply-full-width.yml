@@ -1,15 +1,15 @@
 name: Apply full-width layout
 
 on:
-  push:
-    paths:
-      - '.github/workflows/apply-full-width.yml'
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: ${{ github.event.comment.body == '/apply-full-width-layout' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
