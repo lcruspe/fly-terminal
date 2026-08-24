@@ -997,13 +997,28 @@ def focus_mac_app(app_name):
     def _isolate():
         escaped = clean_name.replace('"', '\\"')
         script = f"""
-        tell application "{escaped}" to activate
+        tell application "{escaped}"
+            reopen
+            activate
+        end tell
+        delay 0.2
         tell application "System Events"
+            tell process "{escaped}"
+                set frontmost to true
+                try
+                    set value of attribute "AXFullScreen" of window 1 to true
+                on error
+                    try
+                        set position of window 1 to {{0, 0}}
+                        set size of window 1 to {{2560, 1440}}
+                    end try
+                end try
+            end tell
             set visible of (every process whose name is not "{escaped}" and name is not "Finder" and name is not "Dock" and name is not "System Events") to false
         end tell
         """
         try:
-            subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=5)
+            subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=6)
         except Exception:
             pass
 
