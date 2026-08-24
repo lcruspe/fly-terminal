@@ -23,7 +23,7 @@ CODEX_ANSWER_START_RE = re.compile(r"^\s*─{8,}\s*$")
 MAX_UPLOAD_BYTES = int(os.environ.get("FLY_TERMINAL_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 MAX_LAST_ANSWER_CHARS = int(os.environ.get("FLY_TERMINAL_LAST_ANSWER_MAX_CHARS", str(1024 * 1024)))
 UPLOAD_NAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
-DOCUMENTS_DIR = Path.home() / "Documents"
+DOCUMENTS_DIR = Path(os.environ.get("FLY_TERMINAL_DOCUMENTS_DIR", str(Path.home() / "Documents"))).expanduser()
 DESKTOP_FIELD_CODE_RE = re.compile(r"%[A-Za-z]")
 APP_DESKTOP_DIRS = (
     "/config/Desktop",

@@ -25,6 +25,7 @@ FLY_BROWSER_CONTAINER_PORT="${FLY_BROWSER_CONTAINER_PORT:-3000}"
 FLY_BROWSER_PROFILE_DIR="${FLY_BROWSER_PROFILE_DIR:-${HOME}/.local/share/fly-terminal/browser-profile}"
 FLY_BROWSER_CONTAINER_NAME="${FLY_BROWSER_CONTAINER_NAME:-fly-terminal-browser}"
 FLY_BROWSER_PROFILE_VOLUME="${FLY_BROWSER_PROFILE_VOLUME:-fly-terminal-browser-profile}"
+FLY_TERMINAL_DOCUMENTS_DIR="${FLY_TERMINAL_DOCUMENTS_DIR:-${HOME}/Documents}"
 FLY_BROWSER_PASSWORD="${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}"
 FLY_BROWSER_CHROME_PROFILE_DIR="${FLY_BROWSER_CHROME_PROFILE_DIR:-/config/.config/chromium}"
 FLY_BROWSER_CHROME_CLI="${FLY_BROWSER_CHROME_CLI:-${FLY_BROWSER_CHROME_PROFILE_DIR} --no-default-browser-check --disable-dev-shm-usage --disable-field-trial-config --password-store=basic}"
@@ -169,12 +170,14 @@ fi
 }
 
 container_has_required_settings() {
-  local env_dump
+  local env_dump documents_label
   env_dump="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)" || return 1
+  documents_label="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{index .Config.Labels "fly-terminal.documents-dir"}}' 2>/dev/null)" || return 1
   grep -qx 'SELKIES_AUDIO_ENABLED=false|locked' <<<"${env_dump}" &&
     grep -qx 'SELKIES_MICROPHONE_ENABLED=false|locked' <<<"${env_dump}" &&
     grep -qx 'SELKIES_USE_BROWSER_CURSORS=true' <<<"${env_dump}" &&
-    grep -qx "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" <<<"${env_dump}"
+    grep -qx "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" <<<"${env_dump}" &&
+    [ "${documents_label}" = "${FLY_TERMINAL_DOCUMENTS_DIR}" ]
 }
 
 ensure_container_restart_policy() {
@@ -357,7 +360,7 @@ patch_selkies_input() {
   fi
 }
 
-mkdir -p "${FLY_BROWSER_PROFILE_DIR}"
+mkdir -p "${FLY_BROWSER_PROFILE_DIR}" "${FLY_TERMINAL_DOCUMENTS_DIR}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required for fly-terminal browser module." >&2
@@ -394,6 +397,7 @@ case "${FLY_BROWSER_IMAGE}" in
     docker run -d \
       --name "${FLY_BROWSER_CONTAINER_NAME}" \
       --restart unless-stopped \
+      --label "fly-terminal.documents-dir=${FLY_TERMINAL_DOCUMENTS_DIR}" \
       --shm-size=1g \
       -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:${FLY_BROWSER_CONTAINER_PORT}" \
       -e "PUID=$(id -u)" \
@@ -406,17 +410,20 @@ case "${FLY_BROWSER_IMAGE}" in
       -e "SELKIES_USE_BROWSER_CURSORS=true" \
       -e "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" \
       -v "${FLY_BROWSER_PROFILE_VOLUME}:/config" \
+      -v "${FLY_TERMINAL_DOCUMENTS_DIR}:/config/Documents" \
       "${FLY_BROWSER_IMAGE}" >/dev/null
     ;;
   *)
     docker run -d \
       --name "${FLY_BROWSER_CONTAINER_NAME}" \
       --restart unless-stopped \
+      --label "fly-terminal.documents-dir=${FLY_TERMINAL_DOCUMENTS_DIR}" \
       --shm-size=1g \
       -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:6901" \
       -e "VNC_PW=${FLY_BROWSER_PASSWORD}" \
       -e "DISABLE_CUSTOM_STARTUP=1" \
       -v "${FLY_BROWSER_PROFILE_VOLUME}:/home/kasm-user" \
+      -v "${FLY_TERMINAL_DOCUMENTS_DIR}:/home/kasm-user/Documents" \
       "${FLY_BROWSER_IMAGE}" >/dev/null
     ;;
 esac
