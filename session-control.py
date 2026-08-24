@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, quote, urlsplit
 
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -21,6 +22,7 @@ CODEX_ANSWER_START_RE = re.compile(r"^\s*─{8,}\s*$")
 MAX_UPLOAD_BYTES = int(os.environ.get("FLY_TERMINAL_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 MAX_LAST_ANSWER_CHARS = int(os.environ.get("FLY_TERMINAL_LAST_ANSWER_MAX_CHARS", str(1024 * 1024)))
 UPLOAD_NAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
+DOCUMENTS_DIR = Path.home() / "Documents"
 DESKTOP_FIELD_CODE_RE = re.compile(r"%[A-Za-z]")
 APP_DESKTOP_DIRS = (
     "/config/Desktop",
@@ -73,6 +75,16 @@ TOOL_ERROR_MESSAGES = {
     "happ_location_not_found": "Выбранная локация Happ больше недоступна. Обновите список и выберите локацию заново.",
     "happ_action_already_running": "Другая операция Happ уже выполняется. Дождитесь её завершения.",
     "happ_location_switch_failed": "Не удалось переключить локацию Happ.",
+    "payload_too_large": "Размер запроса превышает допустимый лимит.",
+    "documents_unavailable": "Не удалось открыть папку Documents виртуальной машины.",
+    "documents_list_failed": "Не удалось получить список файлов из папки Documents.",
+    "file_name_invalid": "Некорректное имя файла.",
+    "file_data_invalid": "Не удалось прочитать содержимое выбранного файла.",
+    "file_too_large": "Файл превышает допустимый размер загрузки.",
+    "file_write_failed": "Не удалось сохранить файл в папку Documents.",
+    "file_not_found": "Файл не найден в папке Documents.",
+    "file_access_denied": "Доступ к выбранному файлу запрещён.",
+    "file_read_failed": "Не удалось скачать выбранный файл.",
 }
 
 
@@ -395,6 +407,99 @@ def humanize_tool_error_payload(payload):
     return result
 
 
+
+def documents_root():
+    """Return the resolved VM Documents directory, creating it when needed."""
+    try:
+        DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
+        return DOCUMENTS_DIR.resolve(strict=True), ""
+    except OSError as exc:
+        return None, str(exc)
+
+
+def normalize_document_file_name(value):
+    """Accept one plain UTF-8 filename; never accept a path."""
+    name = str(value or "").strip()
+    if (
+        not name
+        or name in {".", ".."}
+        or "/" in name
+        or "\\" in name
+        or any(ord(char) < 32 or ord(char) == 127 for char in name)
+        or len(name.encode("utf-8")) > 240
+    ):
+        return ""
+    return name
+
+
+def list_document_files():
+    root, root_error = documents_root()
+    if root_error:
+        return None, "documents_unavailable", root_error
+
+    files = []
+    try:
+        for entry in root.iterdir():
+            try:
+                if entry.is_symlink() or not entry.is_file():
+                    continue
+                resolved = entry.resolve(strict=True)
+                if resolved.parent != root:
+                    continue
+                stat = entry.stat()
+            except (OSError, RuntimeError):
+                continue
+            files.append({
+                "name": entry.name,
+                "size": stat.st_size,
+                "modifiedAt": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(),
+            })
+    except OSError as exc:
+        return None, "documents_list_failed", str(exc)
+
+    files.sort(key=lambda item: (item["modifiedAt"], item["name"].casefold()), reverse=True)
+    return files, "", ""
+
+
+def reserve_document_file(root, file_name):
+    """Atomically reserve a non-existing filename; collisions get ' (N)' suffixes."""
+    original = Path(file_name)
+    suffix = original.suffix
+    stem = original.name[:-len(suffix)] if suffix else original.name
+    for index in range(10000):
+        candidate_name = original.name if index == 0 else f"{stem} ({index + 1}){suffix}"
+        candidate = root / candidate_name
+        try:
+            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            return candidate, fd
+        except FileExistsError:
+            continue
+    raise OSError("too_many_name_collisions")
+
+
+def resolve_document_download(file_name):
+    name = normalize_document_file_name(file_name)
+    if not name:
+        return None, "file_name_invalid", ""
+
+    root, root_error = documents_root()
+    if root_error:
+        return None, "documents_unavailable", root_error
+
+    candidate = root / name
+    try:
+        if candidate.is_symlink():
+            return None, "file_access_denied", "symlink"
+        resolved = candidate.resolve(strict=True)
+    except FileNotFoundError:
+        return None, "file_not_found", ""
+    except (OSError, RuntimeError) as exc:
+        return None, "file_access_denied", str(exc)
+
+    if resolved.parent != root or not resolved.is_file():
+        return None, "file_access_denied", "outside_documents_or_not_regular_file"
+    return resolved, "", ""
+
 def operation_failure_message(operation, step):
     step = str(step or "")
     if operation == "recovery":
@@ -476,7 +581,7 @@ def send_json(handler, status_code, payload):
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type")
-    handler.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     handler.end_headers()
     if body:
         handler.wfile.write(body)
@@ -611,6 +716,14 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 200, read_ui_preferences())
             return
 
+        if self.path == "/api/files/list":
+            self._handle_documents_list()
+            return
+
+        if urlsplit(self.path).path == "/api/files/download":
+            self._handle_document_download()
+            return
+
         if self.path == "/api/browser/config":
             enabled = os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
             browser_url = os.environ.get("FLY_BROWSER_URL", "/browser/")
@@ -676,6 +789,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_info()
         elif self.path == "/api/session/last-answer":
             self._handle_last_answer()
+        elif self.path == "/api/files/upload":
+            self._handle_document_upload()
         elif self.path == "/api/session/upload-image":
             self._handle_upload_image()
         elif self.path == "/api/apps/launch":
@@ -795,6 +910,146 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             200,
             {"ok": True, "sessionId": session_id, "answer": answer, "characters": len(answer)},
         )
+
+    def _handle_documents_list(self):
+        files, error_code, technical_details = list_document_files()
+        if error_code:
+            send_json(
+                self,
+                500,
+                {"ok": False, "error": error_code, "details": technical_details},
+            )
+            return
+        send_json(
+            self,
+            200,
+            {
+                "ok": True,
+                "directory": "Documents",
+                "maxUploadBytes": MAX_UPLOAD_BYTES,
+                "files": files,
+            },
+        )
+
+    def _handle_document_upload(self):
+        max_body = int(MAX_UPLOAD_BYTES * 1.4) + 65536
+        payload, error = self._read_json_body(max_body)
+        if error:
+            status = 413 if error == "payload_too_large" else 400
+            send_json(self, status, {"ok": False, "error": error})
+            return
+
+        file_name = normalize_document_file_name(payload.get("fileName"))
+        if not file_name:
+            send_json(self, 400, {"ok": False, "error": "file_name_invalid"})
+            return
+
+        data_b64 = payload.get("data")
+        if not isinstance(data_b64, str):
+            send_json(self, 400, {"ok": False, "error": "file_data_invalid"})
+            return
+        try:
+            content = base64.b64decode(data_b64, validate=True)
+        except (ValueError, TypeError):
+            send_json(self, 400, {"ok": False, "error": "file_data_invalid"})
+            return
+        if len(content) > MAX_UPLOAD_BYTES:
+            send_json(self, 413, {"ok": False, "error": "file_too_large"})
+            return
+
+        root, root_error = documents_root()
+        if root_error:
+            send_json(self, 500, {"ok": False, "error": "documents_unavailable", "details": root_error})
+            return
+
+        target_path = None
+        fd = None
+        try:
+            target_path, fd = reserve_document_file(root, file_name)
+            with os.fdopen(fd, "wb") as target_file:
+                fd = None
+                target_file.write(content)
+                target_file.flush()
+                os.fsync(target_file.fileno())
+        except OSError as exc:
+            if fd is not None:
+                os.close(fd)
+            if target_path is not None:
+                try:
+                    target_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            send_json(self, 500, {"ok": False, "error": "file_write_failed", "details": str(exc)})
+            return
+
+        saved_name = target_path.name
+        send_json(
+            self,
+            201,
+            {
+                "ok": True,
+                "name": saved_name,
+                "originalName": file_name,
+                "renamed": saved_name != file_name,
+                "bytes": len(content),
+                "directory": "Documents",
+            },
+        )
+
+    def _handle_document_download(self):
+        query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+        file_name = (query.get("name") or [""])[0]
+        target_path, error_code, technical_details = resolve_document_download(file_name)
+        if error_code:
+            if error_code == "file_not_found":
+                status = 404
+            elif error_code == "file_name_invalid":
+                status = 400
+            elif error_code == "file_access_denied":
+                status = 403
+            else:
+                status = 500
+            send_json(
+                self,
+                status,
+                {"ok": False, "error": error_code, "details": technical_details},
+            )
+            return
+
+        try:
+            source = target_path.open("rb")
+        except OSError as exc:
+            send_json(self, 500, {"ok": False, "error": "file_read_failed", "details": str(exc)})
+            return
+
+        with source:
+            try:
+                stat = os.fstat(source.fileno())
+            except OSError as exc:
+                send_json(self, 500, {"ok": False, "error": "file_read_failed", "details": str(exc)})
+                return
+
+            mime_type = mimetypes.guess_type(target_path.name)[0] or "application/octet-stream"
+            suffix = target_path.suffix
+            safe_suffix = suffix if re.fullmatch(r"\.[A-Za-z0-9]{1,12}", suffix or "") else ""
+            fallback_name = f"download{safe_suffix}"
+            encoded_name = quote(target_path.name, safe="")
+            self.send_response(200)
+            self.send_header("Content-Type", mime_type)
+            self.send_header("Content-Disposition", f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_name}")
+            self.send_header("Content-Length", str(stat.st_size))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            try:
+                while True:
+                    chunk = source.read(64 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def _handle_upload_image(self):
         max_body = int(MAX_UPLOAD_BYTES * 1.4) + 4096
