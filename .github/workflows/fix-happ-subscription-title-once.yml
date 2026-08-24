@@ -6,10 +6,11 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   fix:
-    if: startsWith(github.event.issue.title, 'Trigger: execute Happ title decoder')
+    if: startsWith(github.event.issue.title, 'Trigger: diagnose Happ title decoder')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +18,19 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: Apply and validate
-        run: python tools/_fix_happ_subscription_title_once.py
+        id: apply
+        continue-on-error: true
+        run: python tools/_fix_happ_subscription_title_once.py > /tmp/happ-title-fix.log 2>&1
+      - name: Report validation failure
+        if: steps.apply.outcome == 'failure'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          REPOSITORY: '${{ github.repository }}'
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "$(printf '%s\n\n%s' 'Happ title fix failed:' "$(tail -80 /tmp/happ-title-fix.log)")"
       - name: Commit and clean one-shot machinery
+        if: steps.apply.outcome == 'success'
         run: |
           rm tools/_fix_happ_subscription_title_once.py
           rm .github/workflows/fix-happ-subscription-title-once.yml
@@ -28,3 +40,6 @@ jobs:
           git add -A
           git commit -m 'Decode Happ subscription display names'
           git push origin HEAD:main
+      - name: Fail after reporting
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
