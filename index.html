@@ -199,10 +199,9 @@
     }
 
     .layout-controls {
-      background: rgba(255, 255, 255, 0.16);
-      border: 1px solid var(--border);
-      border-radius: var(--control-radius);
-      padding: 3px;
+      background: transparent;
+      border: 0;
+      padding: 0;
     }
 
     .control-label {
@@ -213,18 +212,39 @@
       text-transform: uppercase;
     }
 
-    .view-switch {
-      background: var(--control);
-      border: 1px solid var(--border);
-      border-radius: var(--control-radius);
+    .frame-view-switch {
+      align-items: center;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
       display: inline-flex;
-      padding: 3px;
+      gap: 2px;
+      padding: 2px;
     }
 
-    .view-switch button {
-      border-color: transparent;
+    .frame-view-mode-btn {
+      align-items: center;
+      background: transparent;
+      border: 0;
+      border-radius: 6px;
       box-shadow: none;
-      padding: 6px 8px;
+      color: var(--terminal-topbar-ink);
+      display: inline-flex;
+      height: 26px;
+      justify-content: center;
+      padding: 0;
+      transform: none;
+      width: 28px;
+    }
+
+    .frame-view-mode-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+      transform: none;
+    }
+
+    .frame-view-mode-btn.active {
+      background: var(--accent);
+      color: var(--active-btn-ink);
     }
 
     /* Tabs Bar */
@@ -1258,18 +1278,7 @@
             </button>
           </div>
 
-          <div class="control-group layout-controls" id="layoutControls" aria-label="Режим и компоновка">
-            <span class="control-label">Вид</span>
-            <div class="view-switch" aria-label="Режим отображения">
-              <button type="button" id="viewTabs" class="active" title="Вкладки">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M2 7h12"/></svg>
-                Вкладки
-              </button>
-              <button type="button" id="viewSplit" title="Сплит">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M8 2v12M2 8h12"/></svg>
-                Сплит
-              </button>
-            </div>
+          <div class="control-group layout-controls" id="layoutControls" aria-label="Компоновка разделённого режима" hidden>
             <div id="splitLayoutContainer" class="layout-presets-wrapper" style="display: none;">
               <div id="splitLayoutPresets"></div>
             </div>
@@ -1947,8 +1956,6 @@
     const appsList = document.getElementById("appsList");
     const reloadActiveBtn = document.getElementById("reloadSession");
     const copySelectionBtn = document.getElementById("copySelection");
-    const viewTabsBtn = document.getElementById("viewTabs");
-    const viewSplitBtn = document.getElementById("viewSplit");
     const directLink = document.getElementById("directLink");
     const bottomPanel = document.getElementById("bottomPanel");
     const togglePanelBtn = document.getElementById("togglePanel");
@@ -2191,16 +2198,10 @@
 
     function renderSplitLayoutPresets() {
       const N = tabs.length;
-      if (N <= 1) {
-        splitLayoutContainer.style.display = 'none';
-        return;
-      }
-      
-      if (viewMode === 'split') {
-        splitLayoutContainer.style.display = 'inline-flex';
-      } else {
-        splitLayoutContainer.style.display = 'none';
-      }
+      const showPresets = N > 1 && viewMode === 'split';
+      if (layoutControls) layoutControls.hidden = !showPresets;
+      splitLayoutContainer.style.display = showPresets ? 'inline-flex' : 'none';
+      if (!showPresets) return;
       
       const presets = [
         { id: 'grid', title: 'Сетка' },
@@ -2288,6 +2289,28 @@
 
     function buildBrowserUrl() {
       return browserConfig.url || "about:blank";
+    }
+
+    function viewModeSwitchMarkup() {
+      const tabsActive = viewMode === "tabs";
+      const splitActive = viewMode === "split";
+      return `
+        <div class="frame-view-switch" role="group" aria-label="Режим отображения">
+          <button type="button" class="frame-view-mode-btn${tabsActive ? " active" : ""}" data-view-mode="tabs" title="Вкладки" aria-label="Вкладки" aria-pressed="${String(tabsActive)}">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M2 7h12"/></svg>
+          </button>
+          <button type="button" class="frame-view-mode-btn${splitActive ? " active" : ""}" data-view-mode="split" title="Сплит" aria-label="Сплит" aria-pressed="${String(splitActive)}">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M8 2v12M2 8h12"/></svg>
+          </button>
+        </div>`;
+    }
+
+    function updateViewModeButtons() {
+      document.querySelectorAll(".frame-view-mode-btn").forEach((button) => {
+        const active = button.dataset.viewMode === viewMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
     }
 
     function fullscreenIcon(expanded = false) {
@@ -2772,8 +2795,6 @@
 
       const toolbarActions = [
         togglePanelBtn,
-        viewTabsBtn,
-        viewSplitBtn,
         addBrowserBtn,
         document.getElementById("openBrowserTab"),
         appsMenu?.querySelector(":scope > summary"),
@@ -3644,6 +3665,7 @@
             <button type="button" class="frame-control frame-fullscreen-btn" title="На весь экран" aria-label="На весь экран" aria-pressed="false">
               ${fullscreenIcon(false)}
             </button>
+            ${viewModeSwitchMarkup()}
           </div>
         </div>
         <div class="terminal-stage">
@@ -3693,6 +3715,7 @@
             <button type="button" class="frame-control frame-fullscreen-btn" title="На весь экран" aria-label="На весь экран" aria-pressed="false">
               ${fullscreenIcon(false)}
             </button>
+            ${viewModeSwitchMarkup()}
           </div>
         </div>
         <div class="terminal-stage">
@@ -3847,8 +3870,7 @@
     function setViewMode(mode) {
       viewMode = mode;
       terminalContainer.className = `terminal-container mode-${mode}`;
-      viewTabsBtn.classList.toggle("active", mode === 'tabs');
-      viewSplitBtn.classList.toggle("active", mode === 'split');
+      updateViewModeButtons();
       if (mode === 'tabs' && activeTabId) switchTab(activeTabId);
       renderSplitLayoutPresets();
       applySplitLayout();
@@ -3982,8 +4004,12 @@
         iframe.src = tab.type === "browser" ? buildBrowserUrl() : buildTerminalUrl(tab.sessionId);
       }
     };
-    viewTabsBtn.onclick = () => setViewMode('tabs');
-    viewSplitBtn.onclick = () => setViewMode('split');
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest?.(".frame-view-mode-btn");
+      if (!button) return;
+      const mode = button.dataset.viewMode;
+      if (mode === "tabs" || mode === "split") setViewMode(mode);
+    });
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && fullscreenTabId) {
