@@ -38,7 +38,7 @@ jobs:
         run: |
           rm tools/_apply_container_file_browser_once.py
           rm .github/workflows/apply-container-file-browser-once.yml
-          rm -f tools/_container_file_browser_validation_marker.txt
+          rm -f tools/_container_file_browser_validation_marker.txt tools/.container-file-browser-trigger-note
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
