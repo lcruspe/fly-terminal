@@ -1,0 +1,65 @@
+name: Implement file tools from issue
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: github.event.issue.number == 1 && github.event.comment.body == '@implement-file-tools'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply implementation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/implement-file-tools.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          source = workflow[start:end]
+          source = "\n".join(line[10:] if line.startswith("          ") else line for line in source.splitlines())
+          exec(compile(source, 'implement-file-tools', 'exec'), {'__name__': '__main__'})
+          PY
+
+      - name: Validate implementation
+        shell: bash
+        run: |
+          python -m py_compile session-control.py
+          python - <<'PY'
+          from pathlib import Path
+          html = Path('index.html').read_text(encoding='utf-8')
+          start = html.rfind('<script>')
+          end = html.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('inline script not found')
+          Path('/tmp/fly-terminal-index.js').write_text(html[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check /tmp/fly-terminal-index.js
+          git diff --check
+          grep -q 'DOCUMENTS_DIR = Path.home() / "Documents"' session-control.py
+          grep -q 'id="documentsUploadInput"' index.html
+          grep -q '## Файлы Documents' TOOLS.md
+
+      - name: Commit to main
+        shell: bash
+        run: |
+          if git diff --quiet -- session-control.py index.html TOOLS.md; then
+            echo 'No implementation changes to commit'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add session-control.py index.html TOOLS.md
+          git commit -m 'Add Documents file transfer tools'
+          git push origin HEAD:main
