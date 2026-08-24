@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import posixpath
 import re
 import base64
 import hashlib
@@ -27,6 +28,9 @@ MAX_LAST_ANSWER_CHARS = int(os.environ.get("FLY_TERMINAL_LAST_ANSWER_MAX_CHARS",
 UPLOAD_NAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
 DOCUMENTS_DIR = Path(os.environ.get("FLY_TERMINAL_DOCUMENTS_DIR", str(Path.home() / "Documents"))).expanduser()
 BROWSER_DOCUMENTS_DIR = "/config/Documents"
+CONTAINER_FILE_BROWSER_BLOCKED_ROOTS = ("/proc", "/sys", "/dev", "/run")
+CONTAINER_FILE_BROWSER_MAX_ENTRIES = int(os.environ.get("FLY_TERMINAL_CONTAINER_FILE_MAX_ENTRIES", "2000"))
+CONTAINER_FILE_BROWSER_TIMEOUT_SECONDS = int(os.environ.get("FLY_TERMINAL_CONTAINER_FILE_TIMEOUT_SECONDS", "15"))
 DESKTOP_FIELD_CODE_RE = re.compile(r"%[A-Za-z]")
 APP_DESKTOP_DIRS = (
     "/config/Desktop",
@@ -91,6 +95,15 @@ TOOL_ERROR_MESSAGES = {
     "file_not_found": "Файл не найден в папке Documents.",
     "file_access_denied": "Доступ к выбранному файлу запрещён.",
     "file_read_failed": "Не удалось скачать выбранный файл.",
+    "container_unavailable": "Контейнер Chromium недоступен. Убедитесь, что браузерный контейнер запущен.",
+    "container_path_invalid": "Некорректный путь в файловой системе контейнера.",
+    "container_path_blocked": "Этот системный каталог недоступен для просмотра.",
+    "container_directory_not_found": "Каталог в контейнере больше не существует.",
+    "container_directory_access_denied": "Нет доступа к выбранному каталогу контейнера.",
+    "container_list_failed": "Не удалось получить содержимое каталога контейнера.",
+    "container_file_not_found": "Выбранный файл в контейнере больше не существует.",
+    "container_file_access_denied": "Нет доступа к выбранному файлу контейнера.",
+    "container_file_read_failed": "Не удалось скачать выбранный файл из контейнера.",
 }
 
 
@@ -538,6 +551,235 @@ def docker_exec(args, **kwargs):
         check=False,
         **kwargs,
     )
+
+
+def normalize_container_browser_path(value):
+    """Normalize one absolute POSIX path used only inside the Chromium container."""
+    raw = str(value or "/").strip()
+    if (
+        not raw
+        or not raw.startswith("/")
+        or any(ord(char) < 32 or ord(char) == 127 for char in raw)
+        or len(raw.encode("utf-8")) > 4096
+    ):
+        return ""
+    normalized = posixpath.normpath(raw)
+    return "/" + normalized.lstrip("/")
+
+
+def container_browser_path_blocked(path):
+    path = normalize_container_browser_path(path)
+    if not path:
+        return False
+    return any(path == root or path.startswith(root + "/") for root in CONTAINER_FILE_BROWSER_BLOCKED_ROOTS)
+
+
+CONTAINER_DIRECTORY_LIST_SCRIPT = r"""
+import datetime
+import json
+import os
+import stat
+import sys
+
+BLOCKED = ("/proc", "/sys", "/dev", "/run")
+MAX_ENTRIES = int(sys.argv[2])
+requested = os.path.normpath(sys.argv[1])
+
+
+def blocked(path):
+    return any(path == root or path.startswith(root + "/") for root in BLOCKED)
+
+
+def fail(code, details=""):
+    print(json.dumps({"ok": False, "error": code, "details": details}, ensure_ascii=False))
+    raise SystemExit(0)
+
+
+real = os.path.realpath(requested)
+if requested != real:
+    fail("container_directory_access_denied", "symlink_path")
+if blocked(real):
+    fail("container_path_blocked")
+
+try:
+    root_stat = os.lstat(requested)
+except FileNotFoundError:
+    fail("container_directory_not_found")
+except PermissionError as exc:
+    fail("container_directory_access_denied", str(exc))
+except OSError as exc:
+    fail("container_list_failed", str(exc))
+
+if stat.S_ISLNK(root_stat.st_mode) or not stat.S_ISDIR(root_stat.st_mode):
+    fail("container_directory_access_denied", "not_directory")
+
+try:
+    names = os.listdir(requested)
+except PermissionError as exc:
+    fail("container_directory_access_denied", str(exc))
+except OSError as exc:
+    fail("container_list_failed", str(exc))
+
+entries = []
+for name in names:
+    full = os.path.join(requested, name)
+    try:
+        item_stat = os.lstat(full)
+    except OSError:
+        continue
+    if stat.S_ISLNK(item_stat.st_mode):
+        continue
+    if stat.S_ISDIR(item_stat.st_mode):
+        real_child = os.path.realpath(full)
+        if blocked(real_child) or real_child != os.path.normpath(full):
+            continue
+        kind = "directory"
+    elif stat.S_ISREG(item_stat.st_mode):
+        kind = "file"
+    else:
+        continue
+    entries.append({
+        "name": name,
+        "path": full if requested != "/" else "/" + name,
+        "kind": kind,
+        "size": item_stat.st_size if kind == "file" else None,
+        "modifiedAt": datetime.datetime.fromtimestamp(
+            item_stat.st_mtime, datetime.timezone.utc
+        ).isoformat(),
+    })
+
+entries.sort(key=lambda item: (item["kind"] != "directory", item["name"].casefold()))
+truncated = len(entries) > MAX_ENTRIES
+entries = entries[:MAX_ENTRIES]
+parent = None if requested == "/" else (os.path.dirname(requested.rstrip("/")) or "/")
+print(json.dumps({
+    "ok": True,
+    "path": requested,
+    "parent": parent,
+    "entries": entries,
+    "truncated": truncated,
+}, ensure_ascii=False))
+"""
+
+
+CONTAINER_FILE_STREAM_SCRIPT = r"""
+import json
+import os
+import stat
+import sys
+
+BLOCKED = ("/proc", "/sys", "/dev", "/run")
+requested = os.path.normpath(sys.argv[1])
+out = sys.stdout.buffer
+
+
+def blocked(path):
+    return any(path == root or path.startswith(root + "/") for root in BLOCKED)
+
+
+def fail(code, details=""):
+    out.write((json.dumps({"ok": False, "error": code, "details": details}, ensure_ascii=False) + "\n").encode("utf-8"))
+    out.flush()
+    raise SystemExit(0)
+
+
+real = os.path.realpath(requested)
+if requested != real:
+    fail("container_file_access_denied", "symlink_path")
+if blocked(real):
+    fail("container_path_blocked")
+
+flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+try:
+    fd = os.open(requested, flags)
+except FileNotFoundError:
+    fail("container_file_not_found")
+except PermissionError as exc:
+    fail("container_file_access_denied", str(exc))
+except OSError as exc:
+    fail("container_file_read_failed", str(exc))
+
+try:
+    file_stat = os.fstat(fd)
+    if not stat.S_ISREG(file_stat.st_mode):
+        fail("container_file_access_denied", "not_regular_file")
+    name = os.path.basename(requested) or "download"
+    out.write((json.dumps({"ok": True, "name": name, "size": file_stat.st_size}, ensure_ascii=False) + "\n").encode("utf-8"))
+    out.flush()
+    while True:
+        chunk = os.read(fd, 64 * 1024)
+        if not chunk:
+            break
+        out.write(chunk)
+finally:
+    os.close(fd)
+"""
+
+
+def list_browser_container_directory(path):
+    safe_path = normalize_container_browser_path(path)
+    if not safe_path:
+        return None, "container_path_invalid", ""
+    if container_browser_path_blocked(safe_path):
+        return None, "container_path_blocked", ""
+
+    try:
+        result = docker_exec(
+            ["python3", "-c", CONTAINER_DIRECTORY_LIST_SCRIPT, safe_path, str(CONTAINER_FILE_BROWSER_MAX_ENTRIES)],
+            timeout=CONTAINER_FILE_BROWSER_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, "container_unavailable", str(exc)
+
+    try:
+        payload = json.loads((result.stdout or "").strip())
+    except json.JSONDecodeError:
+        details = (result.stderr or result.stdout or "").strip()
+        return None, "container_unavailable" if result.returncode != 0 else "container_list_failed", details
+
+    if not isinstance(payload, dict):
+        return None, "container_list_failed", "invalid_payload"
+    if payload.get("ok") is not True:
+        return None, str(payload.get("error") or "container_list_failed"), str(payload.get("details") or "")
+    return payload, "", ""
+
+
+def open_browser_container_download(path):
+    safe_path = normalize_container_browser_path(path)
+    if not safe_path:
+        return None, None, "container_path_invalid", ""
+    if container_browser_path_blocked(safe_path):
+        return None, None, "container_path_blocked", ""
+
+    try:
+        process = subprocess.Popen(
+            ["docker", "exec", browser_container_name(), "python3", "-c", CONTAINER_FILE_STREAM_SCRIPT, safe_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as exc:
+        return None, None, "container_unavailable", str(exc)
+
+    try:
+        header_line = process.stdout.readline(64 * 1024) if process.stdout else b""
+        if not header_line:
+            stderr = process.stderr.read().decode("utf-8", "replace").strip() if process.stderr else ""
+            process.wait(timeout=2)
+            return None, None, "container_unavailable", stderr
+        metadata = json.loads(header_line.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+        process.terminate()
+        return None, None, "container_file_read_failed", str(exc)
+
+    if metadata.get("ok") is not True:
+        error_code = str(metadata.get("error") or "container_file_read_failed")
+        details = str(metadata.get("details") or "")
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.terminate()
+        return None, None, error_code, details
+    return process, metadata, "", ""
 
 
 def parse_desktop_entry(content):
@@ -1091,6 +1333,14 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_document_download()
             return
 
+        if urlsplit(self.path).path == "/api/container/files/list":
+            self._handle_container_files_list()
+            return
+
+        if urlsplit(self.path).path == "/api/container/files/download":
+            self._handle_container_file_download()
+            return
+
         if self.path == "/api/browser/config":
             enabled = os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
             browser_url = os.environ.get("FLY_BROWSER_URL", "/browser/")
@@ -1427,6 +1677,80 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk)
             except (BrokenPipeError, ConnectionResetError):
                 pass
+
+    def _handle_container_files_list(self):
+        query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+        path = (query.get("path") or ["/"])[0]
+        payload, error_code, technical_details = list_browser_container_directory(path)
+        if error_code:
+            if error_code == "container_directory_not_found":
+                status = 404
+            elif error_code in {"container_path_invalid"}:
+                status = 400
+            elif error_code in {"container_path_blocked", "container_directory_access_denied"}:
+                status = 403
+            elif error_code == "container_unavailable":
+                status = 503
+            else:
+                status = 500
+            send_json(self, status, {"ok": False, "error": error_code, "details": technical_details})
+            return
+        send_json(self, 200, payload)
+
+    def _handle_container_file_download(self):
+        query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+        path = (query.get("path") or [""])[0]
+        process, metadata, error_code, technical_details = open_browser_container_download(path)
+        if error_code:
+            if error_code == "container_file_not_found":
+                status = 404
+            elif error_code == "container_path_invalid":
+                status = 400
+            elif error_code in {"container_path_blocked", "container_file_access_denied"}:
+                status = 403
+            elif error_code == "container_unavailable":
+                status = 503
+            else:
+                status = 500
+            send_json(self, status, {"ok": False, "error": error_code, "details": technical_details})
+            return
+
+        safe_name = str(metadata.get("name") or "download")
+        file_size = int(metadata.get("size") or 0)
+        mime_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+        suffix = Path(safe_name).suffix
+        safe_suffix = suffix if re.fullmatch(r"\.[A-Za-z0-9]{1,12}", suffix or "") else ""
+        fallback_name = f"download{safe_suffix}"
+        encoded_name = quote(safe_name, safe="")
+
+        self.send_response(200)
+        self.send_header("Content-Type", mime_type)
+        self.send_header("Content-Disposition", f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_name}")
+        self.send_header("Content-Length", str(file_size))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        try:
+            while True:
+                chunk = process.stdout.read(64 * 1024) if process.stdout else b""
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            if process.stdout:
+                process.stdout.close()
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            if process.stderr:
+                process.stderr.close()
 
     def _handle_upload_image(self):
         max_body = int(MAX_UPLOAD_BYTES * 1.4) + 4096

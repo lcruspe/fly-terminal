@@ -602,6 +602,135 @@
       width: auto;
     }
 
+    .container-file-dialog {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      color: var(--ink);
+      max-height: min(78vh, 680px);
+      padding: 0;
+      width: min(680px, calc(100vw - 28px));
+    }
+
+    .container-file-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.44);
+      backdrop-filter: blur(2px);
+    }
+
+    .container-file-picker {
+      display: grid;
+      grid-template-rows: auto auto minmax(180px, 1fr) auto;
+      max-height: min(78vh, 680px);
+      min-height: min(560px, 78vh);
+    }
+
+    .container-file-picker-header,
+    .container-file-picker-toolbar,
+    .container-file-picker-footer {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+    }
+
+    .container-file-picker-header {
+      border-bottom: 1px solid var(--border);
+      justify-content: space-between;
+    }
+
+    .container-file-picker-header strong {
+      font-size: 13px;
+    }
+
+    .container-file-picker-toolbar {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .container-file-picker-path {
+      background: var(--control);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      flex: 1 1 auto;
+      font: 600 11px/1.3 Menlo, Monaco, monospace;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 7px 9px;
+      white-space: nowrap;
+    }
+
+    .container-file-picker-entries {
+      display: grid;
+      gap: 5px;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .container-file-entry {
+      align-items: center;
+      background: var(--control);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--ink);
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      min-height: 42px;
+      padding: 6px 8px;
+      text-align: left;
+      width: 100%;
+    }
+
+    button.container-file-entry {
+      cursor: pointer;
+    }
+
+    button.container-file-entry:hover {
+      background: var(--control-strong);
+    }
+
+    .container-file-entry-icon {
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .container-file-entry-info {
+      min-width: 0;
+    }
+
+    .container-file-entry-name {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .container-file-entry-meta {
+      color: var(--muted);
+      display: block;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    .container-file-entry .button {
+      min-height: 30px;
+      padding: 6px 8px;
+      width: auto;
+    }
+
+    .container-file-picker-footer {
+      border-top: 1px solid var(--border);
+      justify-content: space-between;
+    }
+
+    .container-file-picker-footer .settings-action-status {
+      margin: 0;
+      min-width: 0;
+    }
+
     select {
       appearance: none;
       background:
@@ -1158,6 +1287,13 @@
                 <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
               </div>
               <div class="settings-group settings-action">
+                <span class="settings-label">Файлы контейнера</span>
+                <button type="button" id="containerFileBrowseBtn" title="Открыть файловую систему Chromium-контейнера и скачать выбранный файл на локальный компьютер">
+                  Выбрать файл и скачать
+                </button>
+                <div class="settings-action-status" id="containerFileStatus">Выберите файл вручную из файловой системы контейнера</div>
+              </div>
+              <div class="settings-group settings-action">
                 <span class="settings-label">Chromium</span>
                 <button type="button" id="recoverStack" title="Перезапустить Colima/Docker, browser-контейнер, Caddy и ttyd через штатные LaunchAgents">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>
@@ -1186,6 +1322,24 @@
       </section>
     </div>
   </main>
+
+  <dialog class="container-file-dialog" id="containerFileDialog">
+    <div class="container-file-picker">
+      <div class="container-file-picker-header">
+        <strong>Файлы Chromium-контейнера</strong>
+        <button type="button" id="containerFileCloseBtn" title="Закрыть">✕</button>
+      </div>
+      <div class="container-file-picker-toolbar">
+        <button type="button" id="containerFileUpBtn" title="На уровень выше">↑</button>
+        <div class="container-file-picker-path" id="containerFilePath" title="Текущий путь">/</div>
+      </div>
+      <div class="container-file-picker-entries" id="containerFileEntries" aria-live="polite"></div>
+      <div class="container-file-picker-footer">
+        <div class="settings-action-status" id="containerFilePickerStatus">Выберите файл для скачивания</div>
+        <button type="button" id="containerFileCancelBtn">Закрыть</button>
+      </div>
+    </div>
+  </dialog>
   
   <script>
     const STORAGE_KEY = "fly-terminal-preferences-v2";
@@ -1715,6 +1869,17 @@
     const documentsStatus = document.getElementById("documentsStatus");
     const documentsFileList = document.getElementById("documentsFileList");
     let documentsMaxUploadBytes = null;
+    const containerFileBrowseBtn = document.getElementById("containerFileBrowseBtn");
+    const containerFileStatus = document.getElementById("containerFileStatus");
+    const containerFileDialog = document.getElementById("containerFileDialog");
+    const containerFileCloseBtn = document.getElementById("containerFileCloseBtn");
+    const containerFileCancelBtn = document.getElementById("containerFileCancelBtn");
+    const containerFileUpBtn = document.getElementById("containerFileUpBtn");
+    const containerFilePath = document.getElementById("containerFilePath");
+    const containerFileEntries = document.getElementById("containerFileEntries");
+    const containerFilePickerStatus = document.getElementById("containerFilePickerStatus");
+    let containerFileCurrentPath = "/";
+    let containerFileParentPath = null;
     const recoverStackBtn = document.getElementById("recoverStack");
     const recoveryStatus = document.getElementById("recoveryStatus");
     const updateStackBtn = document.getElementById("updateStack");
@@ -2798,6 +2963,122 @@
       }
     }
 
+    function setContainerFileStatus(tone, message) {
+      if (!containerFileStatus) return;
+      containerFileStatus.className = `settings-action-status ${tone || ""}`.trim();
+      containerFileStatus.textContent = message;
+    }
+
+    function setContainerFilePickerStatus(tone, message) {
+      if (!containerFilePickerStatus) return;
+      containerFilePickerStatus.className = `settings-action-status ${tone || ""}`.trim();
+      containerFilePickerStatus.textContent = message;
+    }
+
+    function containerFileDownloadUrl(path) {
+      const url = new URL("/api/container/files/download", window.location.href);
+      url.username = "";
+      url.password = "";
+      url.searchParams.set("path", path);
+      return url.toString();
+    }
+
+    function renderContainerDirectory(payload) {
+      if (!containerFileEntries || !containerFilePath) return;
+      containerFileCurrentPath = payload.path || "/";
+      containerFileParentPath = payload.parent || null;
+      containerFilePath.textContent = containerFileCurrentPath;
+      containerFilePath.title = containerFileCurrentPath;
+      if (containerFileUpBtn) containerFileUpBtn.disabled = !containerFileParentPath;
+      containerFileEntries.replaceChildren();
+
+      const entries = Array.isArray(payload.entries) ? payload.entries : [];
+      if (!entries.length) {
+        const empty = document.createElement("div");
+        empty.className = "document-file-empty";
+        empty.textContent = "В этом каталоге нет доступных файлов или папок";
+        containerFileEntries.appendChild(empty);
+      }
+
+      entries.forEach((entry) => {
+        const row = document.createElement(entry.kind === "directory" ? "button" : "div");
+        row.className = "container-file-entry";
+        if (entry.kind === "directory") row.type = "button";
+
+        const icon = document.createElement("span");
+        icon.className = "container-file-entry-icon";
+        icon.textContent = entry.kind === "directory" ? "▸" : "•";
+
+        const info = document.createElement("div");
+        info.className = "container-file-entry-info";
+        const name = document.createElement("span");
+        name.className = "container-file-entry-name";
+        name.textContent = entry.name;
+        name.title = entry.name;
+        const meta = document.createElement("span");
+        meta.className = "container-file-entry-meta";
+        meta.textContent = entry.kind === "directory"
+          ? "Папка"
+          : [formatFileBytes(entry.size), formatFileModified(entry.modifiedAt)].filter(Boolean).join(" · ");
+        info.append(name, meta);
+        row.append(icon, info);
+
+        if (entry.kind === "directory") {
+          row.onclick = () => loadContainerDirectory(entry.path);
+        } else {
+          const download = document.createElement("a");
+          download.className = "button";
+          download.textContent = "Скачать";
+          download.href = containerFileDownloadUrl(entry.path);
+          download.download = entry.name;
+          download.title = `Скачать ${entry.name} на локальный компьютер`;
+          download.onclick = () => {
+            setContainerFileStatus("ok", `Скачивание из контейнера: ${entry.name}`);
+            setContainerFilePickerStatus("ok", `Скачивание: ${entry.name}`);
+          };
+          row.appendChild(download);
+        }
+        containerFileEntries.appendChild(row);
+      });
+
+      const suffix = payload.truncated ? " · список ограничен" : "";
+      setContainerFilePickerStatus("ok", `${entries.length} элементов${suffix}`);
+    }
+
+    async function loadContainerDirectory(path = "/") {
+      if (!containerFileEntries) return;
+      setContainerFilePickerStatus("warn", "Загружаю каталог...");
+      if (containerFileUpBtn) containerFileUpBtn.disabled = true;
+      try {
+        const url = new URL("/api/container/files/list", window.location.href);
+        url.searchParams.set("path", path || "/");
+        const response = await localApiFetch(`${url.pathname}${url.search}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.message || payload.details || payload.summary || "Не удалось открыть каталог контейнера");
+        }
+        renderContainerDirectory(payload);
+      } catch (error) {
+        containerFileEntries.replaceChildren();
+        const empty = document.createElement("div");
+        empty.className = "document-file-empty";
+        empty.textContent = error.message || "Не удалось открыть каталог контейнера";
+        containerFileEntries.appendChild(empty);
+        setContainerFilePickerStatus("danger", error.message || "Не удалось открыть каталог контейнера");
+      }
+    }
+
+    async function openContainerFileBrowser() {
+      if (!containerFileDialog) return;
+      if (!containerFileDialog.open) containerFileDialog.showModal();
+      setContainerFileStatus("warn", "Открыт файловый браузер контейнера");
+      await loadContainerDirectory(containerFileCurrentPath || "/");
+    }
+
+    function closeContainerFileBrowser() {
+      if (containerFileDialog?.open) containerFileDialog.close();
+    }
+
     function setRecoveryStatus(tone, message) {
       if (!recoveryStatus) return;
       recoveryStatus.className = `settings-action-status ${tone || ""}`.trim();
@@ -3666,6 +3947,17 @@
     if (documentsUploadBtn) documentsUploadBtn.onclick = uploadDocumentFiles;
     if (documentsRefreshBtn) documentsRefreshBtn.onclick = () => loadDocumentFiles();
     if (documentsFileList) loadDocumentFiles();
+    if (containerFileBrowseBtn) containerFileBrowseBtn.onclick = openContainerFileBrowser;
+    if (containerFileCloseBtn) containerFileCloseBtn.onclick = closeContainerFileBrowser;
+    if (containerFileCancelBtn) containerFileCancelBtn.onclick = closeContainerFileBrowser;
+    if (containerFileUpBtn) containerFileUpBtn.onclick = () => {
+      if (containerFileParentPath) loadContainerDirectory(containerFileParentPath);
+    };
+    if (containerFileDialog) {
+      containerFileDialog.addEventListener("click", (event) => {
+        if (event.target === containerFileDialog) closeContainerFileBrowser();
+      });
+    }
     if (recoverStackBtn) {
       recoverStackBtn.onclick = runStackRecovery;
       pollRecoveryStatus(1400, 1);
