@@ -1,10 +1,8 @@
 name: Fix Happ subscription titles once
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/fix-happ-subscription-title-once.yml'
+  issues:
+    types: [opened]
   issue_comment:
     types: [created]
 
@@ -13,7 +11,7 @@ permissions:
 
 jobs:
   fix:
-    if: github.event_name == 'push' || (github.event.issue.number == 1 && github.event.comment.author_association == 'OWNER' && contains(github.event.comment.body, '@fix-happ-subscription-title'))
+    if: github.event_name == 'issues' || (github.event.issue.number == 1 && github.event.comment.author_association == 'OWNER' && contains(github.event.comment.body, '@fix-happ-subscription-title'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
