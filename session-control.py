@@ -5,6 +5,8 @@ import re
 import base64
 import hashlib
 import mimetypes
+import plistlib
+import sqlite3
 import shlex
 import stat
 import subprocess
@@ -56,6 +58,7 @@ HAPP_VPN_SERVICE = os.environ.get("FLY_TERMINAL_HAPP_SERVICE", "Happ Plus")
 HAPP_RECONNECT_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
 HAPP_CACHE_DIR = Path.home() / "Library/Containers/su.ffg.happ.plus/Data/Library/Caches/su.ffg.happ.plus/fsCachedData"
+HAPP_CACHE_DB = HAPP_CACHE_DIR.parent / "Cache.db"
 
 TOOL_ERROR_MESSAGES = {
     "invalid_json": "Сервер получил некорректный запрос. Обновите страницу и повторите действие.",
@@ -75,6 +78,7 @@ TOOL_ERROR_MESSAGES = {
     "happ_connect_failed": "Не удалось запустить VPN-соединение Happ.",
     "happ_connect_timeout": "Happ не подключился к VPN за отведённое время.",
     "happ_location_not_found": "Выбранная локация Happ больше недоступна. Обновите список и выберите локацию заново.",
+    "happ_subscription_not_found": "Выбранная подписка Happ больше недоступна. Обновите список подписок и повторите действие.",
     "happ_action_already_running": "Другая операция Happ уже выполняется. Дождитесь её завершения.",
     "happ_location_switch_failed": "Не удалось переключить локацию Happ.",
     "payload_too_large": "Размер запроса превышает допустимый лимит.",
@@ -90,7 +94,12 @@ TOOL_ERROR_MESSAGES = {
 }
 
 
-def happ_current_location():
+def _happ_config_id(config):
+    encoded = json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:24]
+
+
+def happ_current_config():
     try:
         result = subprocess.run(
             ["plutil", "-extract", "connectedConfigJson", "raw", "-o", "-", str(HAPP_PREFERENCES)],
@@ -101,41 +110,335 @@ def happ_current_location():
             timeout=5,
         )
         config = json.loads(result.stdout) if result.returncode == 0 else {}
-        return str(config.get("remarks") or "").strip()
+        return config if isinstance(config, dict) else {}
     except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return {}
+
+
+def happ_current_location():
+    return str(happ_current_config().get("remarks") or "").strip()
+
+
+def _cached_value_bytes(value):
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    return b""
+
+
+def _happ_cached_response_body(receiver_data, is_data_on_fs):
+    raw = _cached_value_bytes(receiver_data)
+    if not raw:
+        return b""
+
+    file_name = ""
+    try:
+        file_name = raw.decode("utf-8").strip("\x00\r\n ")
+    except UnicodeDecodeError:
+        pass
+
+    should_read_file = bool(is_data_on_fs)
+    if not should_read_file and file_name and len(file_name) < 256:
+        candidate = HAPP_CACHE_DIR / file_name
+        should_read_file = candidate.is_file()
+
+    if should_read_file and file_name and Path(file_name).name == file_name:
+        try:
+            return (HAPP_CACHE_DIR / file_name).read_bytes()
+        except OSError:
+            return b""
+    return raw
+
+
+def _parse_happ_subscription_configs(raw_body):
+    if not raw_body:
+        return []
+    try:
+        payload = json.loads(raw_body.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return []
+
+    if isinstance(payload, dict):
+        for key in ("configs", "servers", "items"):
+            if isinstance(payload.get(key), list):
+                payload = payload[key]
+                break
+    if not isinstance(payload, list):
+        return []
+
+    configs = []
+    for config in payload:
+        if not isinstance(config, dict) or not isinstance(config.get("outbounds"), list):
+            continue
+        label = str(config.get("remarks") or "").strip()
+        if not label:
+            continue
+        configs.append(config)
+    return configs
+
+
+def _resolve_plist_archive(blob):
+    raw = _cached_value_bytes(blob)
+    if not raw:
+        return None
+    try:
+        archive = plistlib.loads(raw)
+    except (plistlib.InvalidFileException, ValueError, TypeError):
+        return None
+    if not isinstance(archive, dict) or not isinstance(archive.get("$objects"), list):
+        return archive
+
+    objects = archive["$objects"]
+
+    def resolve(value, stack=frozenset()):
+        if isinstance(value, plistlib.UID):
+            index = value.data
+            if index < 0 or index >= len(objects) or index in stack:
+                return None
+            return resolve(objects[index], stack | {index})
+        if isinstance(value, list):
+            return [resolve(item, stack) for item in value]
+        if isinstance(value, dict):
+            if "NS.keys" in value and "NS.objects" in value:
+                keys = resolve(value["NS.keys"], stack)
+                values = resolve(value["NS.objects"], stack)
+                if isinstance(keys, list) and isinstance(values, list):
+                    return {
+                        str(key): item
+                        for key, item in zip(keys, values)
+                        if key is not None
+                    }
+            if "NS.objects" in value and set(value).issubset({"NS.objects", "$class"}):
+                return resolve(value["NS.objects"], stack)
+            return {
+                str(key): resolve(item, stack)
+                for key, item in value.items()
+                if key != "$class"
+            }
+        return value
+
+    return resolve(archive.get("$top", archive))
+
+
+def _find_named_value(value, names):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = str(key).casefold().replace("_", "-")
+            if normalized in names and isinstance(item, (str, bytes, bytearray)):
+                return item
+        for item in value.values():
+            found = _find_named_value(item, names)
+            if found not in (None, ""):
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_named_value(item, names)
+            if found not in (None, ""):
+                return found
+    return None
+
+
+def _normalize_happ_subscription_title(value):
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            return ""
+    title = str(value or "").strip()
+    if not title:
         return ""
 
+    if " " not in title and len(title) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=_-]+", title):
+        padded = title + "=" * (-len(title) % 4)
+        try:
+            decoded_bytes = base64.b64decode(padded, altchars=b"-_", validate=True)
+            decoded = decoded_bytes.decode("utf-8").strip()
+            standard = base64.b64encode(decoded_bytes).decode("ascii").rstrip("=")
+            urlsafe = base64.urlsafe_b64encode(decoded_bytes).decode("ascii").rstrip("=")
+            if decoded and title.rstrip("=") in {standard, urlsafe} and all(char.isprintable() for char in decoded):
+                title = decoded
+        except (ValueError, UnicodeDecodeError):
+            pass
+    return title[:80]
 
-def happ_locations():
-    """Read real server configurations from Happ's subscription cache."""
-    candidates = []
+
+def _happ_subscription_title(response_object, request_key):
+    archive = _resolve_plist_archive(response_object)
+    title = _normalize_happ_subscription_title(
+        _find_named_value(archive, {"profile-title", "profiletitle"})
+    )
+    if title:
+        return title
+
     try:
-        cache_files = sorted(HAPP_CACHE_DIR.iterdir(), key=lambda path: path.stat().st_mtime, reverse=True)
+        parsed = urlsplit(str(request_key or ""))
+        host = parsed.hostname or ""
+    except ValueError:
+        host = ""
+    return host or "Подписка Happ"
+
+
+def _happ_locations_from_configs(configs):
+    locations = []
+    seen = set()
+    for config in configs:
+        location_id = _happ_config_id(config)
+        if location_id in seen:
+            continue
+        seen.add(location_id)
+        locations.append({
+            "id": location_id,
+            "label": str(config.get("remarks") or "").strip(),
+            "config": config,
+        })
+    return locations
+
+
+def _legacy_happ_subscriptions():
+    """Compatibility fallback for installations where Cache.db cannot be read."""
+    try:
+        cache_files = sorted(HAPP_CACHE_DIR.iterdir(), key=lambda item: item.stat().st_mtime, reverse=True)
     except OSError:
         return []
+
+    subscriptions = []
+    fingerprints = set()
     for cache_file in cache_files:
         try:
-            payload = json.loads(cache_file.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            configs = _parse_happ_subscription_configs(cache_file.read_bytes())
+        except OSError:
             continue
-        if not isinstance(payload, list):
+        locations = _happ_locations_from_configs(configs)
+        if not locations:
             continue
-        parsed = []
-        for config in payload:
-            if not isinstance(config, dict) or not isinstance(config.get("outbounds"), list):
-                continue
-            label = str(config.get("remarks") or "").strip()
-            if not label:
-                continue
-            encoded = json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            parsed.append({"id": hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:24], "label": label, "config": config})
-        if parsed:
-            candidates.extend(parsed)
-            break
-    unique = {}
-    for location in candidates:
-        unique.setdefault(location["label"], location)
-    return list(unique.values())
+        fingerprint = hashlib.sha256("|".join(item["id"] for item in locations).encode("utf-8")).hexdigest()
+        if fingerprint in fingerprints:
+            continue
+        fingerprints.add(fingerprint)
+        subscriptions.append({
+            "id": f"legacy-{fingerprint[:16]}",
+            "label": "Подписка Happ",
+            "locations": locations,
+        })
+    return subscriptions
+
+
+def happ_subscriptions():
+    """Return every cached Happ subscription and its locations without exposing subscription URLs."""
+    if not HAPP_CACHE_DB.is_file():
+        subscriptions = _legacy_happ_subscriptions()
+    else:
+        subscriptions = []
+        seen_subscriptions = set()
+        connection = None
+        try:
+            database_uri = f"file:{quote(str(HAPP_CACHE_DB), safe='/')}?mode=ro"
+            connection = sqlite3.connect(database_uri, uri=True, timeout=1)
+            receiver_columns = {
+                str(row[1]).casefold(): str(row[1])
+                for row in connection.execute("PRAGMA table_info(cfurl_cache_receiver_data)")
+            }
+            response_columns = {
+                str(row[1]).casefold(): str(row[1])
+                for row in connection.execute("PRAGMA table_info(cfurl_cache_response)")
+            }
+            if "isdataonfs" in receiver_columns:
+                fs_expr = f'd."{receiver_columns["isdataonfs"]}"'
+            elif "isdataonfs" in response_columns:
+                fs_expr = f'r."{response_columns["isdataonfs"]}"'
+            else:
+                fs_expr = "0"
+
+            rows = connection.execute(
+                f"""
+                SELECT r.entry_ID, r.request_key, r.time_stamp,
+                       {fs_expr} AS is_data_on_fs,
+                       d.receiver_data, b.response_object
+                FROM cfurl_cache_response AS r
+                JOIN cfurl_cache_receiver_data AS d USING (entry_ID)
+                LEFT JOIN cfurl_cache_blob_data AS b USING (entry_ID)
+                ORDER BY r.time_stamp DESC
+                """
+            )
+            for entry_id, request_key, _timestamp, is_data_on_fs, receiver_data, response_object in rows:
+                body = _happ_cached_response_body(receiver_data, is_data_on_fs)
+                configs = _parse_happ_subscription_configs(body)
+                locations = _happ_locations_from_configs(configs)
+                if not locations:
+                    continue
+
+                stable_key = str(request_key or f"cache-entry:{entry_id}")
+                subscription_id = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()[:24]
+                if subscription_id in seen_subscriptions:
+                    continue
+                seen_subscriptions.add(subscription_id)
+                subscriptions.append({
+                    "id": subscription_id,
+                    "label": _happ_subscription_title(response_object, request_key),
+                    "locations": locations,
+                })
+        except (OSError, sqlite3.Error):
+            subscriptions = []
+        finally:
+            if connection is not None:
+                connection.close()
+
+        if not subscriptions:
+            subscriptions = _legacy_happ_subscriptions()
+
+    label_counts = {}
+    for subscription in subscriptions:
+        base_label = subscription.get("label") or "Подписка Happ"
+        count = label_counts.get(base_label, 0) + 1
+        label_counts[base_label] = count
+        if count > 1:
+            subscription["label"] = f"{base_label} ({count})"
+    return subscriptions
+
+
+def happ_subscription_catalog():
+    subscriptions = happ_subscriptions()
+    current_config = happ_current_config()
+    current_label = str(current_config.get("remarks") or "").strip()
+    current_config_id = _happ_config_id(current_config) if current_config else ""
+    current_subscription_id = ""
+    current_location_id = ""
+
+    if current_config_id:
+        for subscription in subscriptions:
+            location = next((item for item in subscription["locations"] if item["id"] == current_config_id), None)
+            if location:
+                current_subscription_id = subscription["id"]
+                current_location_id = location["id"]
+                break
+
+    if not current_subscription_id and current_label:
+        matches = [
+            (subscription, location)
+            for subscription in subscriptions
+            for location in subscription["locations"]
+            if location["label"] == current_label
+        ]
+        if len(matches) == 1:
+            current_subscription_id = matches[0][0]["id"]
+            current_location_id = matches[0][1]["id"]
+
+    current_subscription_label = next(
+        (item["label"] for item in subscriptions if item["id"] == current_subscription_id),
+        "",
+    )
+    return {
+        "subscriptions": subscriptions,
+        "current": current_label,
+        "currentSubscriptionId": current_subscription_id,
+        "currentSubscription": current_subscription_label,
+        "currentLocationId": current_location_id,
+    }
 
 
 def apply_happ_location(location):
@@ -819,14 +1122,27 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 200 if not error else 503, payload)
             return
 
-        if self.path == "/api/vpn/happ/locations":
-            locations = happ_locations()
-            current = happ_current_location()
+        if self.path in {"/api/vpn/happ/locations", "/api/vpn/happ/subscriptions"}:
+            catalog = happ_subscription_catalog()
+            public_subscriptions = [
+                {
+                    "id": subscription["id"],
+                    "label": subscription["label"],
+                    "locations": [
+                        {"id": location["id"], "label": location["label"]}
+                        for location in subscription["locations"]
+                    ],
+                }
+                for subscription in catalog["subscriptions"]
+            ]
             send_json(self, 200, {
                 "ok": True,
-                "current": current,
-                "locations": [{"id": item["id"], "label": item["label"]} for item in locations],
-                "configured": bool(locations),
+                "current": catalog["current"],
+                "currentSubscriptionId": catalog["currentSubscriptionId"],
+                "currentSubscription": catalog["currentSubscription"],
+                "currentLocationId": catalog["currentLocationId"],
+                "subscriptions": public_subscriptions,
+                "configured": bool(public_subscriptions),
             })
             return
 
@@ -1381,8 +1697,23 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         if error:
             send_json(self, 400, {"ok": False, "error": error})
             return
+
+        subscription_id = str(payload.get("subscriptionId") or "")
         location_id = str(payload.get("locationId") or "")
-        location = next((item for item in happ_locations() if item["id"] == location_id), None)
+        catalog = happ_subscription_catalog()
+        subscriptions = catalog["subscriptions"]
+
+        subscription = None
+        if subscription_id:
+            subscription = next((item for item in subscriptions if item["id"] == subscription_id), None)
+            if not subscription:
+                send_json(self, 404, {"ok": False, "error": "happ_subscription_not_found"})
+                return
+            candidates = subscription["locations"]
+        else:
+            candidates = [location for item in subscriptions for location in item["locations"]]
+
+        location = next((item for item in candidates if item["id"] == location_id), None)
         if not location:
             send_json(self, 404, {"ok": False, "error": "happ_location_not_found"})
             return
@@ -1395,7 +1726,14 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             if not switched:
                 send_json(self, 504, {"ok": False, "error": "happ_location_switch_failed", "state": final_state, "details": switch_error or final_error})
                 return
-            send_json(self, 200, {"ok": True, "service": HAPP_VPN_SERVICE, "state": final_state, "location": happ_current_location() or location["label"]})
+            send_json(self, 200, {
+                "ok": True,
+                "service": HAPP_VPN_SERVICE,
+                "state": final_state,
+                "subscriptionId": subscription["id"] if subscription else "",
+                "subscription": subscription["label"] if subscription else "",
+                "location": happ_current_location() or location["label"],
+            })
         except (OSError, subprocess.TimeoutExpired) as exc:
             send_json(self, 500, {"ok": False, "error": "happ_location_switch_failed", "details": str(exc)})
         finally:

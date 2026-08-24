@@ -1133,8 +1133,10 @@
             <summary class="button">Tools</summary>
             <div class="settings-panel">
               <div class="settings-group">
-                <span class="settings-label">Локация Happ</span>
-                <select id="happLocation" aria-label="Локация Happ"><option value="">Загрузка...</option></select>
+                <span class="settings-label">Подписка Happ</span>
+                <select id="happSubscription" aria-label="Подписка Happ"><option value="">Загрузка...</option></select>
+                <span class="settings-label">Локация</span>
+                <select id="happLocation" aria-label="Локация Happ"><option value="">Сначала выберите подписку</option></select>
                 <div class="settings-action-status" id="happLocationStatus"></div>
               </div>
               <div class="settings-group settings-action">
@@ -1719,6 +1721,7 @@
     const updateStatus = document.getElementById("updateStatus");
     const reconnectHappBtn = document.getElementById("reconnectHapp");
     const happStatus = document.getElementById("happStatus");
+    const happSubscriptionSelect = document.getElementById("happSubscription");
     const happLocationSelect = document.getElementById("happLocation");
     const happLocationStatus = document.getElementById("happLocationStatus");
 
@@ -1731,6 +1734,8 @@
     let browserConfig = { enabled: false, url: "" };
     let browserApps = [];
     let browserAppsError = "";
+    let happSubscriptions = [];
+    let happCatalogState = { currentSubscriptionId: "", currentLocationId: "", current: "", currentSubscription: "" };
     let bootRecoveryAttempted = false;
     let fullscreenTabId = null;
     let recoveryPollTimer = null;
@@ -2807,7 +2812,11 @@
 
     function renderHappState(payload) {
       const state = payload?.state || "Unknown";
-      if (payload?.location && happLocationStatus) happLocationStatus.textContent = `Сейчас: ${payload.location}`;
+      if (payload?.location && happLocationStatus) {
+        happLocationStatus.textContent = payload?.subscription
+          ? `Сейчас: ${payload.subscription} → ${payload.location}`
+          : `Сейчас: ${payload.location}`;
+      }
       if (state === "Connected") {
         setHappStatus("ok", `${payload?.service || "Happ Plus"}: подключено`);
       } else if (state === "Connecting" || state === "Disconnecting") {
@@ -2817,54 +2826,135 @@
       }
     }
 
-    async function loadHappLocations() {
+    function renderHappLocationOptions(subscriptionId, preferredLocationId = "") {
       if (!happLocationSelect) return;
+      happLocationSelect.innerHTML = "";
+      const subscription = happSubscriptions.find(item => item.id === subscriptionId);
+      if (!subscription) {
+        happLocationSelect.appendChild(new Option("Сначала выберите подписку", ""));
+        happLocationSelect.disabled = true;
+        return;
+      }
+
+      const locations = Array.isArray(subscription.locations) ? subscription.locations : [];
+      if (!locations.length) {
+        happLocationSelect.appendChild(new Option("Нет доступных локаций", ""));
+        happLocationSelect.disabled = true;
+        return;
+      }
+
+      happLocationSelect.appendChild(new Option("Выберите локацию…", ""));
+      locations.forEach(location => happLocationSelect.appendChild(new Option(location.label, location.id)));
+      happLocationSelect.disabled = false;
+      if (preferredLocationId && locations.some(location => location.id === preferredLocationId)) {
+        happLocationSelect.value = preferredLocationId;
+      }
+    }
+
+    function updateHappCatalogStatus(selectedSubscriptionId = "") {
+      if (!happLocationStatus) return;
+      if (happCatalogState.current) {
+        const subscriptionLabel = happCatalogState.currentSubscription || "";
+        happLocationStatus.textContent = subscriptionLabel
+          ? `Сейчас: ${subscriptionLabel} → ${happCatalogState.current}`
+          : `Сейчас: ${happCatalogState.current}`;
+        return;
+      }
+      const selected = happSubscriptions.find(item => item.id === selectedSubscriptionId);
+      happLocationStatus.textContent = selected ? `Подписка: ${selected.label}` : "";
+    }
+
+    async function loadHappSubscriptions() {
+      if (!happSubscriptionSelect || !happLocationSelect) return;
       try {
-        const response = await localApiFetch("/api/vpn/happ/locations");
+        const response = await localApiFetch("/api/vpn/happ/subscriptions");
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-        happLocationSelect.innerHTML = "";
-        if (!payload.locations?.length) {
-          happLocationSelect.appendChild(new Option(payload.current || "Текущая локация", ""));
-          happLocationSelect.disabled = true;
-          happLocationStatus.textContent = "В кэше подписки Happ нет доступных локаций";
+        if (!response.ok || payload.ok === false) {
+          throw new Error(payload.message || payload.details || "Не удалось получить подписки Happ");
+        }
+
+        happSubscriptions = Array.isArray(payload.subscriptions) ? payload.subscriptions : [];
+        happCatalogState = {
+          currentSubscriptionId: payload.currentSubscriptionId || "",
+          currentLocationId: payload.currentLocationId || "",
+          current: payload.current || "",
+          currentSubscription: payload.currentSubscription || ""
+        };
+
+        happSubscriptionSelect.innerHTML = "";
+        if (!happSubscriptions.length) {
+          happSubscriptionSelect.appendChild(new Option("Подписки не найдены", ""));
+          happSubscriptionSelect.disabled = true;
+          renderHappLocationOptions("");
+          happLocationStatus.textContent = "В кэше Happ не найдены подписки с доступными локациями";
           return;
         }
-        happLocationSelect.appendChild(new Option("Выберите локацию…", ""));
-        payload.locations.forEach(location => happLocationSelect.appendChild(new Option(location.label, location.id)));
-        happLocationSelect.disabled = false;
-        happLocationStatus.textContent = payload.current ? `Сейчас: ${payload.current}` : "";
+
+        happSubscriptionSelect.appendChild(new Option("Выберите подписку…", ""));
+        happSubscriptions.forEach(subscription => {
+          happSubscriptionSelect.appendChild(new Option(subscription.label, subscription.id));
+        });
+        happSubscriptionSelect.disabled = false;
+
+        const currentExists = happSubscriptions.some(item => item.id === happCatalogState.currentSubscriptionId);
+        const selectedSubscriptionId = currentExists
+          ? happCatalogState.currentSubscriptionId
+          : happSubscriptions[0].id;
+        happSubscriptionSelect.value = selectedSubscriptionId;
+        renderHappLocationOptions(
+          selectedSubscriptionId,
+          selectedSubscriptionId === happCatalogState.currentSubscriptionId ? happCatalogState.currentLocationId : ""
+        );
+        updateHappCatalogStatus(selectedSubscriptionId);
       } catch (error) {
-        happLocationSelect.innerHTML = "";
-        happLocationSelect.appendChild(new Option("Недоступно", ""));
-        happLocationSelect.disabled = true;
+        happSubscriptions = [];
+        happSubscriptionSelect.innerHTML = "";
+        happSubscriptionSelect.appendChild(new Option("Недоступно", ""));
+        happSubscriptionSelect.disabled = true;
+        renderHappLocationOptions("");
         happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
       }
     }
 
+    function handleHappSubscriptionChange() {
+      const subscriptionId = happSubscriptionSelect?.value || "";
+      const preferredLocationId = subscriptionId === happCatalogState.currentSubscriptionId
+        ? happCatalogState.currentLocationId
+        : "";
+      renderHappLocationOptions(subscriptionId, preferredLocationId);
+      updateHappCatalogStatus(subscriptionId);
+    }
+
     async function switchHappLocation() {
-      const locationId = happLocationSelect?.value;
-      if (!locationId) return;
+      const subscriptionId = happSubscriptionSelect?.value || "";
+      const locationId = happLocationSelect?.value || "";
+      if (!subscriptionId || !locationId) return;
+
+      const subscription = happSubscriptions.find(item => item.id === subscriptionId);
       const selectedLabel = happLocationSelect.options[happLocationSelect.selectedIndex]?.textContent || "локацию";
+      const subscriptionLabel = subscription?.label || "подписка";
+      happSubscriptionSelect.disabled = true;
       happLocationSelect.disabled = true;
       reconnectHappBtn.disabled = true;
-      happLocationStatus.textContent = `Переключаю: ${selectedLabel}...`;
+      happLocationStatus.textContent = `Переключаю: ${subscriptionLabel} → ${selectedLabel}...`;
       try {
         const response = await localApiFetch("/api/vpn/happ/location", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ locationId })
+          body: JSON.stringify({ subscriptionId, locationId })
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.details || payload.error || `HTTP ${response.status}`);
+        if (!response.ok || payload.ok === false) {
+          throw new Error(payload.message || payload.details || "Не удалось переключить локацию Happ");
+        }
         renderHappState(payload);
-        setStatusText(`Happ: ${payload.location || selectedLabel}`, 2800);
+        setStatusText(`Happ: ${payload.subscription || subscriptionLabel} → ${payload.location || selectedLabel}`, 2800);
       } catch (error) {
         happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
         setStatusText("Не удалось переключить локацию Happ", 3600);
       } finally {
         reconnectHappBtn.disabled = false;
-        await loadHappLocations();
+        await loadHappSubscriptions();
       }
     }
 
@@ -3588,9 +3678,10 @@
       reconnectHappBtn.onclick = reconnectHapp;
       refreshHappStatus();
     }
-    if (happLocationSelect) {
+    if (happSubscriptionSelect && happLocationSelect) {
+      happSubscriptionSelect.onchange = handleHappSubscriptionChange;
       happLocationSelect.onchange = switchHappLocation;
-      loadHappLocations();
+      loadHappSubscriptions();
     }
     
     async function writeClipboardText(text) {
