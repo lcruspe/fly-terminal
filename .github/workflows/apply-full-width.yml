@@ -3,6 +3,8 @@ name: Apply full-width layout once
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -10,7 +12,9 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.issue.title == 'Trigger: apply full-width Fly Terminal layout'
+    if: >-
+      (github.event_name == 'issues' && github.event.issue.title == 'Trigger: apply full-width Fly Terminal layout') ||
+      (github.event_name == 'issue_comment' && github.event.issue.number == 13 && github.event.comment.body == '@apply-full-width-layout')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
