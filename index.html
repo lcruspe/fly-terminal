@@ -1301,6 +1301,15 @@
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/><path d="M11 5l3-3M11 2h3v3" stroke-width="1.3"/></svg>
               ↗ Desktop
             </a>
+            <details class="dropdown mac-apps-menu" id="macAppsMenu" hidden>
+              <summary class="button" title="Открыть окно приложения macOS в отдельной вкладке">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+                Приложения Mac
+              </summary>
+              <div class="dropdown-menu" id="macAppsList">
+                <button type="button" disabled>Загрузка...</button>
+              </div>
+            </details>
             <details class="dropdown apps-menu" id="appsMenu" hidden>
               <summary class="button">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
@@ -1961,6 +1970,8 @@
     // Buttons
     const addBrowserBtn = document.getElementById("addBrowser");
     const addDesktopBtn = document.getElementById("addDesktop");
+    const macAppsMenu = document.getElementById("macAppsMenu");
+    const macAppsList = document.getElementById("macAppsList");
     const appsMenu = document.getElementById("appsMenu");
     const appsList = document.getElementById("appsList");
     const reloadActiveBtn = document.getElementById("reloadSession");
@@ -2004,6 +2015,8 @@
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "" };
     let desktopConfig = { enabled: false, url: "" };
+    let macApps = [];
+    let macAppsError = "";
     let browserApps = [];
     let browserAppsError = "";
     let happSubscriptions = [];
@@ -2638,6 +2651,84 @@
       }
     }
 
+    function renderMacAppsMenu() {
+      if (!macAppsList) return;
+      macAppsList.replaceChildren();
+      if (!macApps.length) {
+        const empty = document.createElement("button");
+        empty.type = "button";
+        empty.textContent = macAppsError ? `Обновить список: ${macAppsError}` : "Обновить список";
+        empty.onclick = () => loadMacApps();
+        macAppsList.appendChild(empty);
+        requestAnimationFrame(positionOpenFloatingMenus);
+        return;
+      }
+
+      macApps.forEach((app) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "app-menu-item";
+        button.dataset.appName = app.name;
+        button.title = app.name;
+
+        const icon = document.createElement("span");
+        icon.className = "app-menu-icon";
+        icon.textContent = "";
+
+        const name = document.createElement("span");
+        name.className = "app-menu-name";
+        name.textContent = app.name;
+
+        const meta = document.createElement("span");
+        meta.className = "app-menu-meta";
+        meta.textContent = "macOS";
+
+        button.append(icon, name, meta);
+        button.onclick = () => {
+          if (macAppsMenu) macAppsMenu.open = false;
+          addMacAppTab(app.name);
+        };
+        macAppsList.appendChild(button);
+      });
+      requestAnimationFrame(positionOpenFloatingMenus);
+    }
+
+    async function loadMacApps(attempt = 0) {
+      if (macAppsMenu) macAppsMenu.hidden = false;
+      try {
+        const response = await localApiFetch("/api/mac/apps/list");
+        const payload = await response.json();
+        macApps = response.ok && Array.isArray(payload.apps) ? payload.apps : [];
+        macAppsError = macApps.length ? "" : (payload.error || `HTTP ${response.status}`);
+      } catch (e) {
+        macApps = [];
+        macAppsError = e.message || String(e);
+      }
+      renderMacAppsMenu();
+      if (!macApps.length && attempt < 3) {
+        setTimeout(() => loadMacApps(attempt + 1), 400 * (attempt + 1));
+      }
+    }
+
+    async function focusMacApp(appName) {
+      try {
+        await localApiFetch("/api/mac/apps/focus", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: appName })
+        });
+      } catch (e) {}
+    }
+
+    function addMacAppTab(appName) {
+      focusMacApp(appName);
+      const tab = addDesktopTab(`App: ${appName}`, `App: ${appName}`, `macOS · ${appName}`);
+      tab.type = "mac-app";
+      tab.appName = appName;
+      setStatusText(`Открыто приложение ${appName}`, 2500);
+      return tab;
+    }
+
     function floatingMenuFor(details) {
       return details?.querySelector(":scope > .settings-panel, :scope > .dropdown-menu");
     }
@@ -2835,6 +2926,7 @@
         document.getElementById("openBrowserTab"),
         addDesktopBtn,
         document.getElementById("openDesktopTab"),
+        macAppsMenu?.querySelector(":scope > summary"),
         appsMenu?.querySelector(":scope > summary"),
         directLink,
         reloadActiveBtn,
@@ -3872,6 +3964,9 @@
       
       const activeTab = tabs.find(t => t.id === id);
       if (activeTab) {
+        if (activeTab.type === "mac-app" && activeTab.appName) {
+          focusMacApp(activeTab.appName);
+        }
         const iframe = activeTab.wrapper.querySelector("iframe");
         try {
           iframe?.contentWindow?.focus();
@@ -4096,7 +4191,8 @@
         const iframe = tab.wrapper.querySelector("iframe");
         if (tab.type === "browser") {
           iframe.src = buildBrowserUrl();
-        } else if (tab.type === "desktop") {
+        } else if (tab.type === "desktop" || tab.type === "mac-app") {
+          if (tab.type === "mac-app" && tab.appName) focusMacApp(tab.appName);
           iframe.src = buildDesktopUrl();
         } else {
           iframe.src = buildTerminalUrl(tab.sessionId);
@@ -4266,6 +4362,7 @@
         await Promise.allSettled([loadBrowserConfig(), loadDesktopConfig()]);
       } finally {
         loadBrowserApps();
+        loadMacApps();
         loadSessions();
         setTimeout(verifyBootUi, 2000);
       }

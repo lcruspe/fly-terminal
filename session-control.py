@@ -947,6 +947,56 @@ def focus_browser_app_window(app, existing_windows):
     return False
 
 
+def get_running_mac_apps():
+    script = """
+    tell application "System Events"
+        set appList to every process whose visible is true
+        set res to {}
+        repeat with p in appList
+            set pName to name of p
+            set pBundle to ""
+            try
+                set pBundle to bundle identifier of p
+            end try
+            set end of res to (pName & "|" & pBundle)
+        end repeat
+        return res
+    end tell
+    """
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3)
+        if res.returncode != 0:
+            return []
+        items = []
+        raw = res.stdout.strip()
+        if not raw:
+            return []
+        parts = [p.strip() for p in raw.split(", ")]
+        for part in parts:
+            if "|" in part:
+                name, bundle = part.split("|", 1)
+            else:
+                name, bundle = part, ""
+            name = name.strip()
+            if name and name not in ("Dock", "System Events"):
+                items.append({"name": name, "bundleId": bundle.strip()})
+        return items
+    except Exception:
+        return []
+
+
+def focus_mac_app(app_name):
+    clean_name = str(app_name or "").strip().replace('"', '\\"')
+    if not clean_name:
+        return False, "invalid_app_name"
+    script = f'tell application "{clean_name}" to activate'
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3)
+        return res.returncode == 0, res.stderr.strip()
+    except Exception as exc:
+        return False, str(exc)
+
+
 def humanize_tool_error_payload(payload):
     if not isinstance(payload, dict) or payload.get("ok") is not False:
         return payload
@@ -1375,6 +1425,11 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/api/mac/apps/list":
+            apps = get_running_mac_apps()
+            send_json(self, 200, {"ok": True, "apps": apps})
+            return
+
         if self.path == "/api/apps/list":
             apps, error = discover_browser_apps()
             if error:
@@ -1445,6 +1500,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_upload_image()
         elif self.path == "/api/apps/launch":
             self._handle_launch_app()
+        elif self.path == "/api/mac/apps/focus":
+            self._handle_mac_app_focus()
         elif self.path == "/api/system/recover":
             self._handle_recover()
         elif self.path == "/api/system/update":
@@ -1455,6 +1512,18 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_happ_location()
         else:
             send_json(self, 404, {"ok": False, "error": "not_found"})
+
+    def _handle_mac_app_focus(self):
+        payload, error = self._read_json_body()
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+        app_name = str(payload.get("name") or "").strip()
+        ok, details = focus_mac_app(app_name)
+        if not ok:
+            send_json(self, 500, {"ok": False, "error": "focus_failed", "details": details})
+            return
+        send_json(self, 200, {"ok": True, "app": app_name})
 
     def _read_json_body(self, max_bytes=4096):
         try:
