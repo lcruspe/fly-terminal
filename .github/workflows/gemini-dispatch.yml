@@ -219,3 +219,52 @@ jobs:
           gh issue comment "${ISSUE_NUMBER}" \
             --body "${MESSAGE}" \
             --repo "${REPOSITORY}"
+
+  file-tools-implementation:
+    if: github.event_name == 'issue_comment' && github.event.issue.number == 1 && github.event.comment.body == '@implement-file-tools-now'
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'write'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: 'Apply deterministic implementation'
+        run: |-
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/implement-file-tools.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          source = workflow[start:end]
+          source = "\n".join(line[10:] if line.startswith("          ") else line for line in source.splitlines())
+          exec(compile(source, 'implement-file-tools', 'exec'), {'__name__': '__main__'})
+          PY
+          python -m py_compile session-control.py
+          python - <<'PY'
+          from pathlib import Path
+          html = Path('index.html').read_text(encoding='utf-8')
+          start = html.rfind('<script>')
+          end = html.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('inline script not found')
+          Path('/tmp/fly-terminal-index.js').write_text(html[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check /tmp/fly-terminal-index.js
+          git diff --check
+          grep -q 'DOCUMENTS_DIR = Path.home() / "Documents"' session-control.py
+          grep -q 'id="documentsUploadInput"' index.html
+          grep -q '## Файлы Documents' TOOLS.md
+      - name: 'Commit implementation'
+        run: |-
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add session-control.py index.html TOOLS.md
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Add Documents file transfer tools'
+          git push origin HEAD:main
