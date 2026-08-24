@@ -201,7 +201,7 @@ class Recovery:
 
         checks = [
             ("http-browser", lambda: self.http_status("/browser/", auth_header), "200"),
-            ("ws-browser", lambda: self.websocket_status("/browser/websocket/signaling/", auth_header), "101"),
+            ("ws-browser", lambda: self.websocket_status("/browser/websockets", auth_header), "101"),
             ("ws-terminal", lambda: self.websocket_status("/terminal/ws", auth_header), "101"),
         ]
         for step, fn, expected in checks:

@@ -170,14 +170,16 @@ fi
 }
 
 container_has_required_settings() {
-  local env_dump documents_label
+  local env_dump documents_label documents_mode
   env_dump="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)" || return 1
   documents_label="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{index .Config.Labels "fly-terminal.documents-dir"}}' 2>/dev/null)" || return 1
+  documents_mode="$(docker inspect "${FLY_BROWSER_CONTAINER_NAME}" --format '{{index .Config.Labels "fly-terminal.documents-mode"}}' 2>/dev/null)" || return 1
   grep -qx 'SELKIES_AUDIO_ENABLED=false|locked' <<<"${env_dump}" &&
     grep -qx 'SELKIES_MICROPHONE_ENABLED=false|locked' <<<"${env_dump}" &&
     grep -qx 'SELKIES_USE_BROWSER_CURSORS=true' <<<"${env_dump}" &&
     grep -qx "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" <<<"${env_dump}" &&
-    [ "${documents_label}" = "${FLY_TERMINAL_DOCUMENTS_DIR}" ]
+    [ "${documents_label}" = "${FLY_TERMINAL_DOCUMENTS_DIR}" ] &&
+    [ "${documents_mode}" = "copy" ]
 }
 
 ensure_container_restart_policy() {
@@ -332,6 +334,25 @@ chmod u+rwx,go+rx /config/Downloads
 '
 }
 
+sync_linuxserver_document_files() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -x /usr/bin/chromium || return 0
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" mkdir -p /config/Documents
+  find "${FLY_TERMINAL_DOCUMENTS_DIR}" -maxdepth 1 -type f -print0 |
+    while IFS= read -r -d '' document_path; do
+      local document_name="${document_path:t}"
+      if ! docker cp "${document_path}" "${FLY_BROWSER_CONTAINER_NAME}:/config/Documents/"; then
+        docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" \
+          rm -f -- "/config/Documents/${document_name}" 2>/dev/null || true
+        echo "WARNING: document is unavailable and was not copied: ${document_name}" >&2
+      fi
+    done
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+chown -R abc:dialout /config/Documents
+find /config/Documents -type d -exec chmod u+rwx,go+rx {} +
+find /config/Documents -type f -exec chmod u+rw,go+r {} +
+'
+}
+
 unblock_linuxserver_selkies() {
   docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -d /run/service/svc-selkies || return 0
   docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
@@ -378,6 +399,7 @@ if docker ps --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; t
     patch_selkies_nginx_websocket_port
     patch_selkies_input
     ensure_linuxserver_download_directory
+    sync_linuxserver_document_files
     start_kasm_chrome
     start_linuxserver_chromium
     unblock_linuxserver_selkies
@@ -398,6 +420,7 @@ case "${FLY_BROWSER_IMAGE}" in
       --name "${FLY_BROWSER_CONTAINER_NAME}" \
       --restart unless-stopped \
       --label "fly-terminal.documents-dir=${FLY_TERMINAL_DOCUMENTS_DIR}" \
+      --label "fly-terminal.documents-mode=copy" \
       --shm-size=1g \
       -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:${FLY_BROWSER_CONTAINER_PORT}" \
       -e "PUID=$(id -u)" \
@@ -410,7 +433,6 @@ case "${FLY_BROWSER_IMAGE}" in
       -e "SELKIES_USE_BROWSER_CURSORS=true" \
       -e "CHROME_CLI=${FLY_BROWSER_CHROME_CLI}" \
       -v "${FLY_BROWSER_PROFILE_VOLUME}:/config" \
-      -v "${FLY_TERMINAL_DOCUMENTS_DIR}:/config/Documents" \
       "${FLY_BROWSER_IMAGE}" >/dev/null
     ;;
   *)
@@ -418,12 +440,12 @@ case "${FLY_BROWSER_IMAGE}" in
       --name "${FLY_BROWSER_CONTAINER_NAME}" \
       --restart unless-stopped \
       --label "fly-terminal.documents-dir=${FLY_TERMINAL_DOCUMENTS_DIR}" \
+      --label "fly-terminal.documents-mode=copy" \
       --shm-size=1g \
       -p "127.0.0.1:${FLY_BROWSER_HOST_PORT}:6901" \
       -e "VNC_PW=${FLY_BROWSER_PASSWORD}" \
       -e "DISABLE_CUSTOM_STARTUP=1" \
       -v "${FLY_BROWSER_PROFILE_VOLUME}:/home/kasm-user" \
-      -v "${FLY_TERMINAL_DOCUMENTS_DIR}:/home/kasm-user/Documents" \
       "${FLY_BROWSER_IMAGE}" >/dev/null
     ;;
 esac
@@ -434,6 +456,7 @@ patch_selkies_browser_prefix
 patch_selkies_nginx_websocket_port
 patch_selkies_input
 ensure_linuxserver_download_directory
+sync_linuxserver_document_files
 start_kasm_chrome
 start_linuxserver_chromium
 unblock_linuxserver_selkies

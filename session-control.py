@@ -24,6 +24,7 @@ MAX_UPLOAD_BYTES = int(os.environ.get("FLY_TERMINAL_MAX_UPLOAD_BYTES", str(25 * 
 MAX_LAST_ANSWER_CHARS = int(os.environ.get("FLY_TERMINAL_LAST_ANSWER_MAX_CHARS", str(1024 * 1024)))
 UPLOAD_NAME_RE = re.compile(r"[^A-Za-z0-9._ -]+")
 DOCUMENTS_DIR = Path(os.environ.get("FLY_TERMINAL_DOCUMENTS_DIR", str(Path.home() / "Documents"))).expanduser()
+BROWSER_DOCUMENTS_DIR = "/config/Documents"
 DESKTOP_FIELD_CODE_RE = re.compile(r"%[A-Za-z]")
 APP_DESKTOP_DIRS = (
     "/config/Desktop",
@@ -416,6 +417,36 @@ def documents_root():
         return DOCUMENTS_DIR.resolve(strict=True), ""
     except OSError as exc:
         return None, str(exc)
+
+
+def mirror_document_to_browser(source_path):
+    """Copy one uploaded document into the persistent Chromium profile volume."""
+    container = browser_container_name()
+    destination = f"{BROWSER_DOCUMENTS_DIR}/{source_path.name}"
+    commands = (
+        ["docker", "exec", "-u", "root", container, "mkdir", "-p", BROWSER_DOCUMENTS_DIR],
+        ["docker", "cp", str(source_path), f"{container}:{destination}"],
+        [
+            "docker", "exec", "-u", "root", container,
+            "sh", "-c", 'chown abc:dialout "$1" && chmod u+rw,go+r "$1"',
+            "sh", destination,
+        ],
+    )
+    try:
+        for command in commands:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                return False, result.stderr.strip() or f"exit_{result.returncode}"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    return True, ""
 
 
 def normalize_document_file_name(value):
@@ -1004,6 +1035,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             return
 
         saved_name = target_path.name
+        browser_mirrored, browser_mirror_error = mirror_document_to_browser(target_path)
         send_json(
             self,
             201,
@@ -1014,6 +1046,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "renamed": saved_name != file_name,
                 "bytes": len(content),
                 "directory": "Documents",
+                "browserMirrored": browser_mirrored,
+                "browserMirrorError": browser_mirror_error,
             },
         )
 

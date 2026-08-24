@@ -2779,9 +2779,10 @@
         documentsUploadInput.value = "";
         await loadDocumentFiles({ announce: false });
         const renamed = saved.filter(item => item.renamed).length;
+        const browserPending = saved.filter(item => item.browserMirrored === false).length;
         setDocumentsStatus(
-          "ok",
-          `Загружено: ${saved.length}${renamed ? ` · ${renamed} переименовано из-за совпадения имён` : ""}`
+          browserPending ? "warn" : "ok",
+          `Загружено: ${saved.length}${renamed ? ` · ${renamed} переименовано из-за совпадения имён` : ""}${browserPending ? ` · ${browserPending} появится в Chromium после его запуска` : " · доступно в Chromium"}`
         );
       } catch (error) {
         await loadDocumentFiles({ announce: false });
