@@ -602,6 +602,86 @@
       width: auto;
     }
 
+    .tools-field-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .vpn-action-row {
+      align-items: center;
+      display: grid;
+      gap: 6px;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .vpn-action-row .settings-action-status {
+      min-height: 0;
+    }
+
+    .file-transfer-control {
+      display: grid;
+      gap: 9px;
+    }
+
+    .file-transfer-mode-input {
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      position: absolute;
+      width: 1px;
+    }
+
+    .file-transfer-switch {
+      background: var(--control);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      display: grid;
+      gap: 3px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      padding: 3px;
+    }
+
+    .file-transfer-switch label {
+      align-items: center;
+      border-radius: 7px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      font-size: 11px;
+      font-weight: 700;
+      justify-content: center;
+      line-height: 1.2;
+      min-height: 34px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+
+    #fileTransferToVm:checked ~ .file-transfer-switch label[for="fileTransferToVm"],
+    #fileTransferToLocal:checked ~ .file-transfer-switch label[for="fileTransferToLocal"] {
+      background: var(--accent);
+      color: var(--active-btn-ink);
+    }
+
+    .file-transfer-panel {
+      display: grid;
+      gap: 8px;
+    }
+
+    #fileTransferToLocal:checked ~ .file-transfer-vm-panel,
+    #fileTransferToVm:checked ~ .file-transfer-local-panel {
+      display: none;
+    }
+
+    .file-transfer-local-panel > button {
+      min-height: 42px;
+    }
+
+    .system-tools-section > button + .settings-action-status {
+      margin-top: -2px;
+    }
+
     .container-file-dialog {
       background: var(--panel-solid);
       border: 1px solid var(--border);
@@ -1261,53 +1341,63 @@
           <details class="settings tools-menu" id="toolsMenu">
             <summary class="button">Tools</summary>
             <div class="settings-panel">
-              <div class="settings-group">
-                <span class="settings-label">Подписка Happ</span>
+              <div class="settings-group tools-section tools-vpn-section">
+                <span class="settings-label">VPN</span>
+                <label class="tools-field-label" for="happSubscription">Подписка</label>
                 <select id="happSubscription" aria-label="Подписка Happ"><option value="">Загрузка...</option></select>
-                <span class="settings-label">Локация</span>
+                <label class="tools-field-label" for="happLocation">Локация</label>
                 <select id="happLocation" aria-label="Локация Happ"><option value="">Сначала выберите подписку</option></select>
                 <div class="settings-action-status" id="happLocationStatus"></div>
-              </div>
-              <div class="settings-group settings-action">
-                <span class="settings-label">VPN Happ</span>
-                <button type="button" id="reconnectHapp" title="Отключить и снова подключить активную конфигурацию Happ Plus через macOS scutil">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>
-                  Переподключить Happ
-                </button>
-                <div class="settings-action-status" id="happStatus">Проверяю подключение...</div>
-              </div>
-              <div class="settings-group settings-action">
-                <span class="settings-label">Файлы Documents</span>
-                <input class="file-upload-input" type="file" id="documentsUploadInput" multiple aria-label="Файлы для загрузки в Documents" />
-                <div class="file-tools-actions">
-                  <button type="button" id="documentsUploadBtn" title="Загрузить выбранные файлы в Documents виртуальной машины">Загрузить</button>
-                  <button type="button" id="documentsRefreshBtn" title="Обновить список файлов">Обновить</button>
+                <div class="vpn-action-row">
+                  <button type="button" id="reconnectHapp" title="Отключить и снова подключить активную конфигурацию Happ Plus через macOS scutil">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>
+                    Переподключить
+                  </button>
+                  <div class="settings-action-status" id="happStatus"></div>
                 </div>
-                <div class="settings-action-status" id="documentsStatus">Загрузка списка...</div>
-                <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
               </div>
-              <div class="settings-group settings-action">
-                <span class="settings-label">Файлы контейнера</span>
-                <button type="button" id="containerFileBrowseBtn" title="Открыть файловую систему Chromium-контейнера и скачать выбранный файл на локальный компьютер">
-                  Выбрать файл и скачать
-                </button>
-                <div class="settings-action-status" id="containerFileStatus">Выберите файл вручную из файловой системы контейнера</div>
+
+              <div class="settings-group settings-action tools-section file-transfer-section">
+                <span class="settings-label">Обмен файлами</span>
+                <div class="file-transfer-control">
+                  <input class="file-transfer-mode-input" type="radio" name="fileTransferMode" id="fileTransferToVm" checked />
+                  <input class="file-transfer-mode-input" type="radio" name="fileTransferMode" id="fileTransferToLocal" />
+                  <div class="file-transfer-switch" role="tablist" aria-label="Направление передачи файлов">
+                    <label for="fileTransferToVm" role="tab">На виртуальную машину</label>
+                    <label for="fileTransferToLocal" role="tab">На локальный компьютер</label>
+                  </div>
+
+                  <div class="file-transfer-panel file-transfer-vm-panel">
+                    <input class="file-upload-input" type="file" id="documentsUploadInput" multiple aria-label="Файлы для загрузки на виртуальную машину" />
+                    <div class="file-tools-actions">
+                      <button type="button" id="documentsUploadBtn" title="Загрузить выбранные файлы в Documents виртуальной машины">Загрузить</button>
+                      <button type="button" id="documentsRefreshBtn" title="Обновить список файлов">Обновить</button>
+                    </div>
+                    <div class="settings-action-status" id="documentsStatus"></div>
+                    <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
+                  </div>
+
+                  <div class="file-transfer-panel file-transfer-local-panel">
+                    <button type="button" id="containerFileBrowseBtn" title="Выбрать файл на виртуальной машине и скачать его на локальный компьютер">
+                      Выбрать файл на виртуальной машине
+                    </button>
+                    <div class="settings-action-status" id="containerFileStatus"></div>
+                  </div>
+                </div>
               </div>
-              <div class="settings-group settings-action">
-                <span class="settings-label">Chromium</span>
+
+              <div class="settings-group settings-action tools-section system-tools-section">
+                <span class="settings-label">Система</span>
                 <button type="button" id="recoverStack" title="Перезапустить Colima/Docker, browser-контейнер, Caddy и ttyd через штатные LaunchAgents">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>
-                  Восстановить стек Chromium
+                  Восстановить Chromium
                 </button>
-                <div class="settings-action-status" id="recoveryStatus">Готово к запуску</div>
-              </div>
-              <div class="settings-group settings-action">
-                <span class="settings-label">Обновление</span>
+                <div class="settings-action-status" id="recoveryStatus"></div>
                 <button type="button" id="updateStack" title="Забрать последнюю версию из origin/main и перезапустить стек">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5A6 6 0 0 1 13.5 3L15 4.5"/><path d="M15 1.5v3h-3"/><path d="M13 11.5A6 6 0 0 1 2.5 13L1 11.5"/><path d="M1 14.5v-3h3"/></svg>
-                  Обновить из репозитория
+                  Обновить Fly Terminal
                 </button>
-                <div class="settings-action-status" id="updateStatus">Готово к запуску</div>
+                <div class="settings-action-status" id="updateStatus"></div>
               </div>
             </div>
           </details>
@@ -1326,16 +1416,16 @@
   <dialog class="container-file-dialog" id="containerFileDialog">
     <div class="container-file-picker">
       <div class="container-file-picker-header">
-        <strong>Файлы Chromium-контейнера</strong>
+        <strong>Файлы виртуальной машины</strong>
         <button type="button" id="containerFileCloseBtn" title="Закрыть">✕</button>
       </div>
       <div class="container-file-picker-toolbar">
         <button type="button" id="containerFileUpBtn" title="На уровень выше">↑</button>
-        <div class="container-file-picker-path" id="containerFilePath" title="Текущий путь">/</div>
+        <div class="container-file-picker-path" id="containerFilePath" title="Текущий путь">/config</div>
       </div>
       <div class="container-file-picker-entries" id="containerFileEntries" aria-live="polite"></div>
       <div class="container-file-picker-footer">
-        <div class="settings-action-status" id="containerFilePickerStatus">Выберите файл для скачивания</div>
+        <div class="settings-action-status" id="containerFilePickerStatus"></div>
         <button type="button" id="containerFileCancelBtn">Закрыть</button>
       </div>
     </div>
@@ -3071,8 +3161,9 @@
     async function openContainerFileBrowser() {
       if (!containerFileDialog) return;
       if (!containerFileDialog.open) containerFileDialog.showModal();
-      setContainerFileStatus("warn", "Открыт файловый браузер контейнера");
-      await loadContainerDirectory(containerFileCurrentPath || "/");
+      setContainerFileStatus("", "");
+      containerFileCurrentPath = "/config";
+      await loadContainerDirectory("/config");
     }
 
     function closeContainerFileBrowser() {
@@ -3099,7 +3190,7 @@
           : `Сейчас: ${payload.location}`;
       }
       if (state === "Connected") {
-        setHappStatus("ok", `${payload?.service || "Happ Plus"}: подключено`);
+        setHappStatus("", "");
       } else if (state === "Connecting" || state === "Disconnecting") {
         setHappStatus("warn", `${payload?.service || "Happ Plus"}: ${state}`);
       } else {
