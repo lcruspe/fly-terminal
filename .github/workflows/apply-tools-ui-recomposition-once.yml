@@ -3,6 +3,8 @@ name: Apply Tools UI recomposition once
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -10,7 +12,9 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.issue.title == 'Trigger: apply Tools UI recomposition'
+    if: >-
+      (github.event_name == 'issues' && github.event.issue.title == 'Trigger: apply Tools UI recomposition') ||
+      (github.event_name == 'issue_comment' && github.event.issue.number == 11 && github.event.comment.body == '@apply-tools-ui-recomposition')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
