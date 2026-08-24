@@ -181,6 +181,47 @@ jobs:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
 
+  apply-full-width:
+    if: |-
+      ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/apply-full-width-layout' }}
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'write'
+    steps:
+      - uses: 'actions/checkout@v4'
+        with:
+          ref: 'main'
+
+      - name: 'Apply edge-to-edge horizontal layout'
+        run: |-
+          python - <<'PY'
+          from pathlib import Path
+
+          index = Path('index.html')
+          text = index.read_text(encoding='utf-8')
+          old = "      height: 100vh;\n      padding: 14px;\n      position: relative;"
+          new = "      height: 100vh;\n      padding: 14px 0;\n      position: relative;"
+          if old not in text:
+              raise SystemExit('Expected .shell padding block was not found')
+          index.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          ui = Path('UI.md')
+          docs = ui.read_text(encoding='utf-8').rstrip()
+          if '## Edge-to-edge horizontal layout' not in docs:
+              docs += "\n\n## Edge-to-edge horizontal layout\n\nThe Fly Terminal shell has no horizontal page padding. The terminal/browser workspace, tab bar, and main toolbar therefore span the full viewport width, while the 14 px vertical shell padding and 12 px vertical spacing between sections are preserved. Do not reintroduce horizontal padding on `.shell`; add any required spacing inside individual controls instead.\n"
+          ui.write_text(docs + '\n', encoding='utf-8')
+          PY
+          git diff --check
+          grep -q 'padding: 14px 0;' index.html
+
+      - name: 'Commit and push'
+        run: |-
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html UI.md
+          git commit -m 'Make Fly Terminal panels full width'
+          git push origin HEAD:main
+
   fallthrough:
     needs:
       - 'dispatch'
