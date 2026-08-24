@@ -12,3 +12,7 @@ The collapse/expand-panel action stays directly accessible and switches to icon-
 Responsive layout is recalculated on toolbar/window resize and when toolbar items are shown/hidden or split-layout controls change. The implementation restores all items to their canonical DOM positions before each measurement, so widening the browser reverses the degradation automatically: overflow items return first, then labels are restored when space permits.
 
 When adding new top-level toolbar actions, include them in the responsive toolbar item set and provide a representative icon plus a meaningful `title`/`aria-label`. Do not introduce fixed breakpoint-specific hiding for individual actions; capacity is determined from the actual rendered width.
+
+## Edge-to-edge horizontal layout
+
+The Fly Terminal shell has no horizontal page padding. The terminal/browser workspace, tab bar, and main toolbar therefore span the full viewport width, while the 14 px vertical shell padding and 12 px vertical spacing between sections are preserved. Do not reintroduce horizontal padding on `.shell`; add any required spacing inside individual controls instead.
