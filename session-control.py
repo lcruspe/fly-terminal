@@ -253,17 +253,29 @@ def _normalize_happ_subscription_title(value):
     if not title:
         return ""
 
-    if " " not in title and len(title) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=_-]+", title):
-        padded = title + "=" * (-len(title) % 4)
+    encoded_title = title
+    explicit_base64 = False
+    if title.casefold().startswith("base64:"):
+        encoded_title = title.split(":", 1)[1].strip()
+        explicit_base64 = True
+
+    if encoded_title and " " not in encoded_title and len(encoded_title) >= 4 and re.fullmatch(r"[A-Za-z0-9+/=_-]+", encoded_title):
+        padded = encoded_title + "=" * (-len(encoded_title) % 4)
         try:
             decoded_bytes = base64.b64decode(padded, altchars=b"-_", validate=True)
             decoded = decoded_bytes.decode("utf-8").strip()
             standard = base64.b64encode(decoded_bytes).decode("ascii").rstrip("=")
             urlsafe = base64.urlsafe_b64encode(decoded_bytes).decode("ascii").rstrip("=")
-            if decoded and title.rstrip("=") in {standard, urlsafe} and all(char.isprintable() for char in decoded):
+            canonical_match = encoded_title.rstrip("=") in {standard, urlsafe}
+            if decoded and canonical_match and all(char.isprintable() for char in decoded):
                 title = decoded
+            elif explicit_base64:
+                return ""
         except (ValueError, UnicodeDecodeError):
-            pass
+            if explicit_base64:
+                return ""
+    elif explicit_base64:
+        return ""
     return title[:80]
 
 
