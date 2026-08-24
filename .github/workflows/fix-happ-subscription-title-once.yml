@@ -3,15 +3,13 @@ name: Fix Happ subscription titles once
 on:
   issues:
     types: [opened]
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: github.event_name == 'issues' || (github.event.issue.number == 1 && github.event.comment.author_association == 'OWNER' && contains(github.event.comment.body, '@fix-happ-subscription-title'))
+    if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +77,8 @@ jobs:
         except (ValueError, UnicodeDecodeError):
             if explicit_base64:
                 return ""
+    elif explicit_base64:
+        return ""
     return title[:80]
 '''
           if text.count(old) != 1:
