@@ -268,6 +268,14 @@
       gap: 8px;
     }
     .tab:hover { background: var(--button-bg-strong); transform: translateY(-1px); }
+    .tab.dragging {
+      opacity: 0.4;
+      transform: scale(0.96);
+    }
+    .tab.drag-over {
+      border-left: 2px solid var(--accent);
+      transform: translateX(2px);
+    }
     .tab.active {
       background: var(--accent);
       border-color: transparent;
@@ -464,18 +472,42 @@
     }
 
     .theme-grid button {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 3px;
-      justify-content: center;
+      align-items: center;
+      flex-direction: row;
+      gap: 10px;
+      justify-content: flex-start;
       min-height: 52px;
-      padding: 9px 11px;
+      padding: 8px 12px;
       width: 100%;
+      position: relative;
+    }
+
+    .theme-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,0.15);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .theme-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      min-width: 0;
     }
 
     .theme-name {
       font-size: 13px;
       font-weight: 700;
+      line-height: 1.2;
     }
 
     .theme-mode {
@@ -484,6 +516,171 @@
       font-weight: 700;
       letter-spacing: 0.05em;
       text-transform: uppercase;
+    }
+
+    /* Modern Focus Visible Indicators */
+    button:focus-visible,
+    a.button:focus-visible,
+    summary.button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* Enhanced backdrop blur & elevation for panels */
+    .settings-panel,
+    .dropdown-menu,
+    .command-palette-panel {
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+    }
+
+    /* Command Palette Overlay */
+    .command-palette-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 9000;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 15vh;
+    }
+    .command-palette-backdrop[hidden] {
+      display: none !important;
+    }
+    .command-palette-panel {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: var(--panel-radius);
+      box-shadow: var(--shadow);
+      width: min(520px, calc(100vw - 32px));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .command-palette-input-wrapper {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .command-palette-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--ink);
+      font: 600 14px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      width: 100%;
+    }
+    .command-palette-results {
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .command-palette-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: var(--control-radius);
+      cursor: pointer;
+      color: var(--ink);
+      font: 500 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      transition: background 100ms ease;
+    }
+    .command-palette-item:hover,
+    .command-palette-item.selected {
+      background: var(--button-bg-strong);
+    }
+    .command-palette-item .item-shortcut {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--badge-bg);
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* Shortcuts Modal Overlay */
+    .shortcuts-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 9500;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .shortcuts-modal-backdrop[hidden] {
+      display: none !important;
+    }
+    .shortcuts-modal-panel {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: var(--panel-radius);
+      box-shadow: var(--shadow);
+      width: min(560px, calc(100vw - 32px));
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .shortcuts-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .shortcuts-modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .shortcuts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 20px;
+    }
+    .shortcut-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    .shortcut-key {
+      font-family: monospace;
+      background: var(--badge-bg);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Density Styles */
+    body.density-compact .shell {
+      gap: 6px;
+      padding: 6px 0;
+    }
+    body.density-compact .toolbar {
+      padding: 4px 8px;
+    }
+    body.density-compact .tab {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    body.density-compact .tab-bar {
+      padding: 4px 8px;
     }
 
     .settings-row {
@@ -1332,6 +1529,31 @@
               Копировать
             </button>
           </div>
+          <div id="commandPalette" class="command-palette-backdrop" hidden>
+            <div class="command-palette-panel">
+              <div class="command-palette-input-wrapper">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+                <input type="text" id="commandPaletteInput" class="command-palette-input" placeholder="Поиск команд, вкладок, тем (Cmd+K)..." autocomplete="off" />
+              </div>
+              <div id="commandPaletteResults" class="command-palette-results"></div>
+            </div>
+          </div>
+          <div id="shortcutsModal" class="shortcuts-modal-backdrop" hidden>
+            <div class="shortcuts-modal-panel">
+              <div class="shortcuts-modal-header">
+                <h3>Горячие клавиши</h3>
+                <button type="button" id="closeShortcutsModal" style="border:none; background:transparent; font-size:16px; cursor:pointer;">✕</button>
+              </div>
+              <div class="shortcuts-grid">
+                <div class="shortcut-row"><span>Палитра команд</span><span class="shortcut-key">Cmd + K</span></div>
+                <div class="shortcut-row"><span>Справка по клавишам</span><span class="shortcut-key">Shift + ?</span></div>
+                <div class="shortcut-row"><span>Новая вкладка</span><span class="shortcut-key">Cmd + T</span></div>
+                <div class="shortcut-row"><span>Перетаскивание вкладок</span><span class="shortcut-key">Drag & Drop</span></div>
+                <div class="shortcut-row"><span>Переименовать вкладку</span><span class="shortcut-key">Двойной клик</span></div>
+                <div class="shortcut-row"><span>Закрыть окно/модалку</span><span class="shortcut-key">Esc</span></div>
+              </div>
+            </div>
+          </div>
           <details class="settings" id="settingsMenu">
             <summary class="button">Настройки</summary>
             <div class="settings-panel">
@@ -1349,6 +1571,13 @@
                   <button type="button" data-theme="nord"></button>
                   <button type="button" data-theme="forest"></button>
                 </div>
+              </div>
+              <div class="settings-row">
+                <label for="uiDensity">Плотность UI</label>
+                <select id="uiDensity">
+                  <option value="comfortable">Стандартная</option>
+                  <option value="compact">Компактная</option>
+                </select>
               </div>
               <div class="settings-row">
                 <label for="fontSize">Размер</label>
@@ -4022,15 +4251,54 @@
       }
     }
 
+    let draggedTabIndex = null;
+
     function renderTabs() {
       tabBar.innerHTML = "";
-      tabs.forEach(t => {
+      tabs.forEach((t, index) => {
         const btn = document.createElement("div");
         btn.className = `tab ${t.id === activeTabId ? 'active' : ''}`;
+        btn.draggable = true;
+        btn.dataset.index = index;
         btn.innerHTML = `
           <span class="tab-name">${t.customLabel || t.label}</span>
           <span class="tab-close" title="Закрыть">✕</span>
         `;
+
+        btn.ondragstart = (e) => {
+          draggedTabIndex = index;
+          btn.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", index);
+        };
+
+        btn.ondragend = () => {
+          btn.classList.remove("dragging");
+          draggedTabIndex = null;
+          document.querySelectorAll(".tab").forEach(tabEl => tabEl.classList.remove("drag-over"));
+        };
+
+        btn.ondragover = (e) => {
+          e.preventDefault();
+          if (draggedTabIndex === null || draggedTabIndex === index) return;
+          e.dataTransfer.dropEffect = "move";
+          btn.classList.add("drag-over");
+        };
+
+        btn.ondragleave = () => {
+          btn.classList.remove("drag-over");
+        };
+
+        btn.ondrop = (e) => {
+          e.preventDefault();
+          btn.classList.remove("drag-over");
+          if (draggedTabIndex === null || draggedTabIndex === index) return;
+          
+          const movedTab = tabs.splice(draggedTabIndex, 1)[0];
+          tabs.splice(index, 0, movedTab);
+          renderTabs();
+        };
+
         btn.onclick = () => switchTab(t.id);
         btn.ondblclick = (e) => { e.stopPropagation(); renameTab(t.id); };
         btn.querySelector(".tab-close").onclick = (e) => closeTab(t.id, e);
@@ -4147,13 +4415,26 @@
     themeButtons.forEach((button) => {
       const theme = themes[button.dataset.theme];
       if (!theme) return;
+      
+      const swatch = document.createElement("span");
+      swatch.className = "theme-swatch";
+      swatch.style.background = theme.colors.background || "#111";
+      swatch.style.color = theme.colors.foreground || "#eee";
+      swatch.textContent = ">_";
+
+      const themeInfo = document.createElement("div");
+      themeInfo.className = "theme-info";
+
       const themeName = document.createElement("span");
       themeName.className = "theme-name";
       themeName.textContent = theme.label;
+
       const themeMode = document.createElement("span");
       themeMode.className = "theme-mode";
       themeMode.textContent = theme.mode === "light" ? "Light" : "Dark";
-      button.append(themeName, themeMode);
+
+      themeInfo.append(themeName, themeMode);
+      button.append(swatch, themeInfo);
     });
 
     fontSizeSelect.value = preferences.fontSize;
@@ -4206,9 +4487,168 @@
       if (mode === "tabs" || mode === "split") setViewMode(mode);
     });
 
+    // Command Palette Logic
+    const commandPalette = document.getElementById("commandPalette");
+    const commandPaletteInput = document.getElementById("commandPaletteInput");
+    const commandPaletteResults = document.getElementById("commandPaletteResults");
+    let paletteSelectedIndex = 0;
+    let paletteItems = [];
+
+    function getAvailableCommands() {
+      const cmds = [
+        { label: "Новая вкладка терминала", action: () => addTab("terminal"), shortcut: "Cmd+T / Ctrl+T" },
+        { label: "Новая вкладка браузера", action: () => addTab("browser"), shortcut: "" },
+        { label: "Смена режима: Вкладки", action: () => setViewMode("tabs"), shortcut: "" },
+        { label: "Смена режима: Разделённый", action: () => setViewMode("split"), shortcut: "" },
+        { label: "Открыть Настройки", action: () => settingsMenu.setAttribute("open", "true"), shortcut: "" },
+      ];
+
+      // Add tabs
+      tabs.forEach(t => {
+        cmds.push({
+          label: `Вкладка: ${t.customLabel || t.label}`,
+          action: () => switchTab(t.id),
+          shortcut: "Переключить"
+        });
+      });
+
+      // Add themes
+      Object.keys(themes).forEach(key => {
+        cmds.push({
+          label: `Тема: ${themes[key].label}`,
+          action: () => { preferences.theme = key; savePreferences(preferences); applyTheme(key); },
+          shortcut: "Сменить тему"
+        });
+      });
+
+      return cmds;
+    }
+
+    function openCommandPalette() {
+      if (!commandPalette) return;
+      commandPalette.hidden = false;
+      commandPaletteInput.value = "";
+      paletteSelectedIndex = 0;
+      renderCommandPaletteResults();
+      setTimeout(() => commandPaletteInput.focus(), 50);
+    }
+
+    function closeCommandPalette() {
+      if (!commandPalette) return;
+      commandPalette.hidden = true;
+    }
+
+    function renderCommandPaletteResults() {
+      const query = commandPaletteInput.value.toLowerCase().trim();
+      const allCommands = getAvailableCommands();
+      paletteItems = allCommands.filter(c => c.label.toLowerCase().includes(query));
+      
+      if (paletteSelectedIndex >= paletteItems.length) paletteSelectedIndex = 0;
+
+      commandPaletteResults.innerHTML = "";
+      if (paletteItems.length === 0) {
+        commandPaletteResults.innerHTML = `<div style="padding: 12px; color: var(--muted); text-align: center; font-size: 13px;">Ничего не найдено</div>`;
+        return;
+      }
+
+      paletteItems.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = `command-palette-item ${idx === paletteSelectedIndex ? 'selected' : ''}`;
+        div.innerHTML = `
+          <span>${item.label}</span>
+          ${item.shortcut ? `<span class="item-shortcut">${item.shortcut}</span>` : ''}
+        `;
+        div.onclick = () => {
+          item.action();
+          closeCommandPalette();
+        };
+        commandPaletteResults.appendChild(div);
+      });
+    }
+
+    commandPaletteInput.oninput = () => renderCommandPaletteResults();
+    commandPaletteInput.onkeydown = (e) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        paletteSelectedIndex = (paletteSelectedIndex + 1) % paletteItems.length;
+        renderCommandPaletteResults();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        paletteSelectedIndex = (paletteSelectedIndex - 1 + paletteItems.length) % paletteItems.length;
+        renderCommandPaletteResults();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (paletteItems[paletteSelectedIndex]) {
+          paletteItems[paletteSelectedIndex].action();
+          closeCommandPalette();
+        }
+      } else if (e.key === "Escape") {
+        closeCommandPalette();
+      }
+    };
+
+    commandPalette.onclick = (e) => {
+      if (e.target === commandPalette) closeCommandPalette();
+    };
+
+    // Shortcuts Modal Logic
+    const shortcutsModal = document.getElementById("shortcutsModal");
+    const closeShortcutsModalBtn = document.getElementById("closeShortcutsModal");
+
+    function openShortcutsModal() {
+      if (shortcutsModal) shortcutsModal.hidden = false;
+    }
+    function closeShortcutsModal() {
+      if (shortcutsModal) shortcutsModal.hidden = true;
+    }
+
+    if (closeShortcutsModalBtn) {
+      closeShortcutsModalBtn.onclick = closeShortcutsModal;
+    }
+    if (shortcutsModal) {
+      shortcutsModal.onclick = (e) => {
+        if (e.target === shortcutsModal) closeShortcutsModal();
+      };
+    }
+
+    // Density Selector Logic
+    const uiDensitySelect = document.getElementById("uiDensity");
+    if (uiDensitySelect) {
+      uiDensitySelect.value = preferences.density || "comfortable";
+      if (preferences.density === "compact") {
+        document.body.classList.add("density-compact");
+      }
+
+      uiDensitySelect.onchange = () => {
+        const val = uiDensitySelect.value;
+        preferences.density = val;
+        savePreferences(preferences);
+        if (val === "compact") {
+          document.body.classList.add("density-compact");
+        } else {
+          document.body.classList.remove("density-compact");
+        }
+      };
+    }
+
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && fullscreenTabId) {
-        setFrameFullscreen(fullscreenTabId, false);
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (commandPalette.hidden) openCommandPalette();
+        else closeCommandPalette();
+      }
+      if (event.key === "?" && event.shiftKey) {
+        const isEditingInput = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
+        if (!isEditingInput) {
+          event.preventDefault();
+          if (shortcutsModal.hidden) openShortcutsModal();
+          else closeShortcutsModal();
+        }
+      }
+      if (event.key === "Escape") {
+        if (!commandPalette.hidden) closeCommandPalette();
+        if (shortcutsModal && !shortcutsModal.hidden) closeShortcutsModal();
+        if (fullscreenTabId) setFrameFullscreen(fullscreenTabId, false);
       }
     });
 
