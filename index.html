@@ -3232,21 +3232,30 @@
           top = Math.max(viewportPad, viewportHeight - viewportPad - naturalHeight);
         }
       } else {
-        // Horizontal layout: standard top/bottom positioning
-        const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
+        // Horizontal layout: panel is at the bottom, so popups should open UPWARDS above the toolbar
         const spaceAbove = buttonRect.top - gap - viewportPad;
-        openDown = spaceBelow >= Math.min(naturalHeight, 260) || spaceBelow >= spaceAbove;
-        const availableHeight = Math.max(120, openDown ? spaceBelow : spaceAbove);
+        const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
+        
+        // Open upwards if toolbar is in bottom half of screen or more space above
+        const openUp = buttonRect.top > (viewportHeight / 2) || spaceAbove >= Math.min(naturalHeight, 280);
+        const availableHeight = Math.max(120, openUp ? spaceAbove : spaceBelow);
+        const menuHeight = Math.min(naturalHeight, availableHeight);
 
         left = buttonRect.right - menuWidth;
         if (left < viewportPad) left = buttonRect.left;
         left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
 
-        top = openDown ? buttonRect.bottom + gap : buttonRect.top - gap - Math.min(naturalHeight, availableHeight);
-        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - Math.min(naturalHeight, availableHeight)));
+        if (openUp) {
+          top = buttonRect.top - gap - menuHeight;
+          openDown = false;
+        } else {
+          top = buttonRect.bottom + gap;
+          openDown = true;
+        }
+        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
       }
 
-      const availableHeight = Math.max(120, viewportHeight - top - viewportPad);
+      const availableHeight = Math.max(120, openDown ? (viewportHeight - top - viewportPad) : (buttonRect.top - gap - viewportPad));
       menu.style.position = "fixed";
       menu.style.left = `${Math.round(left)}px`;
       menu.style.top = `${Math.round(top)}px`;
