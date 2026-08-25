@@ -1,0 +1,92 @@
+name: Restore local UI preferences once
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  apply:
+    if: github.event.issue.title == 'Trigger: restore local UI preferences'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply recovered changes
+        run: python tools/_restore_local_ui_prefs_once.py
+
+      - name: Validate
+        run: |
+          python -m py_compile session-control.py
+          python - <<'PY'
+          from pathlib import Path
+          html = Path('index.html').read_text(encoding='utf-8')
+          start = html.rfind('<script>')
+          end = html.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('inline script not found')
+          Path('/tmp/fly-terminal-index.js').write_text(html[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check /tmp/fly-terminal-index.js
+          git diff --check
+          grep -q 'function readPreferencesFromObject' index.html
+          grep -q 'function loadPersistedPreferences' index.html
+          grep -q 'select optgroup' index.html
+          grep -q 'VALID_UI_DENSITIES' session-control.py
+          grep -q 'invalid_ui_preferences' session-control.py
+          grep -q 'UI settings are persisted in two layers' THEMING.md
+
+      - name: Validate UI preference normalization
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('fly_session_control', Path('session-control.py'))
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          prefs = module.normalize_ui_preferences({
+              'theme': 'midnight',
+              'fontSize': 14,
+              'fontFamily': 'Menlo, monospace',
+              'windowTitle': 'FlyTerm',
+              'splitLayout': 'columns',
+              'panelCollapsed': True,
+              'density': 'compact',
+              'toolbarOrientation': 'vertical-left',
+          })
+          assert prefs == {
+              'theme': 'midnight',
+              'density': 'compact',
+              'toolbarOrientation': 'vertical-left',
+              'splitLayout': 'columns',
+              'fontSize': 14,
+              'fontFamily': 'Menlo, monospace',
+              'windowTitle': 'FlyTerm',
+              'panelCollapsed': True,
+          }
+          assert module.normalize_ui_preferences({'fontFamily': 'url(javascript:bad)'}) == {}
+          assert module.normalize_ui_preferences({'toolbarOrientation': 'diagonal'}) == {}
+          PY
+
+      - name: Clean one-shot files and push
+        run: |
+          rm tools/_restore_local_ui_prefs_once.py
+          rm .github/workflows/restore-local-ui-prefs-once.yml
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Restore persistent UI preferences'
+          git push origin HEAD:main
+
+      - name: Close trigger issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --reason completed
