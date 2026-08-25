@@ -3,6 +3,8 @@ name: Apply Happ routing recovery once
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -10,7 +12,9 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.issue.title == 'Trigger: apply Happ routing recovery'
+    if: >-
+      (github.event_name == 'issues' && github.event.issue.title == 'Trigger: apply Happ routing recovery') ||
+      (github.event_name == 'issue_comment' && github.event.issue.number == 14 && github.event.comment.body == '@apply-happ-routing-recovery')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +80,7 @@ jobs:
         run: |
           rm tools/_apply_happ_routing_recovery_once.py
           rm .github/workflows/apply-happ-routing-recovery-once.yml
+          rm -f tools/.trigger-placeholder
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
