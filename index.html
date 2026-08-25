@@ -130,6 +130,60 @@
       gap: 10px;
       flex-shrink: 0;
       z-index: 100;
+      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Icon-only compact vertical sidebar */
+    .shell[class*="orientation-vertical-"].sidebar-compact .bottom-panel {
+      width: 58px;
+      min-width: 58px;
+      max-width: 58px;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .tab-bar {
+      padding: 6px 4px;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .tab {
+      padding: 8px 0;
+      justify-content: center;
+      width: 100%;
+      text-align: center;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .tab .tab-name {
+      max-width: 42px;
+      font-size: 10px;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .tab .tab-close {
+      display: none;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .toolbar {
+      padding: 8px 4px;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .toolbar-primary {
+      display: none;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls button,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls a.button,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls summary.button {
+      padding: 9px 0;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls a.button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls summary.button .toolbar-action-label {
+      display: none !important;
+    }
+
+    .shell[class*="orientation-vertical-"].sidebar-compact .settings summary::after {
+      display: none;
     }
 
     .shell[class*="orientation-vertical-"] .tab-bar {
@@ -4821,6 +4875,7 @@
       } else if (orientation === "vertical-right") {
         shellEl.classList.add("orientation-vertical-right");
       }
+      applyPanelCollapsedPref();
     }
 
     if (toolbarOrientationSelect) {
@@ -5015,14 +5070,26 @@
     initializeApp();
     setInterval(updateTabLabels, 10000);
 
-    // Manual panel collapse
+    // Manual panel collapse & compact toggle
     function applyPanelCollapsedPref() {
       const collapsed = !!preferences.panelCollapsed;
-      bottomPanel.classList.toggle("collapsed", collapsed);
-      togglePanelBtn.classList.toggle("active", collapsed);
-      togglePanelBtn.title = collapsed ? "Развернуть панель" : "Свернуть панель";
-      togglePanelBtn.setAttribute("aria-expanded", String(!collapsed));
-      if (togglePanelLabel) togglePanelLabel.textContent = collapsed ? "Панель" : "Свернуть";
+      const isVertical = shellEl?.classList.contains("orientation-vertical-left") || shellEl?.classList.contains("orientation-vertical-right");
+
+      if (isVertical) {
+        bottomPanel.classList.remove("collapsed");
+        shellEl.classList.toggle("sidebar-compact", collapsed);
+        togglePanelBtn.classList.toggle("active", collapsed);
+        togglePanelBtn.title = collapsed ? "Развернуть подписи" : "Сжать до значков";
+        togglePanelBtn.setAttribute("aria-expanded", String(!collapsed));
+        if (togglePanelLabel) togglePanelLabel.textContent = collapsed ? "Развернуть" : "Сжать";
+      } else {
+        shellEl.classList.remove("sidebar-compact");
+        bottomPanel.classList.toggle("collapsed", collapsed);
+        togglePanelBtn.classList.toggle("active", collapsed);
+        togglePanelBtn.title = collapsed ? "Развернуть панель" : "Свернуть панель";
+        togglePanelBtn.setAttribute("aria-expanded", String(!collapsed));
+        if (togglePanelLabel) togglePanelLabel.textContent = collapsed ? "Панель" : "Свернуть";
+      }
     }
 
     togglePanelBtn.onclick = () => {
