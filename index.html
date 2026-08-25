@@ -3188,70 +3188,100 @@
 
       const viewportPad = 10;
       const gap = 8;
+
+      // 1. Reset state for measurement
+      menu.style.position = "fixed";
       menu.style.left = "0px";
       menu.style.top = "0px";
+      menu.style.bottom = "auto";
+      menu.style.right = "auto";
       menu.style.maxHeight = "";
+      menu.style.maxWidth = "";
 
       const buttonRect = summary.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const menuWidth = Math.min(menuRect.width, Math.max(120, viewportWidth - viewportPad * 2));
-      const naturalHeight = Math.min(menuRect.height, Math.max(120, viewportHeight - viewportPad * 2));
 
       const isVerticalLeft = shellEl?.classList.contains("orientation-vertical-left");
       const isVerticalRight = shellEl?.classList.contains("orientation-vertical-right");
+      const isVertical = isVerticalLeft || isVerticalRight;
 
-      let left, top, openDown = true;
+      let left, top, maxHeight, maxWidth, origin = "center";
 
-      if (isVerticalLeft) {
-        // Sidebar on left: open popup to the right of the sidebar
-        left = buttonRect.right + gap;
-        if (left + menuWidth > viewportWidth - viewportPad) {
-          left = Math.max(viewportPad, buttonRect.left - menuWidth - gap);
+      if (isVertical) {
+        // --- PRIMARY AXIS: HORIZONTAL (flyout to the side) ---
+        maxWidth = viewportWidth - buttonRect.width - gap - viewportPad * 2;
+        const menuWidth = Math.min(menuRect.width, maxWidth);
+
+        if (isVerticalLeft) {
+          // Default: open to the right of left sidebar
+          const spaceRight = viewportWidth - buttonRect.right - gap - viewportPad;
+          if (spaceRight >= menuWidth || spaceRight >= buttonRect.left) {
+            left = buttonRect.right + gap;
+            origin = "top left";
+          } else {
+            left = buttonRect.left - menuWidth - gap;
+            origin = "top right";
+          }
+        } else {
+          // Default: open to the left of right sidebar
+          const spaceLeft = buttonRect.left - gap - viewportPad;
+          if (spaceLeft >= menuWidth || spaceLeft >= (viewportWidth - buttonRect.right)) {
+            left = buttonRect.left - menuWidth - gap;
+            origin = "top right";
+          } else {
+            left = buttonRect.right + gap;
+            origin = "top left";
+          }
         }
+        left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
+
+        // --- SECONDARY AXIS: VERTICAL (align with button top, keep in viewport) ---
+        maxHeight = viewportHeight - viewportPad * 2;
+        const menuHeight = Math.min(menuRect.height, maxHeight);
         top = buttonRect.top;
-        if (top + naturalHeight > viewportHeight - viewportPad) {
-          top = Math.max(viewportPad, viewportHeight - viewportPad - naturalHeight);
+        if (top + menuHeight > viewportHeight - viewportPad) {
+          top = viewportHeight - viewportPad - menuHeight;
         }
-      } else if (isVerticalRight) {
-        // Sidebar on right: open popup to the left of the sidebar
-        left = buttonRect.left - menuWidth - gap;
-        if (left < viewportPad) {
-          left = buttonRect.right + gap;
-        }
-        top = buttonRect.top;
-        if (top + naturalHeight > viewportHeight - viewportPad) {
-          top = Math.max(viewportPad, viewportHeight - viewportPad - naturalHeight);
-        }
+        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
+
       } else {
-        // Horizontal layout: Toolbar is at the bottom.
-        // We calculate bottom position directly relative to buttonRect or viewport bottom
+        // --- PRIMARY AXIS: VERTICAL (flyout above bottom toolbar or below top) ---
+        const spaceAbove = buttonRect.top - gap - viewportPad;
+        const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
+        const openUp = buttonRect.top > (viewportHeight / 2) || spaceAbove >= Math.min(menuRect.height, 280);
+
+        maxHeight = Math.max(120, openUp ? spaceAbove : spaceBelow);
+        const menuHeight = Math.min(menuRect.height, maxHeight);
+
+        if (openUp) {
+          top = buttonRect.top - gap - menuHeight;
+          origin = "bottom right";
+        } else {
+          top = buttonRect.bottom + gap;
+          origin = "top right";
+        }
+        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
+
+        // --- SECONDARY AXIS: HORIZONTAL (align with button right edge, keep in viewport) ---
+        maxWidth = viewportWidth - viewportPad * 2;
+        const menuWidth = Math.min(menuRect.width, maxWidth);
         left = buttonRect.right - menuWidth;
         if (left < viewportPad) left = buttonRect.left;
         left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
-
-        const spaceAbove = buttonRect.top - gap - viewportPad;
-        const availableHeight = Math.max(120, Math.min(spaceAbove, viewportHeight - viewportPad * 2));
-        
-        menu.style.position = "fixed";
-        menu.style.left = `${Math.round(left)}px`;
-        menu.style.bottom = `${Math.round(viewportHeight - buttonRect.top + gap)}px`;
-        menu.style.top = "auto";
-        menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
-        menu.style.zIndex = "9999";
-        menu.style.transformOrigin = "bottom right";
-        return;
       }
 
-      const availableHeight = Math.max(120, viewportHeight - top - viewportPad);
+      // 2. Apply unified fixed layout properties
       menu.style.position = "fixed";
       menu.style.left = `${Math.round(left)}px`;
       menu.style.top = `${Math.round(top)}px`;
       menu.style.bottom = "auto";
-      menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+      menu.style.right = "auto";
+      menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
+      menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
       menu.style.zIndex = "9999";
-      menu.style.transformOrigin = (isVerticalLeft || isVerticalRight) ? "top left" : (openDown ? "top right" : "bottom right");
+      menu.style.transformOrigin = origin;
     }
 
     function positionOpenFloatingMenus() {
