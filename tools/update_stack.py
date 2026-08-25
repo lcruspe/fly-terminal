@@ -16,6 +16,7 @@ LABELS = (
     "ai.kruspe.fly-terminal.ttyd",
     "ai.kruspe.fly-terminal.browser",
 )
+SAFE_GENERATED_BASENAMES = {".DS_Store"}
 
 
 def now():
@@ -70,12 +71,73 @@ class Updater:
             self.write("running", step, step)
         return success
 
+    def _tracked_changes(self):
+        result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("Не удалось проверить локальные изменения")
+        changes = []
+        for raw_line in (result.stdout or "").splitlines():
+            if not raw_line.strip():
+                continue
+            path = raw_line[3:].strip()
+            if " -> " in path:
+                path = path.split(" -> ", 1)[1].strip()
+            if path.startswith('"') and path.endswith('"'):
+                path = path[1:-1]
+            changes.append(path)
+        return changes
+
+    def _clean_safe_generated_changes(self):
+        changes = self._tracked_changes()
+        safe = [path for path in changes if Path(path).name in SAFE_GENERATED_BASENAMES]
+        for path in safe:
+            result = subprocess.run(
+                ["git", "restore", "--worktree", "--staged", "--", path],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            # If upstream has already removed the file, restore can legitimately fail
+            # after fetch. Removing the local generated file is safe in that case.
+            if result.returncode != 0:
+                try:
+                    target = REPO_ROOT / path
+                    if target.name in SAFE_GENERATED_BASENAMES and target.exists():
+                        target.unlink()
+                except OSError:
+                    pass
+        remaining = self._tracked_changes()
+        if remaining:
+            visible = ", ".join(remaining[:8])
+            if len(remaining) > 8:
+                visible += f" и ещё {len(remaining) - 8}"
+            self.entries.append({
+                "time": now(),
+                "step": "preflight",
+                "ok": False,
+                "message": "Есть локальные изменения, которые Fly Terminal не будет перезаписывать автоматически",
+                "output": visible,
+            })
+            self.ok = False
+            self.write("failed", f"Обновление остановлено: есть локальные изменения ({visible})", "preflight")
+            raise RuntimeError("local tracked changes")
+
     def restart_stack(self):
         uid = subprocess.check_output(["id", "-u"], text=True).strip()
         domain = f"gui/{uid}"
         for label in LABELS:
             self.run(f"restart-{label}", ["launchctl", "kickstart", "-k", f"{domain}/{label}"], timeout=30)
-        # The ttyd agent owns session-control; allow launchd and Caddy time to respawn.
         for port in (8080, 7682, 7683):
             deadline = time.monotonic() + 30
             while True:
@@ -93,9 +155,11 @@ class Updater:
                 time.sleep(1)
 
     def execute(self):
-        self.write("running", "Проверяю локальные изменения", "preflight")
-        self.run("git-status", ["git", "diff", "--quiet", "HEAD"], timeout=10)
+        # Fetch first: this lets the updater know the latest upstream state before
+        # deciding whether a local generated macOS artifact is safe to discard.
         self.run("git-fetch", ["git", "fetch", "origin", "main"], timeout=90)
+        self.write("running", "Проверяю локальные изменения", "preflight")
+        self._clean_safe_generated_changes()
         self.run("git-pull", ["git", "pull", "--ff-only", "origin", "main"], timeout=90)
         self.restart_stack()
         self.write("success", "Обновление и перезапуск стека завершены", "complete")
@@ -111,8 +175,17 @@ def main():
         return updater.execute()
     except Exception as exc:
         updater.ok = False
-        updater.entries.append({"time": now(), "step": "fatal", "ok": False, "message": str(exc)})
-        updater.write("failed", "Обновление остановлено с ошибкой", "fatal")
+        # Preserve a more specific summary written by preflight when available.
+        try:
+            current = json.loads(updater.status_file.read_text(encoding="utf-8"))
+        except Exception:
+            current = {}
+        if current.get("state") == "failed" and current.get("step") == "preflight":
+            updater.entries.append({"time": now(), "step": "fatal", "ok": False, "message": str(exc)})
+            updater.write("failed", current.get("summary") or "Обновление остановлено с ошибкой", "preflight")
+        else:
+            updater.entries.append({"time": now(), "step": "fatal", "ok": False, "message": str(exc)})
+            updater.write("failed", "Обновление остановлено с ошибкой", "fatal")
         return 1
 
 
