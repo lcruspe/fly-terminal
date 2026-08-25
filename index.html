@@ -278,12 +278,6 @@
       display: inline !important;
     }
 
-    .shell[class*="orientation-vertical-"] .settings-panel {
-      position: fixed;
-      max-height: calc(100vh - 30px);
-      z-index: 4500;
-    }
-
     .bottom-panel.collapsed .tab-bar,
     .bottom-panel.collapsed .toolbar-primary,
     .bottom-panel.collapsed .control-group:not(.panel-toggle-group),
@@ -628,12 +622,9 @@
       display: grid;
       gap: 14px;
       margin: 0;
-      max-height: calc(100vh - 80px);
       overflow-y: auto;
       padding: 14px;
       position: fixed;
-      bottom: 70px;
-      right: 14px;
       width: min(420px, calc(100vw - 28px));
       z-index: 9999;
     }
@@ -1433,12 +1424,10 @@
       flex-direction: column;
       gap: 2px;
       margin: 0;
-      max-height: calc(100vh - 80px);
       min-width: 190px;
       overflow-y: auto;
       padding: 4px;
       position: fixed;
-      bottom: 70px;
       z-index: 9999;
     }
 
