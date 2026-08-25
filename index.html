@@ -95,57 +95,139 @@
       gap: 0;
     }
 
-    /* Vertical Layouts */
+    /* Vertical Toolbar / Sidebar Layouts */
+    .shell.orientation-vertical-left,
+    .shell.orientation-vertical-right {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+      padding: 10px;
+      gap: 10px;
+      overflow: hidden;
+    }
+
     .shell.orientation-vertical-left {
       flex-direction: row-reverse;
-      padding: 14px;
-    }
-    .shell.orientation-vertical-left .bottom-panel {
-      width: 240px;
-      height: 100%;
-      flex-direction: column;
-    }
-    .shell.orientation-vertical-left .toolbar {
-      flex-direction: column;
-      align-items: stretch;
-      height: 100%;
-      overflow-y: auto;
-    }
-    .shell.orientation-vertical-left .toolbar-primary,
-    .shell.orientation-vertical-left .controls {
-      flex-direction: column;
-      align-items: stretch;
-      width: 100%;
-    }
-    .shell.orientation-vertical-left .control-group {
-      flex-direction: column;
-      align-items: stretch;
     }
 
     .shell.orientation-vertical-right {
       flex-direction: row;
-      padding: 14px;
     }
-    .shell.orientation-vertical-right .bottom-panel {
-      width: 240px;
+
+    .shell[class*="orientation-vertical-"] .terminal-container {
+      flex: 1 1 auto;
+      min-width: 0;
       height: 100%;
-      flex-direction: column;
     }
-    .shell.orientation-vertical-right .toolbar {
+
+    .shell[class*="orientation-vertical-"] .bottom-panel {
+      width: 220px;
+      min-width: 200px;
+      max-width: 240px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+      z-index: 100;
+    }
+
+    .shell[class*="orientation-vertical-"] .tab-bar {
+      flex: 0 1 auto;
+      max-height: 45vh;
       flex-direction: column;
       align-items: stretch;
-      height: 100%;
       overflow-y: auto;
+      overflow-x: hidden;
+      gap: 5px;
+      padding: 8px;
     }
-    .shell.orientation-vertical-right .toolbar-primary,
-    .shell.orientation-vertical-right .controls {
+
+    .shell[class*="orientation-vertical-"] .tab {
+      width: 100%;
+      justify-content: space-between;
+      padding: 7px 10px;
+      font-size: 11px;
+    }
+
+    .shell[class*="orientation-vertical-"] .tab .tab-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .shell[class*="orientation-vertical-"] .tab.new-tab-btn {
+      justify-content: center;
+      padding: 4px 8px;
+    }
+
+    .shell[class*="orientation-vertical-"] .toolbar {
+      flex: 1 1 auto;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      padding: 10px;
+      gap: 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .shell[class*="orientation-vertical-"] .toolbar-primary {
+      flex-direction: column;
+      align-items: flex-start;
+      min-width: 0;
+      gap: 6px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .shell[class*="orientation-vertical-"] .brand strong {
+      font-size: 13px;
+    }
+
+    .shell[class*="orientation-vertical-"] .brand span {
+      display: none;
+    }
+
+    .shell[class*="orientation-vertical-"] .controls {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 6px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .shell[class*="orientation-vertical-"] .control-group {
       flex-direction: column;
       align-items: stretch;
       width: 100%;
+      gap: 6px;
     }
-    .shell.orientation-vertical-right .control-group {
-      flex-direction: column;
-      align-items: stretch;
+
+    .shell[class*="orientation-vertical-"] .controls button,
+    .shell[class*="orientation-vertical-"] .controls a.button,
+    .shell[class*="orientation-vertical-"] .controls summary.button {
+      width: 100%;
+      justify-content: flex-start;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .shell[class*="orientation-vertical-"] .controls button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"] .controls a.button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"] .controls summary.button .toolbar-action-label {
+      display: inline !important;
+    }
+
+    .shell[class*="orientation-vertical-"] .toolbar-icon-only .toolbar-action-label {
+      display: inline !important;
+    }
+
+    .shell[class*="orientation-vertical-"] .settings-panel {
+      position: fixed;
+      max-height: calc(100vh - 30px);
+      z-index: 4500;
     }
 
     .bottom-panel.collapsed .tab-bar,
@@ -3069,24 +3151,53 @@
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
       const menuWidth = Math.min(menuRect.width, Math.max(120, viewportWidth - viewportPad * 2));
       const naturalHeight = Math.min(menuRect.height, Math.max(120, viewportHeight - viewportPad * 2));
-      const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
-      const spaceAbove = buttonRect.top - gap - viewportPad;
-      const openDown = spaceBelow >= Math.min(naturalHeight, 260) || spaceBelow >= spaceAbove;
-      const availableHeight = Math.max(120, openDown ? spaceBelow : spaceAbove);
-      const menuHeight = Math.min(naturalHeight, availableHeight);
 
-      let left = buttonRect.right - menuWidth;
-      if (left < viewportPad) left = buttonRect.left;
-      left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
+      const isVerticalLeft = shellEl?.classList.contains("orientation-vertical-left");
+      const isVerticalRight = shellEl?.classList.contains("orientation-vertical-right");
 
-      let top = openDown ? buttonRect.bottom + gap : buttonRect.top - gap - menuHeight;
-      top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
+      let left, top, openDown = true;
 
+      if (isVerticalLeft) {
+        // Sidebar on left: open popup to the right of the sidebar
+        left = buttonRect.right + gap;
+        if (left + menuWidth > viewportWidth - viewportPad) {
+          left = Math.max(viewportPad, buttonRect.left - menuWidth - gap);
+        }
+        top = buttonRect.top;
+        if (top + naturalHeight > viewportHeight - viewportPad) {
+          top = Math.max(viewportPad, viewportHeight - viewportPad - naturalHeight);
+        }
+      } else if (isVerticalRight) {
+        // Sidebar on right: open popup to the left of the sidebar
+        left = buttonRect.left - menuWidth - gap;
+        if (left < viewportPad) {
+          left = buttonRect.right + gap;
+        }
+        top = buttonRect.top;
+        if (top + naturalHeight > viewportHeight - viewportPad) {
+          top = Math.max(viewportPad, viewportHeight - viewportPad - naturalHeight);
+        }
+      } else {
+        // Horizontal layout: standard top/bottom positioning
+        const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
+        const spaceAbove = buttonRect.top - gap - viewportPad;
+        openDown = spaceBelow >= Math.min(naturalHeight, 260) || spaceBelow >= spaceAbove;
+        const availableHeight = Math.max(120, openDown ? spaceBelow : spaceAbove);
+
+        left = buttonRect.right - menuWidth;
+        if (left < viewportPad) left = buttonRect.left;
+        left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
+
+        top = openDown ? buttonRect.bottom + gap : buttonRect.top - gap - Math.min(naturalHeight, availableHeight);
+        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - Math.min(naturalHeight, availableHeight)));
+      }
+
+      const availableHeight = Math.max(120, viewportHeight - top - viewportPad);
       const baseRect = fixedPositionBaseFor(menu);
       menu.style.left = `${Math.round(left - baseRect.left)}px`;
       menu.style.top = `${Math.round(top - baseRect.top)}px`;
       menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
-      menu.style.transformOrigin = openDown ? "top right" : "bottom right";
+      menu.style.transformOrigin = (isVerticalLeft || isVerticalRight) ? "top left" : (openDown ? "top right" : "bottom right");
     }
 
     function positionOpenFloatingMenus() {
@@ -3273,6 +3384,12 @@
       overflowMenu.open = false;
       overflowMenu.hidden = true;
       if (bottomPanel?.classList.contains("collapsed")) return;
+
+      const isVertical = shellEl?.classList.contains("orientation-vertical-left") || shellEl?.classList.contains("orientation-vertical-right");
+      if (isVertical) {
+        // In vertical orientation, buttons have full text and vertical layout
+        return;
+      }
 
       const visibleItems = responsiveToolbarItems.filter(({ element }) => {
         return !element.hidden && getComputedStyle(element).display !== "none";
