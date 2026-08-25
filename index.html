@@ -95,6 +95,59 @@
       gap: 0;
     }
 
+    /* Vertical Layouts */
+    .shell.orientation-vertical-left {
+      flex-direction: row-reverse;
+      padding: 14px;
+    }
+    .shell.orientation-vertical-left .bottom-panel {
+      width: 240px;
+      height: 100%;
+      flex-direction: column;
+    }
+    .shell.orientation-vertical-left .toolbar {
+      flex-direction: column;
+      align-items: stretch;
+      height: 100%;
+      overflow-y: auto;
+    }
+    .shell.orientation-vertical-left .toolbar-primary,
+    .shell.orientation-vertical-left .controls {
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+    }
+    .shell.orientation-vertical-left .control-group {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .shell.orientation-vertical-right {
+      flex-direction: row;
+      padding: 14px;
+    }
+    .shell.orientation-vertical-right .bottom-panel {
+      width: 240px;
+      height: 100%;
+      flex-direction: column;
+    }
+    .shell.orientation-vertical-right .toolbar {
+      flex-direction: column;
+      align-items: stretch;
+      height: 100%;
+      overflow-y: auto;
+    }
+    .shell.orientation-vertical-right .toolbar-primary,
+    .shell.orientation-vertical-right .controls {
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+    }
+    .shell.orientation-vertical-right .control-group {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
     .bottom-panel.collapsed .tab-bar,
     .bottom-panel.collapsed .toolbar-primary,
     .bottom-panel.collapsed .control-group:not(.panel-toggle-group),
@@ -1577,6 +1630,14 @@
                 <select id="uiDensity">
                   <option value="comfortable">Стандартная</option>
                   <option value="compact">Компактная</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <label for="toolbarOrientation">Панель инструментов</label>
+                <select id="toolbarOrientation">
+                  <option value="horizontal">Горизонтальная (снизу)</option>
+                  <option value="vertical-left">Вертикальная (слева)</option>
+                  <option value="vertical-right">Вертикальная (справа)</option>
                 </select>
               </div>
               <div class="settings-row">
@@ -4628,6 +4689,32 @@
         } else {
           document.body.classList.remove("density-compact");
         }
+      };
+    }
+
+    // Orientation Selector Logic
+    const toolbarOrientationSelect = document.getElementById("toolbarOrientation");
+    const shellEl = document.querySelector(".shell");
+
+    function applyToolbarOrientation(orientation) {
+      if (!shellEl) return;
+      shellEl.classList.remove("orientation-vertical-left", "orientation-vertical-right");
+      if (orientation === "vertical-left") {
+        shellEl.classList.add("orientation-vertical-left");
+      } else if (orientation === "vertical-right") {
+        shellEl.classList.add("orientation-vertical-right");
+      }
+    }
+
+    if (toolbarOrientationSelect) {
+      toolbarOrientationSelect.value = preferences.toolbarOrientation || "horizontal";
+      applyToolbarOrientation(preferences.toolbarOrientation);
+
+      toolbarOrientationSelect.onchange = () => {
+        const val = toolbarOrientationSelect.value;
+        preferences.toolbarOrientation = val;
+        savePreferences(preferences);
+        applyToolbarOrientation(val);
       };
     }
 
