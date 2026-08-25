@@ -3247,10 +3247,11 @@
       }
 
       const availableHeight = Math.max(120, viewportHeight - top - viewportPad);
-      const baseRect = fixedPositionBaseFor(menu);
-      menu.style.left = `${Math.round(left - baseRect.left)}px`;
-      menu.style.top = `${Math.round(top - baseRect.top)}px`;
+      menu.style.position = "fixed";
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
       menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+      menu.style.zIndex = "9999";
       menu.style.transformOrigin = (isVerticalLeft || isVerticalRight) ? "top left" : (openDown ? "top right" : "bottom right");
     }
 
