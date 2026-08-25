@@ -85,6 +85,8 @@ TOOL_ERROR_MESSAGES = {
     "happ_subscription_not_found": "Выбранная подписка Happ больше недоступна. Обновите список подписок и повторите действие.",
     "happ_action_already_running": "Другая операция Happ уже выполняется. Дождитесь её завершения.",
     "happ_location_switch_failed": "Не удалось переключить локацию Happ.",
+    "happ_routing_apply_failed": "Не удалось применить профиль маршрутизации Happ для выбранной подписки.",
+    "happ_routing_fallback_failed": "Happ не смог подключиться даже после отключения проблемного профиля маршрутизации.",
     "payload_too_large": "Размер запроса превышает допустимый лимит.",
     "documents_unavailable": "Не удалось открыть папку Documents виртуальной машины.",
     "documents_list_failed": "Не удалось получить список файлов из папки Documents.",
@@ -308,6 +310,44 @@ def _happ_subscription_title(response_object, request_key):
     return host or "Подписка Happ"
 
 
+def _normalize_happ_routing_deeplink(value):
+    """Return only supported Happ routing deeplinks; never expose arbitrary cached URLs."""
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            return ""
+    deeplink = str(value or "").strip()
+    if not deeplink or len(deeplink) > 32768:
+        return ""
+    if any(ord(char) < 32 or ord(char) == 127 for char in deeplink):
+        return ""
+    lowered = deeplink.casefold()
+    if lowered == "happ://routing/off":
+        return "happ://routing/off"
+    if lowered.startswith("happ://routing/onadd/") or lowered.startswith("happ://routing/add/"):
+        return deeplink
+    return ""
+
+
+def _happ_subscription_routing_deeplink(response_object):
+    """Extract the routing command that Happ itself received with a cached subscription."""
+    archive = _resolve_plist_archive(response_object)
+    routing = _normalize_happ_routing_deeplink(_find_named_value(archive, {"routing"}))
+    if routing:
+        return routing
+
+    enabled = _find_named_value(archive, {"routing-enable", "routingenable"})
+    if isinstance(enabled, (bytes, bytearray)):
+        try:
+            enabled = bytes(enabled).decode("utf-8")
+        except UnicodeDecodeError:
+            enabled = ""
+    if str(enabled or "").strip().casefold() in {"0", "false", "off", "no"}:
+        return "happ://routing/off"
+    return ""
+
+
 def _happ_locations_from_configs(configs):
     locations = []
     seen = set()
@@ -405,6 +445,7 @@ def happ_subscriptions():
                 subscriptions.append({
                     "id": subscription_id,
                     "label": _happ_subscription_title(response_object, request_key),
+                    "routingDeeplink": _happ_subscription_routing_deeplink(response_object),
                     "locations": locations,
                 })
         except (OSError, sqlite3.Error):
@@ -466,7 +507,7 @@ def happ_subscription_catalog():
     }
 
 
-def apply_happ_location(location):
+def _write_happ_current_config(location):
     config_json = json.dumps(location["config"], ensure_ascii=False, separators=(",", ":"))
     result = subprocess.run(
         ["plutil", "-replace", "connectedConfigJson", "-string", config_json, str(HAPP_PREFERENCES)],
@@ -478,16 +519,97 @@ def apply_happ_location(location):
     )
     if result.returncode != 0:
         return False, (result.stderr or result.stdout).strip()
-    subprocess.run(["killall", "Tunnel"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=10)
-    deadline = time.monotonic() + 20
-    last_state = "Unknown"
-    last_error = ""
-    while time.monotonic() < deadline:
-        last_state, last_error = happ_vpn_status()
-        if last_state == "Connected" and happ_current_location() == location["label"]:
-            return True, ""
-        time.sleep(0.4)
-    return False, last_error or f"Happ stayed at {happ_current_location() or 'an unknown location'} ({last_state})"
+    return True, ""
+
+
+def run_happ_routing_deeplink(deeplink):
+    deeplink = _normalize_happ_routing_deeplink(deeplink)
+    if not deeplink:
+        return False, "unsupported_happ_routing_deeplink"
+    try:
+        result = subprocess.run(
+            ["/usr/bin/open", "-g", deeplink],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    if result.returncode != 0:
+        return False, (result.stderr or result.stdout).strip()
+    # Happ processes routing deeplinks asynchronously. Give it a short window to
+    # persist/activate the profile before the network extension is restarted.
+    time.sleep(1.0)
+    return True, ""
+
+
+def restart_happ_vpn():
+    state, state_error = happ_vpn_status()
+    if state == "Unavailable":
+        return False, state_error or "happ_service_unavailable"
+
+    if state != "Disconnected":
+        stopped, stop_error = run_happ_vpn_command("stop")
+        if not stopped:
+            return False, stop_error or "happ_disconnect_failed"
+        stopped_state, stopped_error = wait_for_happ_vpn({"Disconnected"}, 10)
+        if stopped_state != "Disconnected":
+            return False, stopped_error or f"Happ stayed in {stopped_state} while stopping"
+
+    started, start_error = run_happ_vpn_command("start")
+    if not started:
+        return False, start_error or "happ_connect_failed"
+    connected_state, connected_error = wait_for_happ_vpn({"Connected"}, 20)
+    if connected_state != "Connected":
+        return False, connected_error or f"Happ stayed in {connected_state} while starting"
+    return True, ""
+
+
+def apply_happ_location(subscription, location):
+    """Apply server + subscription routing, with a one-shot no-routing recovery.
+
+    Happ can reject a routing profile when its GeoIP/GeoSite data is stale or
+    incompatible (for example, a profile references geoip:RU but the active
+    geoip.dat has no RU section). We first ask Happ to apply its own routing
+    deeplink, so its normal geofile manager gets a chance to repair/update the
+    profile. If the tunnel still cannot start, we retry once with the official
+    happ://routing/off command — the same semantic fallback as Happ's manual
+    "Запуск" action, but without GUI automation.
+    """
+    written, write_error = _write_happ_current_config(location)
+    if not written:
+        return False, write_error, False
+
+    routing_deeplink = ""
+    if isinstance(subscription, dict):
+        routing_deeplink = _normalize_happ_routing_deeplink(subscription.get("routingDeeplink"))
+
+    routing_profile_active = bool(routing_deeplink and routing_deeplink != "happ://routing/off")
+    if routing_deeplink:
+        routing_ok, routing_error = run_happ_routing_deeplink(routing_deeplink)
+        if not routing_ok:
+            return False, routing_error or "happ_routing_apply_failed", False
+
+    connected, connect_error = restart_happ_vpn()
+    if connected and happ_current_location() == location["label"]:
+        return True, "", False
+
+    # A failed Xray routing profile surfaces in Happ as a blocking dialog. Do
+    # not automate that dialog. Disable routing through Happ's documented
+    # deeplink and restart the tunnel once instead.
+    if routing_profile_active:
+        fallback_ok, fallback_error = run_happ_routing_deeplink("happ://routing/off")
+        if fallback_ok:
+            connected, retry_error = restart_happ_vpn()
+            if connected and happ_current_location() == location["label"]:
+                return True, "", True
+            connect_error = retry_error or connect_error
+        else:
+            connect_error = fallback_error or connect_error
+
+    return False, connect_error or "happ_location_switch_failed", False
 
 
 def happ_vpn_status():
@@ -2175,7 +2297,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 409, {"ok": False, "error": "happ_action_already_running"})
             return
         try:
-            switched, switch_error = apply_happ_location(location)
+            switched, switch_error, routing_fallback = apply_happ_location(subscription or {}, location)
             final_state, final_error = happ_vpn_status()
             if not switched:
                 send_json(self, 504, {"ok": False, "error": "happ_location_switch_failed", "state": final_state, "details": switch_error or final_error})
@@ -2187,6 +2309,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "subscriptionId": subscription["id"] if subscription else "",
                 "subscription": subscription["label"] if subscription else "",
                 "location": happ_current_location() or location["label"],
+                "routingFallback": routing_fallback,
             })
         except (OSError, subprocess.TimeoutExpired) as exc:
             send_json(self, 500, {"ok": False, "error": "happ_location_switch_failed", "details": str(exc)})

@@ -3963,7 +3963,12 @@
           throw new Error(payload.message || payload.details || "Не удалось переключить локацию Happ");
         }
         renderHappState(payload);
-        setStatusText(`Happ: ${payload.subscription || subscriptionLabel} → ${payload.location || selectedLabel}`, 2800);
+        if (payload.routingFallback) {
+          setHappStatus("warn", "Подключено без маршрутизации: профиль Happ не запустился с текущими GeoIP/GeoSite");
+          setStatusText(`Happ: ${payload.subscription || subscriptionLabel} → ${payload.location || selectedLabel} · без маршрутизации`, 5200);
+        } else {
+          setStatusText(`Happ: ${payload.subscription || subscriptionLabel} → ${payload.location || selectedLabel}`, 2800);
+        }
       } catch (error) {
         happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
         setStatusText("Не удалось переключить локацию Happ", 3600);
