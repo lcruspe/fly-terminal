@@ -224,6 +224,10 @@
       gap: 10px;
       overflow-y: auto;
       overflow-x: hidden;
+      /* Keep fixed flyout menus viewport-relative instead of clipping them to
+         the scrollable sidebar's backdrop-filter containing block. */
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
 
     .shell[class*="orientation-vertical-"] .toolbar-primary {
@@ -1228,6 +1232,14 @@
       font: 600 13px/1.2 "Avenir Next", "Segoe UI", sans-serif;
       padding: 10px 36px 10px 12px;
       width: 100%;
+    }
+
+    /* Native popup rows may ignore theme backgrounds while inheriting the
+       themed foreground, leaving light text invisible until hover. */
+    select option,
+    select optgroup {
+      background: Canvas;
+      color: CanvasText;
     }
 
     input[type="text"] {
@@ -2430,6 +2442,7 @@
     let activeTabId = null;
     let viewMode = 'tabs'; // 'tabs' or 'split'
     let preferences = readPreferences();
+    let persistPreferencesTimer = null;
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "" };
     let desktopConfig = { enabled: false, url: "" };
@@ -2498,20 +2511,25 @@
       return title ? title.slice(0, 80) : "Terminal";
     }
 
+    function readPreferencesFromObject(raw = {}) {
+      const validLayouts = ["grid", "columns", "rows", "master-left", "master-top"];
+      return {
+        theme: themes[raw.theme] ? raw.theme : "paper",
+        fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
+        fontFamily: fontFamilies.some(f => f.value === raw.fontFamily) ? raw.fontFamily : fontFamilies[0].value,
+        windowTitle: normalizeWindowTitle(raw.windowTitle),
+        splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid",
+        panelCollapsed: !!raw.panelCollapsed,
+        density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
+        toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal"
+      };
+    }
+
     function readPreferences() {
       try {
-        const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-        const validLayouts = ["grid", "columns", "rows", "master-left", "master-top"];
-        return {
-          theme: themes[raw.theme] ? raw.theme : "paper",
-          fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
-          fontFamily: fontFamilies.some(f => f.value === raw.fontFamily) ? raw.fontFamily : fontFamilies[0].value,
-          windowTitle: normalizeWindowTitle(raw.windowTitle),
-          splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid",
-          panelCollapsed: !!raw.panelCollapsed
-        };
+        return readPreferencesFromObject(JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
       } catch {
-        return { theme: "paper", fontSize: 12, fontFamily: fontFamilies[0].value, windowTitle: "Terminal", splitLayout: "grid", panelCollapsed: false };
+        return readPreferencesFromObject();
       }
     }
 
@@ -2519,36 +2537,38 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
       applyAllThemes();
       applyWindowTitle();
+      clearTimeout(persistPreferencesTimer);
+      persistPreferencesTimer = setTimeout(persistUiPreferences, 180);
     }
 
-    async function persistThemePreference() {
+    async function persistUiPreferences() {
       try {
         const response = await localApiFetch("/api/ui/preferences", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ theme: preferences.theme })
+          body: JSON.stringify(preferences)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
       } catch (error) {
-        console.warn("Unable to persist Fly Terminal theme on server", error);
+        console.warn("Unable to persist Fly Terminal UI preferences on server", error);
       }
     }
 
-    async function loadPersistedTheme() {
+    async function loadPersistedPreferences() {
       try {
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        if (payload?.theme && themes[payload.theme]) {
-          preferences.theme = payload.theme;
+        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation"];
+        const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
+        if (hasPersistedPreferences) {
+          preferences = readPreferencesFromObject({ ...preferences, ...payload });
           localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
           return;
         }
-        if (themes[preferences.theme]) {
-          await persistThemePreference();
-        }
+        await persistUiPreferences();
       } catch (error) {
-        console.warn("Unable to load persisted Fly Terminal theme", error);
+        console.warn("Unable to load persisted Fly Terminal UI preferences", error);
       }
     }
 
@@ -4987,7 +5007,6 @@
     themeButtons.forEach(btn => btn.onclick = () => {
       preferences.theme = btn.dataset.theme;
       savePreferences();
-      persistThemePreference();
     });
     bindFloatingMenus();
     bindResponsiveToolbar();
@@ -5090,8 +5109,17 @@
 
     // Initial load
     async function initializeApp() {
-      await loadPersistedTheme();
+      await loadPersistedPreferences();
+      fontSizeSelect.value = preferences.fontSize;
+      fontFamilySelect.value = preferences.fontFamily;
+      windowTitleInput.value = preferences.windowTitle;
+      uiDensitySelect.value = preferences.density;
+      document.body.classList.toggle("density-compact", preferences.density === "compact");
+      toolbarOrientationSelect.value = preferences.toolbarOrientation;
+      applyToolbarOrientation(preferences.toolbarOrientation);
+      applyPanelCollapsedPref();
       applyShellTheme();
+      applyWindowTitle();
       refreshDirectLink();
       try {
         await Promise.allSettled([loadBrowserConfig(), loadDesktopConfig()]);

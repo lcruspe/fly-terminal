@@ -58,6 +58,19 @@ VALID_UI_THEMES = frozenset({
     "paper", "linen", "ledger", "harbor", "sage",
     "graphite", "ink", "midnight", "nord", "forest",
 })
+VALID_UI_DENSITIES = frozenset({"comfortable", "compact"})
+VALID_TOOLBAR_ORIENTATIONS = frozenset({"horizontal", "vertical-left", "vertical-right"})
+VALID_SPLIT_LAYOUTS = frozenset({"grid", "columns", "rows", "master-left", "master-top"})
+VALID_FONT_SIZES = frozenset(range(8, 17))
+VALID_UI_FONT_FAMILIES = frozenset({
+    "Menlo, monospace",
+    "Monaco, monospace",
+    "Courier New, monospace",
+    "Andale Mono, monospace",
+    "Consolas, monospace",
+    "SFMono-Regular, SF Mono, Menlo, monospace",
+    "monospace",
+})
 HAPP_VPN_SERVICE = os.environ.get("FLY_TERMINAL_HAPP_SERVICE", "Happ Plus")
 HAPP_RECONNECT_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
@@ -74,7 +87,8 @@ TOOL_ERROR_MESSAGES = {
     "update_script_missing": "Не найден штатный скрипт обновления. Обновите установку Fly Terminal вручную и повторите действие.",
     "update_start_failed": "Не удалось запустить обновление Fly Terminal.",
     "invalid_theme": "Выбрана неизвестная тема оформления.",
-    "ui_preferences_write_failed": "Не удалось сохранить тему оформления.",
+    "invalid_ui_preferences": "Переданы некорректные настройки интерфейса.",
+    "ui_preferences_write_failed": "Не удалось сохранить настройки интерфейса.",
     "reconnect_already_running": "Переподключение Happ уже выполняется.",
     "happ_service_unavailable": "Системная служба Happ недоступна. Убедитесь, что Happ Plus установлен и запущен.",
     "happ_disconnect_failed": "Не удалось отключить текущее VPN-соединение Happ.",
@@ -1473,6 +1487,47 @@ def read_update_status():
     return humanize_operation_status(status, "update")
 
 
+def normalize_ui_preferences(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    preferences = {}
+    theme = str(payload.get("theme") or "").strip()
+    if theme in VALID_UI_THEMES:
+        preferences["theme"] = theme
+
+    density = str(payload.get("density") or "").strip()
+    if density in VALID_UI_DENSITIES:
+        preferences["density"] = density
+
+    orientation = str(payload.get("toolbarOrientation") or "").strip()
+    if orientation in VALID_TOOLBAR_ORIENTATIONS:
+        preferences["toolbarOrientation"] = orientation
+
+    split_layout = str(payload.get("splitLayout") or "").strip()
+    if split_layout in VALID_SPLIT_LAYOUTS:
+        preferences["splitLayout"] = split_layout
+
+    try:
+        font_size = int(payload.get("fontSize"))
+    except (TypeError, ValueError):
+        font_size = 0
+    if font_size in VALID_FONT_SIZES:
+        preferences["fontSize"] = font_size
+
+    font_family = str(payload.get("fontFamily") or "").strip()
+    if font_family in VALID_UI_FONT_FAMILIES:
+        preferences["fontFamily"] = font_family
+
+    window_title = str(payload.get("windowTitle") or "").strip()
+    if window_title:
+        preferences["windowTitle"] = window_title[:80]
+
+    if isinstance(payload.get("panelCollapsed"), bool):
+        preferences["panelCollapsed"] = payload["panelCollapsed"]
+    return preferences
+
+
 def read_ui_preferences():
     with UI_PREFERENCES_LOCK:
         if not UI_PREFERENCES_FILE.exists():
@@ -1482,21 +1537,22 @@ def read_ui_preferences():
         except (OSError, json.JSONDecodeError):
             return {"ok": True, "theme": None}
 
-    theme = str(payload.get("theme") or "").strip()
-    if theme not in VALID_UI_THEMES:
-        theme = ""
-    return {"ok": True, "theme": theme or None}
+    preferences = normalize_ui_preferences(payload)
+    return {"ok": True, **preferences}
 
 
-def write_ui_preferences(theme):
-    payload = {
-        "theme": theme,
-        "updatedAt": datetime.now().isoformat(),
-    }
+def write_ui_preferences(preferences):
     UI_PREFERENCES_FILE.parent.mkdir(parents=True, exist_ok=True)
     temp_path = UI_PREFERENCES_FILE.with_name(f"{UI_PREFERENCES_FILE.name}.tmp")
-    serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     with UI_PREFERENCES_LOCK:
+        current = {}
+        if UI_PREFERENCES_FILE.exists():
+            try:
+                current = normalize_ui_preferences(json.loads(UI_PREFERENCES_FILE.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        payload = {**current, **preferences, "updatedAt": datetime.now().isoformat()}
+        serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
         temp_path.write_text(serialized, encoding="utf-8")
         os.replace(temp_path, UI_PREFERENCES_FILE)
 
@@ -1697,18 +1753,18 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 400, {"ok": False, "error": error})
             return
 
-        theme = str(payload.get("theme") or "").strip()
-        if theme not in VALID_UI_THEMES:
-            send_json(self, 400, {"ok": False, "error": "invalid_theme"})
+        preferences = normalize_ui_preferences(payload)
+        if not preferences:
+            send_json(self, 400, {"ok": False, "error": "invalid_ui_preferences"})
             return
 
         try:
-            write_ui_preferences(theme)
+            write_ui_preferences(preferences)
         except OSError as exc:
             send_json(self, 500, {"ok": False, "error": "ui_preferences_write_failed", "details": str(exc)})
             return
 
-        send_json(self, 200, {"ok": True, "theme": theme})
+        send_json(self, 200, {"ok": True, **preferences})
 
     def _handle_info(self):
         payload, error = self._read_json_body()

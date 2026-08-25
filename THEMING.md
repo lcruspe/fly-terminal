@@ -18,9 +18,7 @@ Open the `Настройки` menu in the toolbar and use:
 - font sizes from `8px` to `16px`
 - font families such as `Menlo`, `Monaco`, `Courier New`, `Andale Mono`, `Consolas`, `SF Mono`
 
-The selected **theme** is persisted in two layers. The backend stores the canonical value in `~/.local/share/fly-terminal/ui-preferences.json` (override with `FLY_TERMINAL_UI_PREFERENCES_FILE`), while browser `localStorage` remains a fast cache and fallback. On startup the backend value wins; if the backend has no saved theme yet, the browser's current local theme seeds it. This keeps the theme stable across terminal sessions, browser restarts, and different browser entry origins that point to the same Fly Terminal backend.
-
-Font size, font family, window title, layout and panel state remain browser-local preferences. The selected theme continues to drive the embedded ttyd/xterm colors.
+UI settings are persisted in two layers. The backend stores the canonical theme, font size and family, window title, split layout, density, toolbar orientation, and panel state in `~/.local/share/fly-terminal/ui-preferences.json` (override with `FLY_TERMINAL_UI_PREFERENCES_FILE`), while browser `localStorage` remains a fast cache and fallback. On startup the backend value wins; if the backend has no saved settings yet, the browser's current local settings seed it. This keeps the interface stable across terminal sessions, browser restarts, and different browser entry origins that point to the same Fly Terminal backend. Server-side validation uses the same finite theme, font, layout, density, and orientation choices exposed by the UI; partial writes merge with the existing preference file for backward compatibility.
 
 ## Direct terminal links
 
