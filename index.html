@@ -628,12 +628,14 @@
       display: grid;
       gap: 14px;
       margin: 0;
-      max-height: calc(100vh - 24px);
+      max-height: calc(100vh - 80px);
       overflow-y: auto;
       padding: 14px;
       position: fixed;
+      bottom: 70px;
+      right: 14px;
       width: min(420px, calc(100vw - 28px));
-      z-index: 4000;
+      z-index: 9999;
     }
 
     button svg,
@@ -1431,12 +1433,13 @@
       flex-direction: column;
       gap: 2px;
       margin: 0;
-      max-height: calc(100vh - 24px);
+      max-height: calc(100vh - 80px);
       min-width: 190px;
       overflow-y: auto;
       padding: 4px;
       position: fixed;
-      z-index: 4000;
+      bottom: 70px;
+      z-index: 9999;
     }
 
     .dropdown-menu button,
@@ -3164,6 +3167,7 @@
       if (!menu) return;
       menu.style.left = "";
       menu.style.top = "";
+      menu.style.bottom = "";
       menu.style.maxHeight = "";
       menu.style.transformOrigin = "";
     }
@@ -3232,33 +3236,30 @@
           top = Math.max(viewportPad, viewportHeight - viewportPad - naturalHeight);
         }
       } else {
-        // Horizontal layout: panel is at the bottom, so popups should open UPWARDS above the toolbar
-        const spaceAbove = buttonRect.top - gap - viewportPad;
-        const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPad;
-        
-        // Open upwards if toolbar is in bottom half of screen or more space above
-        const openUp = buttonRect.top > (viewportHeight / 2) || spaceAbove >= Math.min(naturalHeight, 280);
-        const availableHeight = Math.max(120, openUp ? spaceAbove : spaceBelow);
-        const menuHeight = Math.min(naturalHeight, availableHeight);
-
+        // Horizontal layout: Toolbar is at the bottom.
+        // We calculate bottom position directly relative to buttonRect or viewport bottom
         left = buttonRect.right - menuWidth;
         if (left < viewportPad) left = buttonRect.left;
         left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
 
-        if (openUp) {
-          top = buttonRect.top - gap - menuHeight;
-          openDown = false;
-        } else {
-          top = buttonRect.bottom + gap;
-          openDown = true;
-        }
-        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
+        const spaceAbove = buttonRect.top - gap - viewportPad;
+        const availableHeight = Math.max(120, Math.min(spaceAbove, viewportHeight - viewportPad * 2));
+        
+        menu.style.position = "fixed";
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.bottom = `${Math.round(viewportHeight - buttonRect.top + gap)}px`;
+        menu.style.top = "auto";
+        menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+        menu.style.zIndex = "9999";
+        menu.style.transformOrigin = "bottom right";
+        return;
       }
 
-      const availableHeight = Math.max(120, openDown ? (viewportHeight - top - viewportPad) : (buttonRect.top - gap - viewportPad));
+      const availableHeight = Math.max(120, viewportHeight - top - viewportPad);
       menu.style.position = "fixed";
       menu.style.left = `${Math.round(left)}px`;
       menu.style.top = `${Math.round(top)}px`;
+      menu.style.bottom = "auto";
       menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
       menu.style.zIndex = "9999";
       menu.style.transformOrigin = (isVerticalLeft || isVerticalRight) ? "top left" : (openDown ? "top right" : "bottom right");
