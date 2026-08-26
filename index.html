@@ -1639,6 +1639,24 @@
       padding: 8px 10px;
     }
 
+    .snippet-editor-item-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .snippet-editor-item-actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .snippet-rename-input {
+      min-width: 0;
+      width: 100%;
+    }
+
     .overflow-menu {
       flex: 0 0 auto;
     }
@@ -3562,8 +3580,15 @@
         const row = document.createElement("div");
         row.className = "snippet-editor-item";
         const label = document.createElement("span");
+        label.className = "snippet-editor-item-name";
         label.textContent = snippet.name;
         label.title = snippet.content;
+        const actions = document.createElement("div");
+        actions.className = "snippet-editor-item-actions";
+        const renameButton = document.createElement("button");
+        renameButton.type = "button";
+        renameButton.textContent = "Переименовать";
+        renameButton.onclick = () => beginSnippetRename(row, snippet);
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.textContent = "Удалить";
@@ -3574,7 +3599,8 @@
           renderSnippetEditorList();
           snippetEditorStatus.textContent = "Сниппет удалён";
         };
-        row.append(label, removeButton);
+        actions.append(renameButton, removeButton);
+        row.append(label, actions);
         snippetEditorList.appendChild(row);
       });
       if (!preferences.snippets.length) {
@@ -3583,6 +3609,55 @@
         empty.textContent = "Сохранённых сниппетов пока нет";
         snippetEditorList.appendChild(empty);
       }
+    }
+
+    function beginSnippetRename(row, snippet) {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "snippet-rename-input";
+      input.maxLength = 80;
+      input.required = true;
+      input.autocomplete = "off";
+      input.value = snippet.name;
+      input.setAttribute("aria-label", `Новое название для ${snippet.name}`);
+
+      const actions = document.createElement("div");
+      actions.className = "snippet-editor-item-actions";
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.textContent = "Сохранить";
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.textContent = "Отмена";
+
+      const saveRename = () => {
+        const name = input.value.trim();
+        if (!name) {
+          input.focus();
+          return;
+        }
+        snippet.name = name;
+        savePreferences();
+        renderSnippetsMenu();
+        renderSnippetEditorList();
+        snippetEditorStatus.textContent = "Сниппет переименован";
+      };
+      saveButton.onclick = saveRename;
+      cancelButton.onclick = renderSnippetEditorList;
+      input.onkeydown = event => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          saveRename();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          renderSnippetEditorList();
+        }
+      };
+
+      actions.append(saveButton, cancelButton);
+      row.replaceChildren(input, actions);
+      input.focus();
+      input.select();
     }
 
     function openSnippetEditor() {
