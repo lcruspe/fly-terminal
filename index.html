@@ -1423,7 +1423,7 @@
       transition: transform 140ms ease;
     }
 
-    .dropdown[open] > summary::after {
+    .dropdown[open] summary::after {
       transform: rotate(180deg);
     }
 
@@ -1484,32 +1484,71 @@
       min-width: 240px;
     }
 
-    .apps-cascade-menu {
-      overflow: visible;
+    .apps-launcher[aria-expanded="true"] {
+      background: var(--control-strong);
+      border-color: var(--focus);
     }
 
-    .cascade-menu {
-      position: relative;
+    .apps-flyout {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      box-shadow: 0 12px 32px rgba(63, 45, 25, 0.18);
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin: 0;
+      max-width: calc(100vw - 20px);
+      min-width: 220px;
+      overflow-y: auto;
+      padding: 4px;
+      position: fixed;
+      z-index: 10020;
     }
 
-    .cascade-menu > summary {
+    .apps-flyout[hidden] {
+      display: none;
+    }
+
+    .apps-flyout-submenu {
+      min-width: min(300px, calc(100vw - 20px));
+      z-index: 10021;
+    }
+
+    .apps-flyout button,
+    .apps-flyout a.button {
       align-items: center;
+      background: transparent;
+      border: 0;
       border-radius: 6px;
+      box-sizing: border-box;
+      color: var(--ink);
       cursor: pointer;
       display: flex;
       font: 600 13px/1 "Avenir Next", "Segoe UI", sans-serif;
       gap: 8px;
-      justify-content: space-between;
-      list-style: none;
+      justify-content: flex-start;
+      overflow: hidden;
       padding: 10px 12px;
+      text-align: left;
+      text-decoration: none;
+      text-overflow: ellipsis;
       white-space: nowrap;
+      width: 100%;
     }
 
-    .cascade-menu > summary::-webkit-details-marker {
-      display: none;
+    .apps-flyout button:hover,
+    .apps-flyout button:focus-visible,
+    .apps-flyout button[aria-expanded="true"],
+    .apps-flyout a.button:hover,
+    .apps-flyout a.button:focus-visible {
+      background: var(--control);
+      outline: none;
+      transform: none;
     }
 
-    .cascade-menu > summary::after {
+    .apps-cascade-trigger::after {
       border-bottom: 4px solid transparent;
       border-left: 5px solid var(--muted);
       border-top: 4px solid transparent;
@@ -1517,21 +1556,13 @@
       margin-left: auto;
     }
 
-    .cascade-menu > summary:hover,
-    .cascade-menu[open] > summary {
-      background: var(--control);
-    }
-
-    .cascade-submenu {
-      left: calc(100% + 5px);
-      max-height: min(420px, calc(100vh - 32px));
-      min-width: 260px;
-      overflow-y: auto;
-      position: absolute;
-      top: -4px;
+    .apps-flyout .divider {
+      border-top: 1px solid var(--border);
+      margin: 2px 8px;
     }
 
     .snippet-menu-item {
+      align-items: start !important;
       display: grid !important;
       gap: 3px !important;
       grid-template-columns: minmax(0, 1fr);
@@ -1546,14 +1577,33 @@
       text-overflow: ellipsis;
     }
 
-    .snippet-editor-panel {
+    .snippet-editor-dialog {
+      background: var(--panel-solid);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--ink);
       max-width: min(620px, calc(100vw - 32px));
+      padding: 0;
       width: 620px;
+    }
+
+    .snippet-editor-dialog::backdrop {
+      background: rgba(20, 18, 15, 0.42);
+      backdrop-filter: blur(3px);
+    }
+
+    .snippet-editor-panel {
+      padding: 18px;
     }
 
     .snippet-editor-form {
       display: grid;
       gap: 10px;
+    }
+
+    .snippet-editor-form label {
+      display: grid;
+      gap: 6px;
     }
 
     .snippet-editor-form input,
@@ -1780,26 +1830,10 @@
           </div>
 
           <div class="control-group session-controls" id="sessionControls">
-            <details class="dropdown apps-menu" id="appsMenu">
-              <summary class="button">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
-                Apps
-              </summary>
-              <div class="dropdown-menu apps-cascade-menu" id="appsList">
-                <details class="cascade-menu" id="macAppsMenu">
-                  <summary>Mac Apps</summary>
-                  <div class="dropdown-menu cascade-submenu" id="macAppsList"><button type="button" disabled>Загрузка...</button></div>
-                </details>
-                <details class="cascade-menu" id="vmAppsMenu">
-                  <summary>VM Apps</summary>
-                  <div class="dropdown-menu cascade-submenu" id="vmAppsList"><button type="button" disabled>Загрузка...</button></div>
-                </details>
-                <details class="cascade-menu" id="snippetsMenu">
-                  <summary>Snippets</summary>
-                  <div class="dropdown-menu cascade-submenu" id="snippetsList"></div>
-                </details>
-              </div>
-            </details>
+            <button type="button" class="apps-launcher" id="appsMenuButton" aria-controls="appsRootMenu" aria-expanded="false" aria-haspopup="menu">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
+              Apps
+            </button>
             <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
               Новое окно
@@ -1836,23 +1870,6 @@
                 <div class="shortcut-row"><span>Переименовать вкладку</span><span class="shortcut-key">Двойной клик</span></div>
                 <div class="shortcut-row"><span>Закрыть окно/модалку</span><span class="shortcut-key">Esc</span></div>
               </div>
-            </div>
-          </div>
-          <div id="snippetEditor" class="shortcuts-modal-backdrop" hidden>
-            <div class="shortcuts-modal-panel snippet-editor-panel" role="dialog" aria-modal="true" aria-labelledby="snippetEditorTitle">
-              <div class="shortcuts-modal-header">
-                <h3 id="snippetEditorTitle">Snippets</h3>
-                <button type="button" id="closeSnippetEditor" aria-label="Закрыть">✕</button>
-              </div>
-              <form id="snippetEditorForm" class="snippet-editor-form">
-                <label>Название<input type="text" id="snippetName" maxlength="80" required autocomplete="off" /></label>
-                <label>Текст<textarea id="snippetContent" maxlength="4000" required spellcheck="false"></textarea></label>
-                <div class="snippet-editor-actions">
-                  <span class="settings-action-status" id="snippetEditorStatus"></span>
-                  <button type="submit">Добавить сниппет</button>
-                </div>
-              </form>
-              <div class="snippet-editor-list" id="snippetEditorList"></div>
             </div>
           </div>
           <details class="settings" id="settingsMenu">
@@ -1992,6 +2009,46 @@
         <div class="settings-action-status" id="containerFilePickerStatus"></div>
         <button type="button" id="containerFileCancelBtn">Закрыть</button>
       </div>
+    </div>
+  </dialog>
+
+  <div class="apps-flyout" id="appsRootMenu" role="menu" aria-labelledby="appsMenuButton" hidden>
+    <button type="button" class="apps-cascade-trigger" data-apps-submenu="macAppsList" aria-expanded="false" aria-haspopup="menu">Mac Apps</button>
+    <button type="button" class="apps-cascade-trigger" data-apps-submenu="vmAppsList" aria-expanded="false" aria-haspopup="menu">VM Apps</button>
+    <button type="button" class="apps-cascade-trigger" data-apps-submenu="snippetsList" aria-expanded="false" aria-haspopup="menu">Snippets</button>
+  </div>
+
+  <div class="apps-flyout apps-flyout-submenu" id="macAppsList" role="menu" hidden>
+    <button type="button" id="addDesktop" hidden title="Открыть рабочий стол Mac mini">Desktop</button>
+    <a class="button" id="openDesktopTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Mac Desktop в отдельной вкладке">↗ Desktop</a>
+    <div class="divider" data-static-divider hidden></div>
+    <div data-dynamic-app-list><button type="button" disabled>Загрузка...</button></div>
+  </div>
+
+  <div class="apps-flyout apps-flyout-submenu" id="vmAppsList" role="menu" hidden>
+    <button type="button" id="addBrowser" hidden>Browser</button>
+    <a class="button" id="openBrowserTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Remote Browser в отдельной вкладке">↗ Browser</a>
+    <div class="divider" data-static-divider hidden></div>
+    <div data-dynamic-app-list><button type="button" disabled>Загрузка...</button></div>
+  </div>
+
+  <div class="apps-flyout apps-flyout-submenu" id="snippetsList" role="menu" hidden></div>
+
+  <dialog class="snippet-editor-dialog" id="snippetEditorDialog" aria-labelledby="snippetEditorTitle">
+    <div class="snippet-editor-panel">
+      <div class="shortcuts-modal-header">
+        <h3 id="snippetEditorTitle">Snippets</h3>
+        <button type="button" id="closeSnippetEditor" aria-label="Закрыть">✕</button>
+      </div>
+      <form id="snippetEditorForm" class="snippet-editor-form">
+        <label>Название<input type="text" id="snippetName" maxlength="80" required autocomplete="off" /></label>
+        <label>Текст<textarea id="snippetContent" maxlength="4000" required spellcheck="false"></textarea></label>
+        <div class="snippet-editor-actions">
+          <span class="settings-action-status" id="snippetEditorStatus" aria-live="polite"></span>
+          <button type="submit">Добавить сниппет</button>
+        </div>
+      </form>
+      <div class="snippet-editor-list" id="snippetEditorList"></div>
     </div>
   </dialog>
   
@@ -2508,15 +2565,12 @@
     // Buttons
     const addBrowserBtn = document.getElementById("addBrowser");
     const addDesktopBtn = document.getElementById("addDesktop");
-    const macAppsMenu = document.getElementById("macAppsMenu");
-    const macAppsList = document.getElementById("macAppsList");
-    const appsMenu = document.getElementById("appsMenu");
-    const appsList = document.getElementById("appsList");
-    const vmAppsMenu = document.getElementById("vmAppsMenu");
-    const vmAppsList = document.getElementById("vmAppsList");
-    const snippetsMenu = document.getElementById("snippetsMenu");
+    const appsMenuButton = document.getElementById("appsMenuButton");
+    const appsRootMenu = document.getElementById("appsRootMenu");
+    const macAppsList = document.querySelector("#macAppsList [data-dynamic-app-list]");
+    const vmAppsList = document.querySelector("#vmAppsList [data-dynamic-app-list]");
     const snippetsList = document.getElementById("snippetsList");
-    const snippetEditor = document.getElementById("snippetEditor");
+    const snippetEditorDialog = document.getElementById("snippetEditorDialog");
     const snippetEditorForm = document.getElementById("snippetEditorForm");
     const snippetNameInput = document.getElementById("snippetName");
     const snippetContentInput = document.getElementById("snippetContent");
@@ -2579,6 +2633,8 @@
     let responsiveToolbarMutationObserver = null;
     let responsiveToolbarFrame = null;
     let responsiveToolbarItems = [];
+    let activeAppsSubmenu = null;
+    let appsSubmenuCloseTimer = null;
 
     function createId() { return Math.random().toString(36).substr(2, 9); }
     function createSessionId() { return (crypto.randomUUID ? crypto.randomUUID() : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9._-]/g, "-"); }
@@ -3109,6 +3165,7 @@
           openBrowserTabBtn.href = browserConfig.url;
         }
       }
+      refreshAppsSubmenuDivider("vmAppsList");
     }
 
     async function loadDesktopConfig() {
@@ -3131,6 +3188,7 @@
           openDesktopTabBtn.href = desktopConfig.url;
         }
       }
+      refreshAppsSubmenuDivider("macAppsList");
     }
 
     function appCategoryLabel(app) {
@@ -3144,32 +3202,14 @@
 
     function renderAppsMenu() {
       vmAppsList.replaceChildren();
-      if (browserConfig.enabled) {
-        const browserButton = document.createElement("button");
-        browserButton.type = "button";
-        browserButton.textContent = "Browser";
-        browserButton.onclick = () => {
-          appsMenu.open = false;
-          addBrowserTab();
-        };
-        vmAppsList.appendChild(browserButton);
-
-        const browserWindowLink = document.createElement("a");
-        browserWindowLink.className = "button";
-        browserWindowLink.href = browserConfig.url;
-        browserWindowLink.target = "_blank";
-        browserWindowLink.rel = "noreferrer";
-        browserWindowLink.textContent = "↗ Browser в новом окне";
-        browserWindowLink.onclick = () => { appsMenu.open = false; };
-        vmAppsList.appendChild(browserWindowLink);
-      }
       if (!browserApps.length) {
         const empty = document.createElement("button");
         empty.type = "button";
         empty.textContent = browserAppsError ? `Обновить список: ${browserAppsError}` : "Обновить список";
         empty.onclick = loadBrowserApps;
         vmAppsList.appendChild(empty);
-        requestAnimationFrame(positionOpenFloatingMenus);
+        refreshAppsSubmenuDivider("vmAppsList");
+        requestAnimationFrame(positionOpenAppsMenus);
         return;
       }
 
@@ -3196,7 +3236,8 @@
         button.onclick = () => launchApp(app.id, app.name);
         vmAppsList.appendChild(button);
       });
-      requestAnimationFrame(positionOpenFloatingMenus);
+      refreshAppsSubmenuDivider("vmAppsList");
+      requestAnimationFrame(positionOpenAppsMenus);
     }
 
     async function loadBrowserApps(attempt = 0) {
@@ -3227,7 +3268,7 @@
         if (!response.ok || !payload.ok) {
           throw new Error(payload.details || payload.error || "launch_failed");
         }
-        appsMenu.open = false;
+        closeAppsMenu();
         addBrowserTab(appName, appName, "remote app");
         setStatusText(`${appName} запущен во вкладке`, 2600);
       } catch (error) {
@@ -3238,32 +3279,14 @@
     function renderMacAppsMenu() {
       if (!macAppsList) return;
       macAppsList.replaceChildren();
-      if (desktopConfig.enabled) {
-        const desktopButton = document.createElement("button");
-        desktopButton.type = "button";
-        desktopButton.textContent = "Mac Desktop";
-        desktopButton.onclick = () => {
-          appsMenu.open = false;
-          addDesktopTab();
-        };
-        macAppsList.appendChild(desktopButton);
-
-        const desktopWindowLink = document.createElement("a");
-        desktopWindowLink.className = "button";
-        desktopWindowLink.href = desktopConfig.url;
-        desktopWindowLink.target = "_blank";
-        desktopWindowLink.rel = "noreferrer";
-        desktopWindowLink.textContent = "↗ Mac Desktop в новом окне";
-        desktopWindowLink.onclick = () => { appsMenu.open = false; };
-        macAppsList.appendChild(desktopWindowLink);
-      }
       if (!macApps.length) {
         const empty = document.createElement("button");
         empty.type = "button";
         empty.textContent = macAppsError ? `Обновить список: ${macAppsError}` : "Обновить список";
         empty.onclick = () => loadMacApps();
         macAppsList.appendChild(empty);
-        requestAnimationFrame(positionOpenFloatingMenus);
+        refreshAppsSubmenuDivider("macAppsList");
+        requestAnimationFrame(positionOpenAppsMenus);
         return;
       }
 
@@ -3288,12 +3311,13 @@
 
         button.append(icon, name, meta);
         button.onclick = () => {
-          if (macAppsMenu) macAppsMenu.open = false;
+          closeAppsMenu();
           addMacAppTab(app.name);
         };
         macAppsList.appendChild(button);
       });
-      requestAnimationFrame(positionOpenFloatingMenus);
+      refreshAppsSubmenuDivider("macAppsList");
+      requestAnimationFrame(positionOpenAppsMenus);
     }
 
     async function loadMacApps(attempt = 0) {
@@ -3331,27 +3355,151 @@
       return tab;
     }
 
-    function closeAppsCascadeMenus(except = null) {
-      [macAppsMenu, vmAppsMenu, snippetsMenu].forEach(menu => {
-        if (menu && menu !== except) menu.open = false;
+    function appsSubmenuElement(id) {
+      return document.getElementById(id);
+    }
+
+    function appsMenuItems(menu) {
+      return Array.from(menu?.querySelectorAll('button:not([disabled]), a.button[href]') || [])
+        .filter(item => !item.hidden && getComputedStyle(item).display !== "none");
+    }
+
+    function refreshAppsSubmenuDivider(submenuId) {
+      const submenu = appsSubmenuElement(submenuId);
+      const divider = submenu?.querySelector("[data-static-divider]");
+      const dynamicList = submenu?.querySelector("[data-dynamic-app-list]");
+      if (!divider || !dynamicList) return;
+      const hasStaticAction = Array.from(submenu.children).some(element => (
+        element !== divider && element !== dynamicList && !element.hidden && getComputedStyle(element).display !== "none"
+      ));
+      divider.hidden = !hasStaticAction || dynamicList.childElementCount === 0;
+    }
+
+    function resetAppsPanelPosition(panel) {
+      if (!panel) return;
+      panel.style.left = "0px";
+      panel.style.right = "auto";
+      panel.style.top = "0px";
+      panel.style.bottom = "auto";
+      panel.style.maxHeight = "";
+    }
+
+    function positionAppsRootMenu() {
+      if (!appsRootMenu || appsRootMenu.hidden || !appsMenuButton) return;
+      const pad = 10;
+      const gap = 8;
+      resetAppsPanelPosition(appsRootMenu);
+      const anchor = appsMenuButton.getBoundingClientRect();
+      const panelRect = appsRootMenu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const panelWidth = Math.min(panelRect.width, viewportWidth - pad * 2);
+      const isVerticalLeft = shellEl?.classList.contains("orientation-vertical-left");
+      const isVerticalRight = shellEl?.classList.contains("orientation-vertical-right");
+
+      let left;
+      let top;
+      let maxHeight;
+      if (isVerticalLeft || isVerticalRight) {
+        const rightSpace = viewportWidth - anchor.right - gap - pad;
+        const leftSpace = anchor.left - gap - pad;
+        const openRight = isVerticalLeft ? (rightSpace >= panelWidth || rightSpace >= leftSpace) : !(leftSpace >= panelWidth || leftSpace >= rightSpace);
+        left = openRight ? anchor.right + gap : anchor.left - panelWidth - gap;
+        maxHeight = viewportHeight - pad * 2;
+        top = anchor.top;
+      } else {
+        const above = anchor.top - gap - pad;
+        const below = viewportHeight - anchor.bottom - gap - pad;
+        const openAbove = above >= Math.min(panelRect.height, 120) || above >= below;
+        maxHeight = Math.max(80, openAbove ? above : below);
+        top = openAbove ? anchor.top - gap - Math.min(panelRect.height, maxHeight) : anchor.bottom + gap;
+        left = anchor.right - panelWidth;
+      }
+
+      const panelHeight = Math.min(panelRect.height, maxHeight);
+      left = clampNumber(left, pad, Math.max(pad, viewportWidth - pad - panelWidth));
+      top = clampNumber(top, pad, Math.max(pad, viewportHeight - pad - panelHeight));
+      appsRootMenu.style.left = `${Math.round(left)}px`;
+      appsRootMenu.style.top = `${Math.round(top)}px`;
+      appsRootMenu.style.maxHeight = `${Math.floor(maxHeight)}px`;
+    }
+
+    function positionAppsSubmenu(trigger, submenu) {
+      if (!trigger || !submenu || submenu.hidden) return;
+      const pad = 10;
+      const gap = 6;
+      resetAppsPanelPosition(submenu);
+      const anchor = trigger.getBoundingClientRect();
+      const panelRect = submenu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const panelWidth = Math.min(panelRect.width, viewportWidth - pad * 2);
+      const rightSpace = viewportWidth - anchor.right - gap - pad;
+      const leftSpace = anchor.left - gap - pad;
+      const openRight = rightSpace >= panelWidth || rightSpace >= leftSpace;
+      const left = openRight ? anchor.right + gap : anchor.left - panelWidth - gap;
+      const maxHeight = viewportHeight - pad * 2;
+      const panelHeight = Math.min(panelRect.height, maxHeight);
+      const top = clampNumber(anchor.top - 4, pad, Math.max(pad, viewportHeight - pad - panelHeight));
+      submenu.style.left = `${Math.round(clampNumber(left, pad, Math.max(pad, viewportWidth - pad - panelWidth)))}px`;
+      submenu.style.top = `${Math.round(top)}px`;
+      submenu.style.maxHeight = `${Math.floor(maxHeight)}px`;
+    }
+
+    function positionOpenAppsMenus() {
+      positionAppsRootMenu();
+      if (activeAppsSubmenu) {
+        const trigger = appsRootMenu?.querySelector(`[data-apps-submenu="${activeAppsSubmenu.id}"]`);
+        positionAppsSubmenu(trigger, activeAppsSubmenu);
+      }
+    }
+
+    function closeAppsSubmenu({ focusTrigger = false } = {}) {
+      clearTimeout(appsSubmenuCloseTimer);
+      if (!activeAppsSubmenu) return;
+      const trigger = appsRootMenu?.querySelector(`[data-apps-submenu="${activeAppsSubmenu.id}"]`);
+      activeAppsSubmenu.hidden = true;
+      resetAppsPanelPosition(activeAppsSubmenu);
+      trigger?.setAttribute("aria-expanded", "false");
+      activeAppsSubmenu = null;
+      if (focusTrigger) trigger?.focus();
+    }
+
+    function closeAppsMenu({ restoreFocus = false } = {}) {
+      closeAppsSubmenu();
+      if (appsRootMenu) appsRootMenu.hidden = true;
+      appsMenuButton?.setAttribute("aria-expanded", "false");
+      if (restoreFocus) appsMenuButton?.focus();
+    }
+
+    function openAppsMenu({ focusFirst = false } = {}) {
+      if (!appsRootMenu || !appsMenuButton) return;
+      document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach(details => details.removeAttribute("open"));
+      appsRootMenu.hidden = false;
+      appsMenuButton.setAttribute("aria-expanded", "true");
+      requestAnimationFrame(() => {
+        positionAppsRootMenu();
+        if (focusFirst) appsMenuItems(appsRootMenu)[0]?.focus();
       });
     }
 
-    function positionCascadeMenu(menu) {
-      const submenu = menu?.querySelector(":scope > .cascade-submenu");
+    function openAppsSubmenu(trigger, { focusFirst = false } = {}) {
+      const submenu = appsSubmenuElement(trigger?.dataset.appsSubmenu);
       if (!submenu) return;
-      submenu.style.left = "calc(100% + 5px)";
-      submenu.style.right = "auto";
-      submenu.style.top = "-4px";
-      const rect = submenu.getBoundingClientRect();
-      if (rect.right > window.innerWidth - 8) {
-        submenu.style.left = "auto";
-        submenu.style.right = "calc(100% + 5px)";
-      }
-      const adjustedRect = submenu.getBoundingClientRect();
-      if (adjustedRect.bottom > window.innerHeight - 8) {
-        submenu.style.top = `${Math.min(-4, window.innerHeight - 8 - adjustedRect.bottom - 4)}px`;
-      }
+      clearTimeout(appsSubmenuCloseTimer);
+      if (activeAppsSubmenu && activeAppsSubmenu !== submenu) closeAppsSubmenu();
+      activeAppsSubmenu = submenu;
+      submenu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      requestAnimationFrame(() => {
+        positionAppsSubmenu(trigger, submenu);
+        if (focusFirst) appsMenuItems(submenu)[0]?.focus();
+      });
+    }
+
+    function scheduleAppsSubmenuClose() {
+      clearTimeout(appsSubmenuCloseTimer);
+      appsSubmenuCloseTimer = setTimeout(() => closeAppsSubmenu(), 180);
     }
 
     function renderSnippetsMenu() {
@@ -3372,13 +3520,12 @@
             await writeClipboardText(snippet.content);
             setStatusText(`Сниппет «${snippet.name}» скопирован`, 2400);
           } catch (error) {
-            setStatusText(`Не удалось скопировать сниппет: ${error.message || error}`, 3200);
+            setStatusText("Не удалось скопировать сниппет", 3000);
           }
-          appsMenu.open = false;
+          closeAppsMenu();
         };
         snippetsList.appendChild(button);
       });
-
       if (preferences.snippets.length) {
         const divider = document.createElement("div");
         divider.className = "divider";
@@ -3389,10 +3536,10 @@
       manageButton.textContent = preferences.snippets.length ? "Управлять сниппетами…" : "Добавить сниппет…";
       manageButton.onclick = openSnippetEditor;
       snippetsList.appendChild(manageButton);
-      requestAnimationFrame(positionOpenFloatingMenus);
+      requestAnimationFrame(positionOpenAppsMenus);
     }
 
-    function renderSnippetEditor() {
+    function renderSnippetEditorList() {
       snippetEditorList.replaceChildren();
       preferences.snippets.forEach(snippet => {
         const row = document.createElement("div");
@@ -3407,7 +3554,7 @@
           preferences.snippets = preferences.snippets.filter(item => item.id !== snippet.id);
           savePreferences();
           renderSnippetsMenu();
-          renderSnippetEditor();
+          renderSnippetEditorList();
           snippetEditorStatus.textContent = "Сниппет удалён";
         };
         row.append(label, removeButton);
@@ -3415,52 +3562,106 @@
       });
       if (!preferences.snippets.length) {
         const empty = document.createElement("span");
-        empty.className = "settings-action-status";
-        empty.textContent = "Сниппетов пока нет";
+        empty.className = "hint";
+        empty.textContent = "Сохранённых сниппетов пока нет";
         snippetEditorList.appendChild(empty);
       }
     }
 
     function openSnippetEditor() {
-      appsMenu.open = false;
-      snippetEditor.hidden = false;
+      closeAppsMenu();
+      renderSnippetEditorList();
       snippetEditorStatus.textContent = "";
-      renderSnippetEditor();
+      if (!snippetEditorDialog.open) snippetEditorDialog.showModal();
       setTimeout(() => snippetNameInput.focus(), 0);
     }
 
     function closeSnippetEditor() {
-      snippetEditor.hidden = true;
-      snippetEditorForm.reset();
+      if (snippetEditorDialog?.open) snippetEditorDialog.close();
+      snippetEditorForm?.reset();
     }
 
-    [macAppsMenu, vmAppsMenu, snippetsMenu].forEach(menu => {
-      menu?.addEventListener("toggle", () => {
-        if (menu.open) {
-          closeAppsCascadeMenus(menu);
-          requestAnimationFrame(() => positionCascadeMenu(menu));
+    function bindAppsMenu() {
+      if (!appsMenuButton || !appsRootMenu) return;
+      appsMenuButton.onclick = () => {
+        if (appsRootMenu.hidden) openAppsMenu();
+        else closeAppsMenu();
+      };
+      appsMenuButton.onkeydown = event => {
+        if (["ArrowDown", "Enter", " "].includes(event.key)) {
+          event.preventDefault();
+          openAppsMenu({ focusFirst: true });
         }
-      });
-    });
+      };
 
-    document.getElementById("closeSnippetEditor").onclick = closeSnippetEditor;
-    snippetEditor.onclick = event => {
-      if (event.target === snippetEditor) closeSnippetEditor();
-    };
-    snippetEditorForm.onsubmit = event => {
-      event.preventDefault();
-      const name = snippetNameInput.value.trim();
-      const content = snippetContentInput.value;
-      if (!name || !content) return;
-      preferences.snippets.push({ id: createId(), name, content });
-      preferences.snippets = preferences.snippets.slice(0, 50);
-      savePreferences();
-      snippetEditorForm.reset();
-      snippetEditorStatus.textContent = "Сниппет добавлен";
+      appsRootMenu.querySelectorAll("[data-apps-submenu]").forEach(trigger => {
+        trigger.onmouseenter = () => openAppsSubmenu(trigger);
+        trigger.onmouseleave = scheduleAppsSubmenuClose;
+        trigger.onclick = () => openAppsSubmenu(trigger, { focusFirst: true });
+        trigger.onkeydown = event => {
+          if (["ArrowRight", "Enter", " "].includes(event.key)) {
+            event.preventDefault();
+            openAppsSubmenu(trigger, { focusFirst: true });
+          }
+        };
+      });
+
+      ["macAppsList", "vmAppsList", "snippetsList"].forEach(id => {
+        const submenu = appsSubmenuElement(id);
+        submenu.onmouseenter = () => clearTimeout(appsSubmenuCloseTimer);
+        submenu.onmouseleave = scheduleAppsSubmenuClose;
+        submenu.addEventListener("keydown", event => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            closeAppsSubmenu({ focusTrigger: true });
+          }
+        });
+      });
+
+      [appsRootMenu, ...["macAppsList", "vmAppsList", "snippetsList"].map(appsSubmenuElement)].forEach(menu => {
+        menu.addEventListener("keydown", event => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          const items = appsMenuItems(menu);
+          if (!items.length) return;
+          event.preventDefault();
+          const currentIndex = items.indexOf(document.activeElement);
+          if (event.key === "Home") items[0].focus();
+          else if (event.key === "End") items[items.length - 1].focus();
+          else if (event.key === "ArrowDown") items[(currentIndex + 1 + items.length) % items.length].focus();
+          else items[(currentIndex - 1 + items.length) % items.length].focus();
+        });
+      });
+
+      document.getElementById("openBrowserTab")?.addEventListener("click", () => closeAppsMenu());
+      document.getElementById("openDesktopTab")?.addEventListener("click", () => closeAppsMenu());
+      document.addEventListener("pointerdown", event => {
+        if (appsRootMenu.hidden) return;
+        const insideMenu = event.composedPath().some(node => node === appsMenuButton || node === appsRootMenu || node === activeAppsSubmenu);
+        if (!insideMenu) closeAppsMenu();
+      });
+      window.addEventListener("resize", positionOpenAppsMenus, { passive: true });
+      window.addEventListener("scroll", positionOpenAppsMenus, { passive: true });
+
+      document.getElementById("closeSnippetEditor").onclick = closeSnippetEditor;
+      snippetEditorDialog.addEventListener("click", event => {
+        if (event.target === snippetEditorDialog) closeSnippetEditor();
+      });
+      snippetEditorForm.onsubmit = event => {
+        event.preventDefault();
+        const name = snippetNameInput.value.trim();
+        const content = snippetContentInput.value;
+        if (!name || !content.trim()) return;
+        preferences.snippets.push({ id: createId(), name, content });
+        preferences.snippets = preferences.snippets.slice(-50);
+        savePreferences();
+        renderSnippetsMenu();
+        renderSnippetEditorList();
+        snippetEditorForm.reset();
+        snippetEditorStatus.textContent = "Сниппет добавлен";
+        snippetNameInput.focus();
+      };
       renderSnippetsMenu();
-      renderSnippetEditor();
-      snippetNameInput.focus();
-    };
+    }
 
     function floatingMenuFor(details) {
       return details?.querySelector(":scope > .settings-panel, :scope > .dropdown-menu");
@@ -3515,7 +3716,6 @@
 
       const buttonRect = summary.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
-      const fixedBase = fixedPositionBaseFor(menu);
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
 
@@ -3564,27 +3764,23 @@
 
       } else {
         // --- HORIZONTAL BOTTOM TOOLBAR LAYOUT ---
-        // The toolbar's backdrop-filter creates a containing block for fixed
-        // descendants, so convert viewport coordinates to that local space.
+        // Toolbar is at the bottom of the screen. Popups MUST anchor to the bottom and grow upward.
         const spaceAbove = buttonRect.top - gap - viewportPad;
         maxHeight = Math.max(120, Math.min(spaceAbove, viewportHeight - viewportPad * 2));
 
         maxWidth = viewportWidth - viewportPad * 2;
         const menuWidth = Math.min(menuRect.width, maxWidth);
-        const menuHeight = Math.min(menuRect.height, maxHeight);
         left = buttonRect.right - menuWidth;
         if (left < viewportPad) left = buttonRect.left;
         left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
-        top = clampNumber(
-          buttonRect.top - gap - menuHeight,
-          viewportPad,
-          Math.max(viewportPad, viewportHeight - viewportPad - menuHeight)
-        );
+
+        // Use bottom anchor directly: distance from bottom of screen to top of toolbar button
+        const bottomDistance = viewportHeight - buttonRect.top + gap;
 
         menu.style.position = "fixed";
-        menu.style.left = `${Math.round(left - fixedBase.left)}px`;
-        menu.style.top = `${Math.round(top - fixedBase.top)}px`;
-        menu.style.bottom = "auto";
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.bottom = `${Math.round(bottomDistance)}px`;
+        menu.style.top = "auto";
         menu.style.right = "auto";
         menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
         menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
@@ -3595,8 +3791,8 @@
 
       // 2. Apply vertical layout properties
       menu.style.position = "fixed";
-      menu.style.left = `${Math.round(left - fixedBase.left)}px`;
-      menu.style.top = `${Math.round(top - fixedBase.top)}px`;
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
       menu.style.bottom = "auto";
       menu.style.right = "auto";
       menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
@@ -3728,7 +3924,7 @@
 
       const toolbarActions = [
         togglePanelBtn,
-        appsMenu?.querySelector(":scope > summary"),
+        appsMenuButton,
         directLink,
         reloadActiveBtn,
         copySelectionBtn,
@@ -3780,6 +3976,7 @@
       if (!toolbarControls || !overflowMenu || !overflowMenuList) return;
 
       restoreResponsiveToolbarItems();
+      closeAppsMenu();
       setResponsiveToolbarIconOnly(false);
       overflowMenu.open = false;
       overflowMenu.hidden = true;
@@ -5256,9 +5453,9 @@
         }
       }
       if (event.key === "Escape") {
+        if (appsRootMenu && !appsRootMenu.hidden) closeAppsMenu({ restoreFocus: true });
         if (!commandPalette.hidden) closeCommandPalette();
         if (shortcutsModal && !shortcutsModal.hidden) closeShortcutsModal();
-        if (snippetEditor && !snippetEditor.hidden) closeSnippetEditor();
         if (fullscreenTabId) setFrameFullscreen(fullscreenTabId, false);
       }
     });
@@ -5305,6 +5502,7 @@
       savePreferences();
     });
     bindFloatingMenus();
+    bindAppsMenu();
     bindResponsiveToolbar();
     if (documentsUploadBtn) documentsUploadBtn.onclick = uploadDocumentFiles;
     if (documentsRefreshBtn) documentsRefreshBtn.onclick = () => loadDocumentFiles();

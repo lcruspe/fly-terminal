@@ -1748,7 +1748,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             return
         send_json(self, 200, {"ok": True, "app": app_name})
 
-    def _read_json_body(self, max_bytes=65536):
+    def _read_json_body(self, max_bytes=262144):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
