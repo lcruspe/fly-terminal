@@ -1423,7 +1423,7 @@
       transition: transform 140ms ease;
     }
 
-    .dropdown[open] summary::after {
+    .dropdown[open] > summary::after {
       transform: rotate(180deg);
     }
 
@@ -1482,6 +1482,111 @@
     .apps-menu .dropdown-menu {
       max-height: min(360px, calc(100vh - 160px));
       min-width: 240px;
+    }
+
+    .apps-cascade-menu {
+      overflow: visible;
+    }
+
+    .cascade-menu {
+      position: relative;
+    }
+
+    .cascade-menu > summary {
+      align-items: center;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      font: 600 13px/1 "Avenir Next", "Segoe UI", sans-serif;
+      gap: 8px;
+      justify-content: space-between;
+      list-style: none;
+      padding: 10px 12px;
+      white-space: nowrap;
+    }
+
+    .cascade-menu > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .cascade-menu > summary::after {
+      border-bottom: 4px solid transparent;
+      border-left: 5px solid var(--muted);
+      border-top: 4px solid transparent;
+      content: "";
+      margin-left: auto;
+    }
+
+    .cascade-menu > summary:hover,
+    .cascade-menu[open] > summary {
+      background: var(--control);
+    }
+
+    .cascade-submenu {
+      left: calc(100% + 5px);
+      max-height: min(420px, calc(100vh - 32px));
+      min-width: 260px;
+      overflow-y: auto;
+      position: absolute;
+      top: -4px;
+    }
+
+    .snippet-menu-item {
+      display: grid !important;
+      gap: 3px !important;
+      grid-template-columns: minmax(0, 1fr);
+      line-height: 1.15 !important;
+    }
+
+    .snippet-menu-preview {
+      color: var(--muted);
+      font: 500 11px/1.25 ui-monospace, "SFMono-Regular", Consolas, monospace;
+      max-width: 36ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .snippet-editor-panel {
+      max-width: min(620px, calc(100vw - 32px));
+      width: 620px;
+    }
+
+    .snippet-editor-form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .snippet-editor-form input,
+    .snippet-editor-form textarea {
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .snippet-editor-form textarea {
+      min-height: 130px;
+      resize: vertical;
+    }
+
+    .snippet-editor-actions,
+    .snippet-editor-item {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .snippet-editor-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .snippet-editor-item {
+      background: var(--control);
+      border-radius: 7px;
+      padding: 8px 10px;
     }
 
     .overflow-menu {
@@ -1675,38 +1780,24 @@
           </div>
 
           <div class="control-group session-controls" id="sessionControls">
-            <button type="button" id="addBrowser" hidden>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/></svg>
-              Browser
-            </button>
-            <a class="button" id="openBrowserTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Remote Browser в отдельной вкладке">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/><path d="M11 5l3-3M11 2h3v3" stroke-width="1.3"/></svg>
-              ↗ Browser
-            </a>
-            <button type="button" id="addDesktop" hidden title="Открыть рабочий стол Mac mini">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/></svg>
-              Desktop
-            </button>
-            <a class="button" id="openDesktopTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Mac Desktop в отдельной вкладке">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/><path d="M11 5l3-3M11 2h3v3" stroke-width="1.3"/></svg>
-              ↗ Desktop
-            </a>
-            <details class="dropdown mac-apps-menu" id="macAppsMenu" hidden>
-              <summary class="button" title="Открыть окно приложения macOS в отдельной вкладке">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
-                Приложения Mac
-              </summary>
-              <div class="dropdown-menu" id="macAppsList">
-                <button type="button" disabled>Загрузка...</button>
-              </div>
-            </details>
-            <details class="dropdown apps-menu" id="appsMenu" hidden>
+            <details class="dropdown apps-menu" id="appsMenu">
               <summary class="button">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
-                Приложения
+                Apps
               </summary>
-              <div class="dropdown-menu" id="appsList">
-                <button type="button" disabled>Загрузка...</button>
+              <div class="dropdown-menu apps-cascade-menu" id="appsList">
+                <details class="cascade-menu" id="macAppsMenu">
+                  <summary>Mac Apps</summary>
+                  <div class="dropdown-menu cascade-submenu" id="macAppsList"><button type="button" disabled>Загрузка...</button></div>
+                </details>
+                <details class="cascade-menu" id="vmAppsMenu">
+                  <summary>VM Apps</summary>
+                  <div class="dropdown-menu cascade-submenu" id="vmAppsList"><button type="button" disabled>Загрузка...</button></div>
+                </details>
+                <details class="cascade-menu" id="snippetsMenu">
+                  <summary>Snippets</summary>
+                  <div class="dropdown-menu cascade-submenu" id="snippetsList"></div>
+                </details>
               </div>
             </details>
             <a class="button" id="directLink" href="/terminal/" target="_blank" rel="noreferrer">
@@ -1745,6 +1836,23 @@
                 <div class="shortcut-row"><span>Переименовать вкладку</span><span class="shortcut-key">Двойной клик</span></div>
                 <div class="shortcut-row"><span>Закрыть окно/модалку</span><span class="shortcut-key">Esc</span></div>
               </div>
+            </div>
+          </div>
+          <div id="snippetEditor" class="shortcuts-modal-backdrop" hidden>
+            <div class="shortcuts-modal-panel snippet-editor-panel" role="dialog" aria-modal="true" aria-labelledby="snippetEditorTitle">
+              <div class="shortcuts-modal-header">
+                <h3 id="snippetEditorTitle">Snippets</h3>
+                <button type="button" id="closeSnippetEditor" aria-label="Закрыть">✕</button>
+              </div>
+              <form id="snippetEditorForm" class="snippet-editor-form">
+                <label>Название<input type="text" id="snippetName" maxlength="80" required autocomplete="off" /></label>
+                <label>Текст<textarea id="snippetContent" maxlength="4000" required spellcheck="false"></textarea></label>
+                <div class="snippet-editor-actions">
+                  <span class="settings-action-status" id="snippetEditorStatus"></span>
+                  <button type="submit">Добавить сниппет</button>
+                </div>
+              </form>
+              <div class="snippet-editor-list" id="snippetEditorList"></div>
             </div>
           </div>
           <details class="settings" id="settingsMenu">
@@ -2404,6 +2512,16 @@
     const macAppsList = document.getElementById("macAppsList");
     const appsMenu = document.getElementById("appsMenu");
     const appsList = document.getElementById("appsList");
+    const vmAppsMenu = document.getElementById("vmAppsMenu");
+    const vmAppsList = document.getElementById("vmAppsList");
+    const snippetsMenu = document.getElementById("snippetsMenu");
+    const snippetsList = document.getElementById("snippetsList");
+    const snippetEditor = document.getElementById("snippetEditor");
+    const snippetEditorForm = document.getElementById("snippetEditorForm");
+    const snippetNameInput = document.getElementById("snippetName");
+    const snippetContentInput = document.getElementById("snippetContent");
+    const snippetEditorList = document.getElementById("snippetEditorList");
+    const snippetEditorStatus = document.getElementById("snippetEditorStatus");
     const reloadActiveBtn = document.getElementById("reloadSession");
     const copySelectionBtn = document.getElementById("copySelection");
     const directLink = document.getElementById("directLink");
@@ -2513,6 +2631,15 @@
 
     function readPreferencesFromObject(raw = {}) {
       const validLayouts = ["grid", "columns", "rows", "master-left", "master-top"];
+      const snippets = Array.isArray(raw.snippets)
+        ? raw.snippets.slice(0, 50).filter(snippet => (
+          snippet && typeof snippet.id === "string" && typeof snippet.name === "string" && typeof snippet.content === "string"
+        )).map(snippet => ({
+          id: snippet.id.slice(0, 80),
+          name: snippet.name.trim().slice(0, 80),
+          content: snippet.content.slice(0, 4000)
+        })).filter(snippet => snippet.id && snippet.name && snippet.content)
+        : [];
       return {
         theme: themes[raw.theme] ? raw.theme : "paper",
         fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
@@ -2521,7 +2648,8 @@
         splitLayout: validLayouts.includes(raw.splitLayout) ? raw.splitLayout : "grid",
         panelCollapsed: !!raw.panelCollapsed,
         density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
-        toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal"
+        toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal",
+        snippets
       };
     }
 
@@ -2559,7 +2687,7 @@
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation"];
+        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "snippets"];
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
@@ -3015,13 +3143,32 @@
     }
 
     function renderAppsMenu() {
-      appsList.replaceChildren();
+      vmAppsList.replaceChildren();
+      if (browserConfig.enabled) {
+        const browserButton = document.createElement("button");
+        browserButton.type = "button";
+        browserButton.textContent = "Browser";
+        browserButton.onclick = () => {
+          appsMenu.open = false;
+          addBrowserTab();
+        };
+        vmAppsList.appendChild(browserButton);
+
+        const browserWindowLink = document.createElement("a");
+        browserWindowLink.className = "button";
+        browserWindowLink.href = browserConfig.url;
+        browserWindowLink.target = "_blank";
+        browserWindowLink.rel = "noreferrer";
+        browserWindowLink.textContent = "↗ Browser в новом окне";
+        browserWindowLink.onclick = () => { appsMenu.open = false; };
+        vmAppsList.appendChild(browserWindowLink);
+      }
       if (!browserApps.length) {
         const empty = document.createElement("button");
         empty.type = "button";
         empty.textContent = browserAppsError ? `Обновить список: ${browserAppsError}` : "Обновить список";
         empty.onclick = loadBrowserApps;
-        appsList.appendChild(empty);
+        vmAppsList.appendChild(empty);
         requestAnimationFrame(positionOpenFloatingMenus);
         return;
       }
@@ -3047,13 +3194,12 @@
 
         button.append(icon, name, meta);
         button.onclick = () => launchApp(app.id, app.name);
-        appsList.appendChild(button);
+        vmAppsList.appendChild(button);
       });
       requestAnimationFrame(positionOpenFloatingMenus);
     }
 
     async function loadBrowserApps(attempt = 0) {
-      appsMenu.hidden = false;
       try {
         const response = await localApiFetch("/api/apps/list");
         const payload = await response.json();
@@ -3092,6 +3238,25 @@
     function renderMacAppsMenu() {
       if (!macAppsList) return;
       macAppsList.replaceChildren();
+      if (desktopConfig.enabled) {
+        const desktopButton = document.createElement("button");
+        desktopButton.type = "button";
+        desktopButton.textContent = "Mac Desktop";
+        desktopButton.onclick = () => {
+          appsMenu.open = false;
+          addDesktopTab();
+        };
+        macAppsList.appendChild(desktopButton);
+
+        const desktopWindowLink = document.createElement("a");
+        desktopWindowLink.className = "button";
+        desktopWindowLink.href = desktopConfig.url;
+        desktopWindowLink.target = "_blank";
+        desktopWindowLink.rel = "noreferrer";
+        desktopWindowLink.textContent = "↗ Mac Desktop в новом окне";
+        desktopWindowLink.onclick = () => { appsMenu.open = false; };
+        macAppsList.appendChild(desktopWindowLink);
+      }
       if (!macApps.length) {
         const empty = document.createElement("button");
         empty.type = "button";
@@ -3132,7 +3297,6 @@
     }
 
     async function loadMacApps(attempt = 0) {
-      if (macAppsMenu) macAppsMenu.hidden = false;
       try {
         const response = await localApiFetch("/api/mac/apps/list");
         const payload = await response.json();
@@ -3166,6 +3330,137 @@
       setStatusText(`Открыто приложение ${appName}`, 2500);
       return tab;
     }
+
+    function closeAppsCascadeMenus(except = null) {
+      [macAppsMenu, vmAppsMenu, snippetsMenu].forEach(menu => {
+        if (menu && menu !== except) menu.open = false;
+      });
+    }
+
+    function positionCascadeMenu(menu) {
+      const submenu = menu?.querySelector(":scope > .cascade-submenu");
+      if (!submenu) return;
+      submenu.style.left = "calc(100% + 5px)";
+      submenu.style.right = "auto";
+      submenu.style.top = "-4px";
+      const rect = submenu.getBoundingClientRect();
+      if (rect.right > window.innerWidth - 8) {
+        submenu.style.left = "auto";
+        submenu.style.right = "calc(100% + 5px)";
+      }
+      const adjustedRect = submenu.getBoundingClientRect();
+      if (adjustedRect.bottom > window.innerHeight - 8) {
+        submenu.style.top = `${Math.min(-4, window.innerHeight - 8 - adjustedRect.bottom - 4)}px`;
+      }
+    }
+
+    function renderSnippetsMenu() {
+      if (!snippetsList) return;
+      snippetsList.replaceChildren();
+      preferences.snippets.forEach(snippet => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "snippet-menu-item";
+        const name = document.createElement("span");
+        name.textContent = snippet.name;
+        const preview = document.createElement("span");
+        preview.className = "snippet-menu-preview";
+        preview.textContent = snippet.content.replace(/\s+/g, " ").trim();
+        button.append(name, preview);
+        button.onclick = async () => {
+          try {
+            await writeClipboardText(snippet.content);
+            setStatusText(`Сниппет «${snippet.name}» скопирован`, 2400);
+          } catch (error) {
+            setStatusText(`Не удалось скопировать сниппет: ${error.message || error}`, 3200);
+          }
+          appsMenu.open = false;
+        };
+        snippetsList.appendChild(button);
+      });
+
+      if (preferences.snippets.length) {
+        const divider = document.createElement("div");
+        divider.className = "divider";
+        snippetsList.appendChild(divider);
+      }
+      const manageButton = document.createElement("button");
+      manageButton.type = "button";
+      manageButton.textContent = preferences.snippets.length ? "Управлять сниппетами…" : "Добавить сниппет…";
+      manageButton.onclick = openSnippetEditor;
+      snippetsList.appendChild(manageButton);
+      requestAnimationFrame(positionOpenFloatingMenus);
+    }
+
+    function renderSnippetEditor() {
+      snippetEditorList.replaceChildren();
+      preferences.snippets.forEach(snippet => {
+        const row = document.createElement("div");
+        row.className = "snippet-editor-item";
+        const label = document.createElement("span");
+        label.textContent = snippet.name;
+        label.title = snippet.content;
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.textContent = "Удалить";
+        removeButton.onclick = () => {
+          preferences.snippets = preferences.snippets.filter(item => item.id !== snippet.id);
+          savePreferences();
+          renderSnippetsMenu();
+          renderSnippetEditor();
+          snippetEditorStatus.textContent = "Сниппет удалён";
+        };
+        row.append(label, removeButton);
+        snippetEditorList.appendChild(row);
+      });
+      if (!preferences.snippets.length) {
+        const empty = document.createElement("span");
+        empty.className = "settings-action-status";
+        empty.textContent = "Сниппетов пока нет";
+        snippetEditorList.appendChild(empty);
+      }
+    }
+
+    function openSnippetEditor() {
+      appsMenu.open = false;
+      snippetEditor.hidden = false;
+      snippetEditorStatus.textContent = "";
+      renderSnippetEditor();
+      setTimeout(() => snippetNameInput.focus(), 0);
+    }
+
+    function closeSnippetEditor() {
+      snippetEditor.hidden = true;
+      snippetEditorForm.reset();
+    }
+
+    [macAppsMenu, vmAppsMenu, snippetsMenu].forEach(menu => {
+      menu?.addEventListener("toggle", () => {
+        if (menu.open) {
+          closeAppsCascadeMenus(menu);
+          requestAnimationFrame(() => positionCascadeMenu(menu));
+        }
+      });
+    });
+
+    document.getElementById("closeSnippetEditor").onclick = closeSnippetEditor;
+    snippetEditor.onclick = event => {
+      if (event.target === snippetEditor) closeSnippetEditor();
+    };
+    snippetEditorForm.onsubmit = event => {
+      event.preventDefault();
+      const name = snippetNameInput.value.trim();
+      const content = snippetContentInput.value;
+      if (!name || !content) return;
+      preferences.snippets.push({ id: createId(), name, content });
+      preferences.snippets = preferences.snippets.slice(0, 50);
+      savePreferences();
+      snippetEditorForm.reset();
+      snippetEditorStatus.textContent = "Сниппет добавлен";
+      renderSnippetsMenu();
+      renderSnippetEditor();
+      snippetNameInput.focus();
+    };
 
     function floatingMenuFor(details) {
       return details?.querySelector(":scope > .settings-panel, :scope > .dropdown-menu");
@@ -3428,11 +3723,6 @@
 
       const toolbarActions = [
         togglePanelBtn,
-        addBrowserBtn,
-        document.getElementById("openBrowserTab"),
-        addDesktopBtn,
-        document.getElementById("openDesktopTab"),
-        macAppsMenu?.querySelector(":scope > summary"),
         appsMenu?.querySelector(":scope > summary"),
         directLink,
         reloadActiveBtn,
@@ -4963,6 +5253,7 @@
       if (event.key === "Escape") {
         if (!commandPalette.hidden) closeCommandPalette();
         if (shortcutsModal && !shortcutsModal.hidden) closeShortcutsModal();
+        if (snippetEditor && !snippetEditor.hidden) closeSnippetEditor();
         if (fullscreenTabId) setFrameFullscreen(fullscreenTabId, false);
       }
     });
@@ -5110,6 +5401,7 @@
     // Initial load
     async function initializeApp() {
       await loadPersistedPreferences();
+      renderSnippetsMenu();
       fontSizeSelect.value = preferences.fontSize;
       fontFamilySelect.value = preferences.fontFamily;
       windowTitleInput.value = preferences.windowTitle;

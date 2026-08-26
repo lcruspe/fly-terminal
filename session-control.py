@@ -1525,6 +1525,22 @@ def normalize_ui_preferences(payload):
 
     if isinstance(payload.get("panelCollapsed"), bool):
         preferences["panelCollapsed"] = payload["panelCollapsed"]
+
+    snippets = payload.get("snippets")
+    if isinstance(snippets, list):
+        normalized_snippets = []
+        seen_ids = set()
+        for raw_snippet in snippets[:50]:
+            if not isinstance(raw_snippet, dict):
+                continue
+            snippet_id = str(raw_snippet.get("id") or "").strip()[:80]
+            name = str(raw_snippet.get("name") or "").strip()[:80]
+            content = str(raw_snippet.get("content") or "")[:4000]
+            if not snippet_id or snippet_id in seen_ids or not name or not content:
+                continue
+            seen_ids.add(snippet_id)
+            normalized_snippets.append({"id": snippet_id, "name": name, "content": content})
+        preferences["snippets"] = normalized_snippets
     return preferences
 
 
@@ -1732,7 +1748,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             return
         send_json(self, 200, {"ok": True, "app": app_name})
 
-    def _read_json_body(self, max_bytes=4096):
+    def _read_json_body(self, max_bytes=65536):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
