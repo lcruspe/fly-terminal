@@ -12,6 +12,7 @@ import shlex
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -1717,6 +1718,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_info()
         elif self.path == "/api/session/last-answer":
             self._handle_last_answer()
+        elif self.path == "/api/session/run-snippet":
+            self._handle_run_snippet()
         elif self.path == "/api/files/upload":
             self._handle_document_upload()
         elif self.path == "/api/session/upload-image":
@@ -1809,6 +1812,104 @@ class SessionControlHandler(BaseHTTPRequestHandler):
 
         cwd = result.stdout.strip().splitlines()[0]
         send_json(self, 200, {"ok": True, "sessionId": session_id, "cwd": cwd})
+
+    def _handle_run_snippet(self):
+        payload, error = self._read_json_body()
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+
+        session_id = payload.get("sessionId", "")
+        content = payload.get("content", "")
+        if not isinstance(session_id, str) or not isinstance(content, str):
+            send_json(self, 400, {"ok": False, "error": "invalid_snippet"})
+            return
+        if not SESSION_RE.fullmatch(session_id):
+            send_json(self, 400, {"ok": False, "error": "invalid_session_id"})
+            return
+        if not content.strip() or len(content) > 4000:
+            send_json(self, 400, {"ok": False, "error": "invalid_snippet"})
+            return
+
+        tmux_target = f"fly-terminal-{session_id}"
+        exists = subprocess.run(
+            ["tmux", "has-session", "-t", tmux_target],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode == 0
+        if exists:
+            send_json(self, 409, {"ok": False, "error": "session_exists"})
+            return
+
+        script_path = None
+        session_created = False
+        try:
+            script_fd, raw_script_path = tempfile.mkstemp(prefix="fly-terminal-snippet-", suffix=".zsh")
+            script_path = Path(raw_script_path)
+            with os.fdopen(script_fd, "w", encoding="utf-8") as script_file:
+                script_file.write(content)
+                if not content.endswith("\n"):
+                    script_file.write("\n")
+            script_path.chmod(0o700)
+
+            create_result = subprocess.run(
+                ["tmux", "new-session", "-d", "-s", tmux_target, "-c", "/", "/bin/zsh", "-l"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if create_result.returncode != 0:
+                send_json(self, 500, {"ok": False, "error": "session_start_failed", "details": create_result.stderr.strip()})
+                return
+            session_created = True
+
+            quoted_path = shlex.quote(str(script_path))
+            launch_command = (
+                f"/bin/zsh {quoted_path}; "
+                f"__fly_snippet_status=$?; rm -f {quoted_path}; "
+                "printf '\\n[Сниппет завершён, код %s]\\n' \"$__fly_snippet_status\""
+            )
+            send_result = subprocess.run(
+                ["tmux", "send-keys", "-t", tmux_target, "-l", launch_command],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if send_result.returncode == 0:
+                send_result = subprocess.run(
+                    ["tmux", "send-keys", "-t", tmux_target, "Enter"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+            if send_result.returncode != 0:
+                subprocess.run(
+                    ["tmux", "kill-session", "-t", tmux_target],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                send_json(self, 500, {"ok": False, "error": "snippet_start_failed", "details": send_result.stderr.strip()})
+                return
+
+            send_json(self, 200, {"ok": True, "sessionId": session_id, "cwd": "/"})
+            script_path = None
+        except OSError as exc:
+            if session_created:
+                subprocess.run(
+                    ["tmux", "kill-session", "-t", tmux_target],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            send_json(self, 500, {"ok": False, "error": "snippet_start_failed", "details": str(exc)})
+        finally:
+            if script_path is not None:
+                script_path.unlink(missing_ok=True)
 
     def _handle_last_answer(self):
         payload, error = self._read_json_body()

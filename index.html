@@ -3518,15 +3518,7 @@
         preview.className = "snippet-menu-preview";
         preview.textContent = snippet.content.replace(/\s+/g, " ").trim();
         button.append(name, preview);
-        button.onclick = async () => {
-          try {
-            await writeClipboardText(snippet.content);
-            setStatusText(`Сниппет «${snippet.name}» скопирован`, 2400);
-          } catch (error) {
-            setStatusText("Не удалось скопировать сниппет", 3000);
-          }
-          closeAppsMenu();
-        };
+        button.onclick = () => launchSnippet(snippet);
         snippetsList.appendChild(button);
       });
       if (preferences.snippets.length) {
@@ -3540,6 +3532,38 @@
       manageButton.onclick = openSnippetEditor;
       snippetsList.appendChild(manageButton);
       requestAnimationFrame(positionOpenAppsMenus);
+    }
+
+    async function launchSnippet(snippet) {
+      const terminalWindow = window.open("", "_blank");
+      if (!terminalWindow) {
+        setStatusText("Браузер заблокировал новое окно терминала", 3200);
+        closeAppsMenu();
+        return;
+      }
+
+      terminalWindow.opener = null;
+      terminalWindow.document.title = `Запуск: ${snippet.name}`;
+      terminalWindow.document.body.textContent = `Запускаю сниппет «${snippet.name}»…`;
+      closeAppsMenu();
+
+      const sessionId = createSessionId();
+      try {
+        const response = await localApiFetch("/api/session/run-snippet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, content: snippet.content })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.ok) {
+          throw new Error(result.details || result.error || `HTTP ${response.status}`);
+        }
+        terminalWindow.location.replace(buildTerminalUrl(sessionId));
+        setStatusText(`Сниппет «${snippet.name}» запущен в новом терминале`, 2800);
+      } catch (error) {
+        terminalWindow.close();
+        setStatusText(`Не удалось запустить сниппет: ${error.message}`, 4000);
+      }
     }
 
     function renderSnippetEditorList() {
