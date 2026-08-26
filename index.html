@@ -3515,6 +3515,7 @@
 
       const buttonRect = summary.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
+      const fixedBase = fixedPositionBaseFor(menu);
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
 
@@ -3563,23 +3564,27 @@
 
       } else {
         // --- HORIZONTAL BOTTOM TOOLBAR LAYOUT ---
-        // Toolbar is at the bottom of the screen. Popups MUST anchor to the bottom and grow upward.
+        // The toolbar's backdrop-filter creates a containing block for fixed
+        // descendants, so convert viewport coordinates to that local space.
         const spaceAbove = buttonRect.top - gap - viewportPad;
         maxHeight = Math.max(120, Math.min(spaceAbove, viewportHeight - viewportPad * 2));
 
         maxWidth = viewportWidth - viewportPad * 2;
         const menuWidth = Math.min(menuRect.width, maxWidth);
+        const menuHeight = Math.min(menuRect.height, maxHeight);
         left = buttonRect.right - menuWidth;
         if (left < viewportPad) left = buttonRect.left;
         left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
-
-        // Use bottom anchor directly: distance from bottom of screen to top of toolbar button
-        const bottomDistance = viewportHeight - buttonRect.top + gap;
+        top = clampNumber(
+          buttonRect.top - gap - menuHeight,
+          viewportPad,
+          Math.max(viewportPad, viewportHeight - viewportPad - menuHeight)
+        );
 
         menu.style.position = "fixed";
-        menu.style.left = `${Math.round(left)}px`;
-        menu.style.bottom = `${Math.round(bottomDistance)}px`;
-        menu.style.top = "auto";
+        menu.style.left = `${Math.round(left - fixedBase.left)}px`;
+        menu.style.top = `${Math.round(top - fixedBase.top)}px`;
+        menu.style.bottom = "auto";
         menu.style.right = "auto";
         menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
         menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
@@ -3590,8 +3595,8 @@
 
       // 2. Apply vertical layout properties
       menu.style.position = "fixed";
-      menu.style.left = `${Math.round(left)}px`;
-      menu.style.top = `${Math.round(top)}px`;
+      menu.style.left = `${Math.round(left - fixedBase.left)}px`;
+      menu.style.top = `${Math.round(top - fixedBase.top)}px`;
       menu.style.bottom = "auto";
       menu.style.right = "auto";
       menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
