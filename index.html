@@ -157,7 +157,9 @@
     }
 
     .shell[class*="orientation-vertical-"].sidebar-compact .tab .tab-close {
-      display: none;
+      position: absolute;
+      right: 2px;
+      top: 2px;
     }
 
     .shell[class*="orientation-vertical-"].sidebar-compact .toolbar {
@@ -469,17 +471,23 @@
       color: var(--active-btn-ink);
     }
     .tab-close {
-      opacity: 0.5;
+      opacity: 0;
       border-radius: 4px;
       padding: 2px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 10px;
+      pointer-events: none;
+      transition: opacity 140ms ease;
+    }
+    .tab:hover .tab-close {
+      opacity: 0.5;
+      pointer-events: auto;
     }
     .tab-close:hover {
       background: rgba(0,0,0,0.1);
-      opacity: 1;
+      opacity: 1 !important;
     }
 
     /* New Tab Button in Tab Bar */
