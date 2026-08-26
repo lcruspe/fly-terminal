@@ -3535,17 +3535,8 @@
     }
 
     async function launchSnippet(snippet) {
-      const terminalWindow = window.open("", "_blank");
-      if (!terminalWindow) {
-        setStatusText("Браузер заблокировал новое окно терминала", 3200);
-        closeAppsMenu();
-        return;
-      }
-
-      terminalWindow.opener = null;
-      terminalWindow.document.title = `Запуск: ${snippet.name}`;
-      terminalWindow.document.body.textContent = `Запускаю сниппет «${snippet.name}»…`;
       closeAppsMenu();
+      setStatusText(`Запускаю сниппет «${snippet.name}»…`);
 
       const sessionId = createSessionId();
       try {
@@ -3558,10 +3549,9 @@
         if (!response.ok || !result.ok) {
           throw new Error(result.details || result.error || `HTTP ${response.status}`);
         }
-        terminalWindow.location.replace(buildTerminalUrl(sessionId));
-        setStatusText(`Сниппет «${snippet.name}» запущен в новом терминале`, 2800);
+        addTab(sessionId, snippet.name, snippet.name);
+        setStatusText(`Сниппет «${snippet.name}» запущен в новой вкладке`, 2800);
       } catch (error) {
-        terminalWindow.close();
         setStatusText(`Не удалось запустить сниппет: ${error.message}`, 4000);
       }
     }
@@ -4811,7 +4801,7 @@
       } catch (e) {}
     }
 
-    function addTab(sessionId = null, label = "Terminal") {
+    function addTab(sessionId = null, label = "Terminal", customLabel = null) {
       const id = createId();
       // Ensure we don't accidentally reuse a session ID if it's already open
       let sId = sessionId;
@@ -4825,7 +4815,7 @@
       wrapper.innerHTML = `
         <div class="terminal-topbar">
           <div class="terminal-heading">
-            <strong class="tab-label-text">${label}</strong>
+            <strong class="tab-label-text">${customLabel || label}</strong>
             <span class="tab-subtext">${sId.slice(0, 8)}...</span>
           </div>
           <div class="terminal-actions">
@@ -4840,7 +4830,7 @@
         </div>
       `;
       
-      const tab = { id, type: "terminal", sessionId: sId, label, customLabel: null, wrapper };
+      const tab = { id, type: "terminal", sessionId: sId, label, customLabel, wrapper };
       tabs.push(tab);
       terminalContainer.appendChild(wrapper);
       
@@ -5190,7 +5180,7 @@
         if (data && Array.isArray(data) && data.length > 0) {
           data.forEach(s => {
             if ((s.type || "terminal") === "terminal" && s.sessionId) {
-              addTab(s.sessionId, s.customLabel || "Terminal");
+              addTab(s.sessionId, s.label || "Terminal", s.customLabel || null);
             }
           });
           if (tabs.length === 0) addTab();
