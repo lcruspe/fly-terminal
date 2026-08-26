@@ -54,6 +54,7 @@ jobs:
       - name: Finalize main
         if: always()
         env:
+          GH_TOKEN: ${{ github.token }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
         run: |
           git config user.name 'github-actions[bot]'
@@ -78,6 +79,3 @@ jobs:
           if [ "$SMOKE_OUTCOME" != "success" ]; then
             exit 1
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
