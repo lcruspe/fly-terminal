@@ -16,3 +16,9 @@ When adding new top-level toolbar actions, include them in the responsive toolba
 ## Edge-to-edge horizontal layout
 
 The Fly Terminal shell has no horizontal page padding. The terminal/browser workspace, tab bar, and main toolbar therefore span the full viewport width, while the 14 px vertical shell padding and 12 px vertical spacing between sections are preserved. Do not reintroduce horizontal padding on `.shell`; add any required spacing inside individual controls instead.
+
+## Tab close controls
+
+Tab close controls remain in the DOM but are visually hidden until the corresponding tab is hovered. This behavior is shared by horizontal tabs, regular vertical sidebars, and the compact vertical sidebar. In non-compact layouts the hidden control keeps its layout space, so tab width and label position do not jump when the close control appears.
+
+In compact vertical sidebar mode the close control is positioned as an overlay in the tab corner instead of consuming layout space. This keeps the compact tab label centered while still allowing every tab to be closed. Do not hide compact close controls with `display: none`; use the shared hover visibility behavior instead.
