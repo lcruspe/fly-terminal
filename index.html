@@ -1830,6 +1830,10 @@
           </div>
 
           <div class="control-group session-controls" id="sessionControls">
+            <button type="button" id="addBrowser" hidden title="Открыть Remote Browser во вкладке">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a9 9 0 0 1 0 12M8 2a9 9 0 0 0 0 12"/></svg>
+              Browser
+            </button>
             <button type="button" class="apps-launcher" id="appsMenuButton" aria-controls="appsRootMenu" aria-expanded="false" aria-haspopup="menu">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
               Apps
@@ -2026,7 +2030,6 @@
   </div>
 
   <div class="apps-flyout apps-flyout-submenu" id="vmAppsList" role="menu" hidden>
-    <button type="button" id="addBrowser" hidden>Browser</button>
     <a class="button" id="openBrowserTab" href="#" target="_blank" rel="noreferrer" hidden title="Открыть Remote Browser в отдельной вкладке">↗ Browser</a>
     <div class="divider" data-static-divider hidden></div>
     <div data-dynamic-app-list><button type="button" disabled>Загрузка...</button></div>
@@ -3924,6 +3927,7 @@
 
       const toolbarActions = [
         togglePanelBtn,
+        addBrowserBtn,
         appsMenuButton,
         directLink,
         reloadActiveBtn,
