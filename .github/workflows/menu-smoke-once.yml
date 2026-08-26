@@ -1,0 +1,192 @@
+name: Menu smoke test once
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  test:
+    if: github.event.issue.title == 'Trigger: menu smoke test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prepare browser test
+        run: |
+          python -m pip install --quiet selenium
+          (which google-chrome || which chromium || which chromium-browser) | head -1
+          which chromedriver || true
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/flyterm-http.log 2>&1 &
+          echo $! >/tmp/flyterm-http.pid
+          sleep 2
+
+      - name: Run menu smoke test
+        id: smoke
+        continue-on-error: true
+        run: |
+          set +e
+          python3 - <<'PY'
+          import json
+          import time
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+
+          opts = Options()
+          opts.add_argument('--headless=new')
+          opts.add_argument('--no-sandbox')
+          opts.add_argument('--disable-dev-shm-usage')
+          opts.add_argument('--window-size=1440,900')
+          driver = webdriver.Chrome(options=opts)
+          wait = WebDriverWait(driver, 12)
+
+          stub = r'''
+          (() => {
+            const realFetch = window.fetch.bind(window);
+            const ok = (payload) => Promise.resolve(new Response(JSON.stringify(payload), {
+              status: 200,
+              headers: {'Content-Type':'application/json'}
+            }));
+            window.fetch = (input, init = {}) => {
+              const url = typeof input === 'string' ? input : (input && input.url) || '';
+              if (!url.includes('/api/')) return realFetch(input, init);
+              if (url.includes('/api/ui/preferences')) return ok({ok:true});
+              if (url.includes('/api/browser/config')) return ok({ok:true, enabled:false, url:''});
+              if (url.includes('/api/desktop/config')) return ok({ok:true, enabled:false, url:'', rawUrl:''});
+              if (url.includes('/api/apps/list')) return ok({ok:true, apps:[]});
+              if (url.includes('/api/mac/apps/list')) return ok({ok:true, apps:[]});
+              if (url.includes('/api/files/list')) return ok({ok:true, directory:'Documents', maxUploadBytes:26214400, files:[]});
+              if (url.includes('/api/vpn/happ/subscriptions') || url.includes('/api/vpn/happ/locations')) return ok({ok:true, subscriptions:[], configured:false, current:'', currentSubscriptionId:'', currentLocationId:''});
+              if (url.includes('/api/vpn/happ/status')) return ok({ok:true, state:'Disconnected', location:''});
+              if (url.includes('/api/system/recover/status') || url.includes('/api/system/update/status')) return ok({ok:true, state:'idle', summary:'', entries:[]});
+              if (url.includes('/api/sessions/list')) return ok({ok:true, sessions:[]});
+              return ok({ok:true});
+            };
+          })();
+          '''
+          driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': stub})
+          driver.get('http://127.0.0.1:8765/index.html')
+          wait.until(lambda d: d.find_element(By.ID, 'settingsMenu'))
+          wait.until(lambda d: d.execute_script('return document.readyState') == 'complete')
+          time.sleep(1)
+
+          failures = []
+          results = []
+
+          def close_details():
+            driver.execute_script("document.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open'))")
+            time.sleep(0.05)
+
+          def menu_check(menu_id, orientation):
+            close_details()
+            details = driver.find_element(By.ID, menu_id)
+            summary = details.find_element(By.CSS_SELECTOR, ':scope > summary')
+            if not summary.is_displayed():
+              results.append({'menu': menu_id, 'orientation': orientation, 'status': 'skipped-hidden'})
+              return
+            driver.execute_script('arguments[0].scrollIntoView({block:"center", inline:"center"})', summary)
+            summary.click()
+            wait.until(lambda d: details.get_attribute('open') is not None)
+            time.sleep(0.12)
+            panel = details.find_element(By.CSS_SELECTOR, ':scope > summary + *')
+            metrics = driver.execute_script('''
+              const el = arguments[0];
+              const r = el.getBoundingClientRect();
+              const cs = getComputedStyle(el);
+              return {
+                left:r.left, top:r.top, right:r.right, bottom:r.bottom,
+                width:r.width, height:r.height,
+                vw:innerWidth, vh:innerHeight,
+                display:cs.display, visibility:cs.visibility,
+                position:cs.position
+              };
+            ''', panel)
+            ok = (
+              metrics['width'] > 0 and metrics['height'] > 0 and
+              metrics['display'] != 'none' and metrics['visibility'] != 'hidden' and
+              metrics['left'] >= -1 and metrics['top'] >= -1 and
+              metrics['right'] <= metrics['vw'] + 1 and metrics['bottom'] <= metrics['vh'] + 1
+            )
+            results.append({'menu': menu_id, 'orientation': orientation, 'status': 'ok' if ok else 'failed', 'metrics': metrics})
+            if not ok:
+              failures.append(f"{menu_id}/{orientation}: panel outside viewport or hidden: {metrics}")
+
+          for orientation in ('horizontal', 'vertical-left', 'vertical-right'):
+            driver.set_window_size(1440, 900)
+            driver.execute_script("applyToolbarOrientation(arguments[0]);", orientation)
+            time.sleep(0.15)
+            menu_check('settingsMenu', orientation)
+            menu_check('toolsMenu', orientation)
+
+          # Narrow viewport exercises responsive overflow menu when it is activated.
+          driver.set_window_size(760, 760)
+          driver.execute_script("applyToolbarOrientation('horizontal'); if (typeof layoutResponsiveToolbar === 'function') layoutResponsiveToolbar();")
+          time.sleep(0.25)
+          overflow = driver.find_element(By.ID, 'overflowMenu')
+          overflow_summary = overflow.find_element(By.CSS_SELECTOR, ':scope > summary')
+          if overflow_summary.is_displayed():
+            menu_check('overflowMenu', 'horizontal-narrow')
+          else:
+            results.append({'menu':'overflowMenu','orientation':'horizontal-narrow','status':'skipped-not-needed'})
+
+          # Behavioral probe: record whether native details menus stay open after another menu opens/outside click.
+          driver.set_window_size(1440, 900)
+          driver.execute_script("applyToolbarOrientation('horizontal');")
+          close_details()
+          settings = driver.find_element(By.ID, 'settingsMenu')
+          tools = driver.find_element(By.ID, 'toolsMenu')
+          settings.find_element(By.CSS_SELECTOR, ':scope > summary').click()
+          tools.find_element(By.CSS_SELECTOR, ':scope > summary').click()
+          time.sleep(0.1)
+          both_open = settings.get_attribute('open') is not None and tools.get_attribute('open') is not None
+          driver.find_element(By.CSS_SELECTOR, '.terminal-container').click()
+          time.sleep(0.1)
+          outside_keeps_tools = tools.get_attribute('open') is not None
+          results.append({'behavior':'menu-exclusivity', 'bothOpenAfterSecondClick': both_open, 'outsideClickKeepsOpen': outside_keeps_tools})
+
+          print('MENU_SMOKE_RESULTS=' + json.dumps(results, ensure_ascii=False))
+          if failures:
+            print('MENU_SMOKE_FAILURES=' + json.dumps(failures, ensure_ascii=False))
+            raise SystemExit(1)
+          driver.quit()
+          PY
+          rc=$?
+          echo "$rc" >/tmp/menu-smoke-status
+          exit 0
+
+      - name: Capture result
+        if: always()
+        run: |
+          echo "Smoke exit code: $(cat /tmp/menu-smoke-status 2>/dev/null || echo 99)"
+
+      - name: Remove one-shot workflow
+        if: always()
+        run: |
+          rm -f .github/workflows/menu-smoke-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: remove one-shot menu smoke test'
+            git push origin HEAD:main
+          fi
+
+      - name: Close trigger issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --reason completed
+
+      - name: Fail if smoke test failed
+        if: always()
+        run: |
+          rc=$(cat /tmp/menu-smoke-status 2>/dev/null || echo 99)
+          exit "$rc"
