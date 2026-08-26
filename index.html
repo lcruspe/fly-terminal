@@ -3913,6 +3913,10 @@
       const menuRect = menu.getBoundingClientRect();
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      // A fixed descendant is relative to the nearest transform/filter/backdrop-filter
+      // containing block, not necessarily the viewport. Keep all placement calculations
+      // in viewport coordinates, then translate only when writing CSS coordinates.
+      const fixedBase = fixedPositionBaseFor(menu);
 
       const isVerticalLeft = shellEl?.classList.contains("orientation-vertical-left");
       const isVerticalRight = shellEl?.classList.contains("orientation-vertical-right");
@@ -3960,8 +3964,9 @@
       } else {
         // --- HORIZONTAL BOTTOM TOOLBAR LAYOUT ---
         // Toolbar is at the bottom of the screen. Popups MUST anchor to the bottom and grow upward.
-        const spaceAbove = buttonRect.top - gap - viewportPad;
-        maxHeight = Math.max(120, Math.min(spaceAbove, viewportHeight - viewportPad * 2));
+        // Size against the viewport first, then place the measured box.
+        // This avoids border/padding differences leaking a tall popup above the viewport.
+        maxHeight = Math.max(1, viewportHeight - viewportPad * 2);
 
         maxWidth = viewportWidth - viewportPad * 2;
         const menuWidth = Math.min(menuRect.width, maxWidth);
@@ -3969,25 +3974,40 @@
         if (left < viewportPad) left = buttonRect.left;
         left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
 
-        // Use bottom anchor directly: distance from bottom of screen to top of toolbar button
-        const bottomDistance = viewportHeight - buttonRect.top + gap;
-
         menu.style.position = "fixed";
-        menu.style.left = `${Math.round(left)}px`;
-        menu.style.bottom = `${Math.round(bottomDistance)}px`;
-        menu.style.top = "auto";
+        menu.style.left = `${Math.round(viewportPad - fixedBase.left)}px`;
+        menu.style.top = `${Math.round(viewportPad - fixedBase.top)}px`;
+        menu.style.bottom = "auto";
         menu.style.right = "auto";
         menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
         menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
         menu.style.zIndex = "9999";
         menu.style.transformOrigin = "bottom right";
+
+        // Measure after constraints, clamp in viewport coordinates, then translate
+        // to the actual fixed-position containing block when assigning CSS offsets.
+        const fittedRect = menu.getBoundingClientRect();
+        const fittedHeight = Math.min(fittedRect.height, maxHeight);
+        const fittedWidth = Math.min(fittedRect.width, maxWidth);
+        left = clampNumber(
+          buttonRect.right - fittedWidth,
+          viewportPad,
+          Math.max(viewportPad, viewportWidth - viewportPad - fittedWidth)
+        );
+        top = clampNumber(
+          buttonRect.top - gap - fittedHeight,
+          viewportPad,
+          Math.max(viewportPad, viewportHeight - viewportPad - fittedHeight)
+        );
+        menu.style.left = `${Math.round(left - fixedBase.left)}px`;
+        menu.style.top = `${Math.round(top - fixedBase.top)}px`;
         return;
       }
 
       // 2. Apply vertical layout properties
       menu.style.position = "fixed";
-      menu.style.left = `${Math.round(left)}px`;
-      menu.style.top = `${Math.round(top)}px`;
+      menu.style.left = `${Math.round(left - fixedBase.left)}px`;
+      menu.style.top = `${Math.round(top - fixedBase.top)}px`;
       menu.style.bottom = "auto";
       menu.style.right = "auto";
       menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
@@ -4000,8 +4020,26 @@
       document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach(positionFloatingMenu);
     }
 
+    function closeFloatingMenus({ except = null } = {}) {
+      document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach((details) => {
+        if (details === except) return;
+        details.removeAttribute("open");
+        resetFloatingMenuPosition(details);
+      });
+    }
+
     function bindFloatingMenus() {
       floatingMenuResizeObserver = new ResizeObserver(() => positionOpenFloatingMenus());
+
+      document.addEventListener("pointerdown", (event) => {
+        const containingMenu = event.target.closest?.("details.settings, details.dropdown") || null;
+        closeFloatingMenus({ except: containingMenu });
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeFloatingMenus();
+      });
+
       document.querySelectorAll("details.settings, details.dropdown").forEach((details) => {
         const menu = floatingMenuFor(details);
         if (menu) floatingMenuResizeObserver.observe(menu);

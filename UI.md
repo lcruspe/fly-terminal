@@ -22,3 +22,9 @@ The Fly Terminal shell has no horizontal page padding. The terminal/browser work
 Tab close controls remain in the DOM but are visually hidden until the corresponding tab is hovered. This behavior is shared by horizontal tabs, regular vertical sidebars, and the compact vertical sidebar. In non-compact layouts the hidden control keeps its layout space, so tab width and label position do not jump when the close control appears.
 
 In compact vertical sidebar mode the close control is positioned as an overlay in the tab corner instead of consuming layout space. This keeps the compact tab label centered while still allowing every tab to be closed. Do not hide compact close controls with `display: none`; use the shared hover visibility behavior instead.
+
+## Floating menus
+
+Settings, Tools, dropdown, and responsive overflow panels are positioned in viewport coordinates and then translated to the browser's actual fixed-position containing block. This matters because CSS properties such as `backdrop-filter`, `filter`, `transform`, `perspective`, and layout/paint containment can make a fixed descendant relative to an ancestor instead of the viewport. After size constraints are applied, the rendered popup is measured and both axes are clamped to a 10 px viewport inset. The same positioning contract applies to horizontal and vertical toolbar orientations.
+
+Only one top-level floating menu should remain active at a time. Clicking outside `details.settings` / `details.dropdown` closes open floating menus, and `Escape` closes them as well. Clicks inside the currently open menu must not dismiss it. These behaviors are part of the menu interaction contract and should be covered by browser smoke tests whenever positioning logic changes.
