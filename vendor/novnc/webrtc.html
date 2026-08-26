@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>macOS Remote Desktop (H.264 / WebRTC)</title>
+  <style>
+    :root {
+      --bg: #121417;
+      --fg: #e2e8f0;
+      --panel-bg: rgba(24, 28, 35, 0.85);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --badge-ok-bg: rgba(16, 185, 129, 0.2);
+      --badge-ok-fg: #34d399;
+      --badge-warn-bg: rgba(245, 158, 11, 0.2);
+      --badge-warn-fg: #fbbf24;
+      --badge-err-bg: rgba(239, 68, 68, 0.2);
+      --badge-err-fg: #f87171;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--fg);
+    }
+
+    #viewport {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: #000;
+      cursor: default;
+    }
+
+    #screenCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      outline: none;
+      display: block;
+    }
+
+    #hudBar {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 9999px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    #viewport:hover #hudBar,
+    #hudBar:hover,
+    #hudBar.pinned {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .hud-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.3px;
+      font-feature-settings: "tnum";
+    }
+
+    .badge-status {
+      background: var(--badge-ok-bg);
+      color: var(--badge-ok-fg);
+    }
+
+    .badge-status.warn {
+      background: var(--badge-warn-bg);
+      color: var(--badge-warn-fg);
+    }
+
+    .badge-status.error {
+      background: var(--badge-err-bg);
+      color: var(--badge-err-fg);
+    }
+
+    .badge-fps {
+      background: rgba(255, 255, 255, 0.08);
+      color: #93c5fd;
+    }
+
+    .badge-res {
+      background: rgba(255, 255, 255, 0.06);
+      color: #cbd5e1;
+      font-size: 10px;
+    }
+
+    .hud-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--fg);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .hud-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .hud-btn:active {
+      transform: scale(0.97);
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.15);
+      margin: 0 2px;
+    }
+
+    #overlayMessage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 24px 32px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+      z-index: 200;
+      text-align: center;
+    }
+
+    #overlayMessage.hidden {
+      display: none;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #clipboardModal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 90%;
+      max-width: 440px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+      z-index: 300;
+    }
+
+    #clipboardModal.hidden {
+      display: none;
+    }
+
+    #clipboardText {
+      width: 100%;
+      height: 100px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      color: var(--fg);
+      padding: 10px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+
+    #clipboardText:focus {
+      border-color: var(--accent);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport">
+    <canvas id="screenCanvas" tabindex="0"></canvas>
+
+    <div id="hudBar">
+      <span class="hud-badge badge-status" id="statusBadge">60 FPS H.264</span>
+      <span class="hud-badge badge-fps" id="fpsBadge">60 fps</span>
+      <span class="hud-badge badge-res" id="resBadge">1920×1080</span>
+      <div class="hud-divider"></div>
+      <button type="button" class="hud-btn" id="spotlightBtn" title="Spotlight (Cmd+Пробел)">⌘ Space</button>
+      <button type="button" class="hud-btn" id="appSwitcherBtn" title="Переключение окон (Cmd+Tab)">⌘ Tab</button>
+      <button type="button" class="hud-btn" id="pasteBtn" title="Вставить текст в Mac">Вставка</button>
+      <div class="hud-divider"></div>
+      <button type="button" class="hud-btn" id="scaleModeBtn" title="Режим масштабирования">Fit</button>
+      <button type="button" class="hud-btn" id="fullscreenBtn" title="Во весь экран">⛶</button>
+    </div>
+
+    <div id="overlayMessage">
+      <div class="spinner" id="overlaySpinner"></div>
+      <h3 id="overlayTitle">Подключение к macOS...</h3>
+      <p id="overlaySubtext" style="font-size: 13px; color: #94a3b8;">Инициализация H.264 видеопотока...</p>
+      <button type="button" class="hud-btn" id="reconnectBtn" style="margin-top: 8px; display: none;">Повторить попытку</button>
+    </div>
+
+    <div id="clipboardModal" class="hidden">
+      <h4 style="font-size: 14px; font-weight: 600;">Вставка текста в macOS</h4>
+      <textarea id="clipboardText" placeholder="Введите или вставьте текст..."></textarea>
+      <div class="modal-actions">
+        <button type="button" class="hud-btn" id="clipboardCancelBtn">Отмена</button>
+        <button type="button" class="hud-btn" id="clipboardSendBtn" style="background: var(--accent); color: #000; font-weight: 600;">Отправить в Mac</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const urlParams = new URLSearchParams(window.location.search);
+      const wsPath = urlParams.get("path") || "desktop-stream-ws";
+      
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host;
+      let wsUrl = `${protocol}//${host}/${wsPath.replace(/^\//, "")}`;
+      if (urlParams.get("port")) {
+        wsUrl = `${protocol}//${window.location.hostname}:${urlParams.get("port")}/`;
+      }
+
+      const canvas = document.getElementById("screenCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+      const statusBadge = document.getElementById("statusBadge");
+      const fpsBadge = document.getElementById("fpsBadge");
+      const resBadge = document.getElementById("resBadge");
+      const overlay = document.getElementById("overlayMessage");
+      const overlayTitle = document.getElementById("overlayTitle");
+      const overlaySubtext = document.getElementById("overlaySubtext");
+      const reconnectBtn = document.getElementById("reconnectBtn");
+      const clipboardModal = document.getElementById("clipboardModal");
+      const clipboardText = document.getElementById("clipboardText");
+
+      let socket = null;
+      let decoder = null;
+      let isDecoderReady = false;
+      let frameCount = 0;
+      let lastFpsTime = performance.now();
+      let streamWidth = 1920;
+      let streamHeight = 1080;
+      let macScreenWidth = 2560;
+      let macScreenHeight = 1440;
+      let fitMode = "contain"; // "contain" or "fill"
+      let reconnectAttempts = 0;
+
+      function updateOverlay(show, title, subtext, showButton = false) {
+        if (show) {
+          overlay.classList.remove("hidden");
+          overlayTitle.textContent = title;
+          overlaySubtext.textContent = subtext;
+          reconnectBtn.style.display = showButton ? "inline-flex" : "none";
+          document.getElementById("overlaySpinner").style.display = showButton ? "none" : "block";
+        } else {
+          overlay.classList.add("hidden");
+        }
+      }
+
+      function showPermissionPrompt(msgText) {
+        overlay.classList.remove("hidden");
+        document.getElementById("overlaySpinner").style.display = "none";
+        overlayTitle.textContent = "Требуется разрешение macOS";
+        overlaySubtext.innerHTML = `
+          ${msgText || "Требуется включить Запись экрана для fly-mac-encoder."}<br><br>
+          Откройте <strong>Системные настройки → Конфиденциальность → Запись экрана</strong> и включите <strong>fly-mac-encoder</strong>.
+          <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px;">
+            <button type="button" class="hud-btn" id="openSettingsBtn" style="background: var(--accent); color: #000; font-weight: 600;">Открыть настройки Mac</button>
+            <button type="button" class="hud-btn" id="fallbackVncBtn">Переключить на noVNC</button>
+          </div>
+        `;
+        const openBtn = document.getElementById("openSettingsBtn");
+        if (openBtn) {
+          openBtn.onclick = () => {
+            fetch("/api/mac/open-permissions", { method: "POST" }).catch(() => {});
+          };
+        }
+        const vncBtn = document.getElementById("fallbackVncBtn");
+        if (vncBtn) {
+          vncBtn.onclick = () => {
+            window.location.href = "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
+          };
+        }
+      }
+
+      function initVideoDecoder() {
+        if (!("VideoDecoder" in window)) {
+          console.warn("WebCodecs VideoDecoder not supported in this browser");
+          return false;
+        }
+
+        try {
+          decoder = new VideoDecoder({
+            output: (frame) => {
+              if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+                canvas.width = frame.displayWidth;
+                canvas.height = frame.displayHeight;
+                resBadge.textContent = `${frame.displayWidth}×${frame.displayHeight}`;
+              }
+              ctx.drawImage(frame, 0, 0);
+              frame.close();
+
+              frameCount++;
+              const now = performance.now();
+              if (now - lastFpsTime >= 1000) {
+                const fps = Math.round((frameCount * 1000) / (now - lastFpsTime));
+                fpsBadge.textContent = `${fps} fps`;
+                frameCount = 0;
+                lastFpsTime = now;
+              }
+            },
+            error: (err) => {
+              console.error("VideoDecoder error:", err);
+              statusBadge.textContent = "Ошибка декодера";
+              statusBadge.className = "hud-badge badge-status error";
+            }
+          });
+
+          decoder.configure({
+            codec: "avc1.42E01F", // H.264 Main Profile Level 3.1
+            optimizeForLatency: true,
+            hardwareAcceleration: "prefer-hardware"
+          });
+
+          isDecoderReady = true;
+          return true;
+        } catch (e) {
+          console.error("Failed to initialize WebCodecs VideoDecoder:", e);
+          return false;
+        }
+      }
+
+      function connect() {
+        updateOverlay(true, "Подключение к macOS...", "Установка WebSocket H.264 соединения...");
+        statusBadge.textContent = "Подключение...";
+        statusBadge.className = "hud-badge badge-status warn";
+
+        if (!decoder) {
+          initVideoDecoder();
+        }
+
+        try {
+          socket = new WebSocket(wsUrl);
+          socket.binaryType = "arraybuffer";
+
+          socket.onopen = () => {
+            reconnectAttempts = 0;
+            updateOverlay(false);
+            statusBadge.textContent = "60 FPS H.264";
+            statusBadge.className = "hud-badge badge-status";
+            socket.send(JSON.stringify({ type: "init" }));
+          };
+
+          socket.onmessage = (event) => {
+            if (typeof event.data === "string") {
+              try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === "init") {
+                  streamWidth = msg.width || streamWidth;
+                  streamHeight = msg.height || streamHeight;
+                  macScreenWidth = msg.screenWidth || macScreenWidth;
+                  macScreenHeight = msg.screenHeight || macScreenHeight;
+                  resBadge.textContent = `${streamWidth}×${streamHeight}`;
+                } else if (msg.type === "status") {
+                  if (msg.state === "tcc_required") {
+                    statusBadge.textContent = "Требуется разрешение";
+                    statusBadge.className = "hud-badge badge-status warn";
+                    showPermissionPrompt(msg.message);
+                  } else if (msg.state === "capturing") {
+                    updateOverlay(false);
+                    statusBadge.textContent = "60 FPS H.264";
+                    statusBadge.className = "hud-badge badge-status";
+                  }
+                }
+              } catch (e) {}
+              return;
+            }
+
+            if (event.data instanceof ArrayBuffer && isDecoderReady) {
+              const view = new DataView(event.data);
+              const flags = view.getUint8(0);
+              const isKey = (flags & 0x01) !== 0;
+              // Timestamp in big-endian int64
+              const tsMs = Number(view.getBigInt64(1));
+              const naluData = new Uint8Array(event.data, 9);
+
+              try {
+                const chunk = new EncodedVideoChunk({
+                  type: isKey ? "key" : "delta",
+                  timestamp: tsMs * 1000,
+                  data: naluData
+                });
+                decoder.decode(chunk);
+              } catch (decErr) {
+                // If decoding fails, request keyframe
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type: "keyframe" }));
+                }
+              }
+            }
+          };
+
+          socket.onclose = () => {
+            statusBadge.textContent = "Отключено";
+            statusBadge.className = "hud-badge badge-status warn";
+            reconnectAttempts++;
+            const delay = Math.min(5000, 1000 * Math.pow(1.5, reconnectAttempts));
+            updateOverlay(true, "Соединение разорвано", `Повторное подключение через ${(delay/1000).toFixed(1)} с...`, true);
+            setTimeout(() => {
+              if (!socket || socket.readyState === WebSocket.CLOSED) {
+                connect();
+              }
+            }, delay);
+          };
+
+          socket.onerror = () => {
+            statusBadge.textContent = "Ошибка связи";
+            statusBadge.className = "hud-badge badge-status error";
+          };
+        } catch (err) {
+          updateOverlay(true, "Ошибка подключения", String(err), true);
+        }
+      }
+
+      // MARK: - Mouse & Keyboard Event Forwarding
+
+      let mouseMoveRaf = null;
+      let lastPendingMousePos = null;
+
+      function getNormalizedCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const normY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        return { x: normX, y: normY };
+      }
+
+      canvas.addEventListener("mousemove", (e) => {
+        const coords = getNormalizedCoords(e);
+        lastPendingMousePos = coords;
+        if (!mouseMoveRaf) {
+          mouseMoveRaf = requestAnimationFrame(() => {
+            if (socket && socket.readyState === WebSocket.OPEN && lastPendingMousePos) {
+              socket.send(JSON.stringify({
+                type: "mousemove",
+                x: lastPendingMousePos.x,
+                y: lastPendingMousePos.y
+              }));
+            }
+            mouseMoveRaf = null;
+          });
+        }
+      });
+
+      canvas.addEventListener("mousedown", (e) => {
+        canvas.focus();
+        e.preventDefault();
+        const coords = getNormalizedCoords(e);
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "mousedown",
+            button: e.button,
+            x: coords.x,
+            y: coords.y
+          }));
+        }
+      });
+
+      canvas.addEventListener("mouseup", (e) => {
+        e.preventDefault();
+        const coords = getNormalizedCoords(e);
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "mouseup",
+            button: e.button,
+            x: coords.x,
+            y: coords.y
+          }));
+        }
+      });
+
+      canvas.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+      });
+
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "wheel",
+            dx: -e.deltaX,
+            dy: -e.deltaY
+          }));
+        }
+      }, { passive: false });
+
+      // Keyboard
+      canvas.addEventListener("keydown", (e) => {
+        // Allow F12 / DevTools
+        if (e.key === "F12") return;
+        e.preventDefault();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "keydown",
+            code: e.code,
+            key: e.key,
+            modifiers: {
+              meta: e.metaKey,
+              ctrl: e.ctrlKey,
+              alt: e.altKey,
+              shift: e.shiftKey
+            }
+          }));
+        }
+      });
+
+      canvas.addEventListener("keyup", (e) => {
+        e.preventDefault();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "keyup",
+            code: e.code,
+            key: e.key,
+            modifiers: {
+              meta: e.metaKey,
+              ctrl: e.ctrlKey,
+              alt: e.altKey,
+              shift: e.shiftKey
+            }
+          }));
+        }
+      });
+
+      // Quick Toolbar actions
+      document.getElementById("spotlightBtn").onclick = () => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "keydown", code: "Space", key: " ", modifiers: { meta: true } }));
+          setTimeout(() => {
+            socket.send(JSON.stringify({ type: "keyup", code: "Space", key: " ", modifiers: { meta: true } }));
+          }, 50);
+        }
+      };
+
+      document.getElementById("appSwitcherBtn").onclick = () => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "keydown", code: "Tab", key: "Tab", modifiers: { meta: true } }));
+          setTimeout(() => {
+            socket.send(JSON.stringify({ type: "keyup", code: "Tab", key: "Tab", modifiers: { meta: true } }));
+          }, 50);
+        }
+      };
+
+      document.getElementById("pasteBtn").onclick = async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            const text = await navigator.clipboard.readText();
+            if (text && socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "clipboard", text }));
+              return;
+            }
+          }
+        } catch (e) {}
+        clipboardModal.classList.remove("hidden");
+        clipboardText.value = "";
+        clipboardText.focus();
+      };
+
+      document.getElementById("clipboardCancelBtn").onclick = () => {
+        clipboardModal.classList.add("hidden");
+      };
+
+      document.getElementById("clipboardSendBtn").onclick = () => {
+        const text = clipboardText.value;
+        if (text && socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "clipboard", text }));
+        }
+        clipboardModal.classList.add("hidden");
+      };
+
+      document.getElementById("scaleModeBtn").onclick = (e) => {
+        if (fitMode === "contain") {
+          fitMode = "fill";
+          canvas.style.objectFit = "fill";
+          e.target.textContent = "Fill";
+        } else {
+          fitMode = "contain";
+          canvas.style.objectFit = "contain";
+          e.target.textContent = "Fit";
+        }
+      };
+
+      document.getElementById("fullscreenBtn").onclick = () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      };
+
+      reconnectBtn.onclick = () => {
+        connect();
+      };
+
+      // Start
+      connect();
+    })();
+  </script>
+</body>
+</html>

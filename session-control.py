@@ -63,6 +63,7 @@ VALID_UI_DENSITIES = frozenset({"comfortable", "compact"})
 VALID_TOOLBAR_ORIENTATIONS = frozenset({"horizontal", "vertical-left", "vertical-right"})
 VALID_SPLIT_LAYOUTS = frozenset({"grid", "columns", "rows", "master-left", "master-top"})
 VALID_FONT_SIZES = frozenset(range(8, 17))
+VALID_DESKTOP_MODES = frozenset({"webrtc", "vnc"})
 VALID_UI_FONT_FAMILIES = frozenset({
     "Menlo, monospace",
     "Monaco, monospace",
@@ -1509,6 +1510,10 @@ def normalize_ui_preferences(payload):
     if split_layout in VALID_SPLIT_LAYOUTS:
         preferences["splitLayout"] = split_layout
 
+    desktop_mode = str(payload.get("desktopMode") or "").strip().lower()
+    if desktop_mode in VALID_DESKTOP_MODES:
+        preferences["desktopMode"] = desktop_mode
+
     try:
         font_size = int(payload.get("fontSize"))
     except (TypeError, ValueError):
@@ -1633,17 +1638,22 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             enabled = os.environ.get("FLY_DESKTOP_ENABLED", "1") == "1"
             desktop_url = os.environ.get("FLY_DESKTOP_URL", "/desktop/")
             password = os.environ.get("FLY_DESKTOP_PASSWORD", "")
-            params = "path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true"
+            params = "path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true"
             if password:
                 params += f"&password={quote(password)}"
-            full_url = f"{desktop_url.rstrip('/')}/vnc.html?{params}"
+            vnc_url = f"{desktop_url.rstrip('/')}/vnc.html?{params}"
+            webrtc_url = os.environ.get("FLY_DESKTOP_STREAM_URL", "/desktop-stream-ws")
+            streamer_port = int(os.environ.get("FLY_STREAMER_PORT", 5905))
             send_json(
                 self,
                 200,
                 {
                     "ok": True,
                     "enabled": enabled,
-                    "url": full_url if enabled else "",
+                    "url": vnc_url if enabled else "",
+                    "vncUrl": vnc_url if enabled else "",
+                    "webrtcUrl": webrtc_url if enabled else "",
+                    "streamerPort": streamer_port,
                     "rawUrl": desktop_url if enabled else "",
                 },
             )
@@ -1652,6 +1662,14 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         if self.path == "/api/mac/apps/list":
             apps = get_running_mac_apps()
             send_json(self, 200, {"ok": True, "apps": apps})
+            return
+
+        if self.path == "/api/mac/open-permissions":
+            try:
+                subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"])
+                send_json(self, 200, {"ok": True})
+            except Exception as exc:
+                send_json(self, 500, {"ok": False, "error": str(exc)})
             return
 
         if self.path == "/api/apps/list":

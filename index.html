@@ -1936,6 +1936,13 @@
                 </select>
               </div>
               <div class="settings-row">
+                <label for="desktopMode">Удаленный стол</label>
+                <select id="desktopMode">
+                  <option value="webrtc">H.264 / WebRTC (60 FPS)</option>
+                  <option value="vnc">noVNC (Совместимость)</option>
+                </select>
+              </div>
+              <div class="settings-row">
                 <label for="fontSize">Размер</label>
                 <select id="fontSize"></select>
               </div>
@@ -2734,6 +2741,7 @@
         panelCollapsed: !!raw.panelCollapsed,
         density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
         toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal",
+        desktopMode: ["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc",
         snippets
       };
     }
@@ -2772,7 +2780,7 @@
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "snippets"];
+        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "snippets"];
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
@@ -2966,7 +2974,12 @@
     }
 
     function buildDesktopUrl() {
-      return desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
+      const mode = preferences.desktopMode || "webrtc";
+      if (mode === "vnc") {
+        return desktopConfig.vncUrl || desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true";
+      }
+      const streamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
+      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&fps=60`;
     }
 
     function viewModeSwitchMarkup() {
@@ -3202,19 +3215,23 @@
         const response = await localApiFetch("/api/desktop/config");
         const config = await response.json();
         desktopConfig = {
-          enabled: Boolean(config.enabled && config.url),
-          url: typeof config.url === "string" ? config.url : ""
+          enabled: Boolean(config.enabled && (config.url || config.webrtcUrl || config.vncUrl)),
+          url: typeof config.url === "string" ? config.url : "",
+          vncUrl: typeof config.vncUrl === "string" ? config.vncUrl : (config.url || ""),
+          webrtcUrl: typeof config.webrtcUrl === "string" ? config.webrtcUrl : "/desktop-stream-ws",
+          streamerPort: Number(config.streamerPort) || 5905
         };
       } catch (e) {
-        desktopConfig = { enabled: false, url: "" };
+        desktopConfig = { enabled: false, url: "", vncUrl: "", webrtcUrl: "/desktop-stream-ws", streamerPort: 5905 };
       }
 
+      const currentDesktopUrl = buildDesktopUrl();
       if (addDesktopBtn) addDesktopBtn.hidden = !desktopConfig.enabled;
       const openDesktopTabBtn = document.getElementById("openDesktopTab");
       if (openDesktopTabBtn) {
         openDesktopTabBtn.hidden = !desktopConfig.enabled;
-        if (desktopConfig.enabled && desktopConfig.url) {
-          openDesktopTabBtn.href = desktopConfig.url;
+        if (desktopConfig.enabled) {
+          openDesktopTabBtn.href = currentDesktopUrl;
         }
       }
       refreshAppsSubmenuDivider("macAppsList");
@@ -5539,6 +5556,31 @@
       };
     }
 
+    // Desktop Mode Selector Logic
+    const desktopModeSelect = document.getElementById("desktopMode");
+    if (desktopModeSelect) {
+      desktopModeSelect.value = preferences.desktopMode || "webrtc";
+      desktopModeSelect.onchange = () => {
+        const val = desktopModeSelect.value;
+        preferences.desktopMode = val;
+        savePreferences();
+        const newUrl = buildDesktopUrl();
+        tabs.forEach(tab => {
+          if (tab.type === "desktop" || tab.type === "mac-app") {
+            const iframe = tab.wrapper?.querySelector("iframe");
+            if (iframe) iframe.src = newUrl;
+            const link = tab.wrapper?.querySelector(".frame-control[target='_blank']");
+            if (link) link.href = newUrl;
+          }
+        });
+        const openDesktopTabBtn = document.getElementById("openDesktopTab");
+        if (openDesktopTabBtn && desktopConfig.enabled) {
+          openDesktopTabBtn.href = newUrl;
+        }
+        setStatusText(`Режим рабочего стола: ${val === "webrtc" ? "H.264 / WebRTC (60 FPS)" : "noVNC"}`, 2400);
+      };
+    }
+
     document.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -5712,6 +5754,7 @@
       uiDensitySelect.value = preferences.density;
       document.body.classList.toggle("density-compact", preferences.density === "compact");
       toolbarOrientationSelect.value = preferences.toolbarOrientation;
+      if (desktopModeSelect) desktopModeSelect.value = preferences.desktopMode || "webrtc";
       applyToolbarOrientation(preferences.toolbarOrientation);
       applyPanelCollapsedPref();
       applyShellTheme();

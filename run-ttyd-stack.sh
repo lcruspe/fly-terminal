@@ -14,14 +14,22 @@ TERMINAL_TITLE="${TERMINAL_TITLE:-Terminal}"
 DEFAULT_TERMINAL_THEME='{"background":"#f7f3e8","foreground":"#28231f","cursor":"#c65f2f","selectionBackground":"#e7d6b3","black":"#28231f","red":"#b84d43","green":"#587a45","yellow":"#a9762c","blue":"#3f6f9f","magenta":"#8a5c8f","cyan":"#3f8585","white":"#f4ead8","brightBlack":"#6f665c","brightRed":"#d85f4f","brightGreen":"#6f934f","brightYellow":"#c89136","brightBlue":"#5688bf","brightMagenta":"#a775aa","brightCyan":"#56a0a0","brightWhite":"#fff8eb"}'
 TERMINAL_THEME="${TERMINAL_THEME:-$DEFAULT_TERMINAL_THEME}"
 
+STREAMER_SCRIPT="${FLY_TERMINAL_STREAMER_SCRIPT:-/Users/kruspe/CodexProjects/fly-terminal-live/macos/launch-streamer.sh}"
+
 cleanup() {
     [ -n "${TTYD_PID:-}" ] && kill "${TTYD_PID}" 2>/dev/null || true
     [ -n "${CONTROL_PID:-}" ] && kill "${CONTROL_PID}" 2>/dev/null || true
+    [ -n "${STREAMER_PID:-}" ] && kill "${STREAMER_PID}" 2>/dev/null || true
 }
 trap cleanup INT TERM EXIT
 
 python3 "$CONTROL_SCRIPT" &
 CONTROL_PID=$!
+
+if [ -f "$STREAMER_SCRIPT" ]; then
+    bash "$STREAMER_SCRIPT" &
+    STREAMER_PID=$!
+fi
 
 set -- \
     -6 \
@@ -48,5 +56,7 @@ TTYD_PID=$!
 wait "$TTYD_PID"
 TTYD_STATUS=$?
 [ -n "${CONTROL_PID:-}" ] && kill "${CONTROL_PID}" 2>/dev/null || true
+[ -n "${STREAMER_PID:-}" ] && kill "${STREAMER_PID}" 2>/dev/null || true
 wait "${CONTROL_PID}" 2>/dev/null || true
+wait "${STREAMER_PID:-}" 2>/dev/null || true
 exit "$TTYD_STATUS"
