@@ -3,6 +3,8 @@ name: Menu smoke test once
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -10,7 +12,8 @@ permissions:
 
 jobs:
   test:
-    if: github.event.issue.title == 'Trigger: menu smoke test'
+    if: >-
+      github.event.issue.title == 'Trigger: menu smoke test'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -126,7 +129,6 @@ jobs:
             menu_check('settingsMenu', orientation)
             menu_check('toolsMenu', orientation)
 
-          # Narrow viewport exercises responsive overflow menu when it is activated.
           driver.set_window_size(760, 760)
           driver.execute_script("applyToolbarOrientation('horizontal'); if (typeof layoutResponsiveToolbar === 'function') layoutResponsiveToolbar();")
           time.sleep(0.25)
@@ -137,7 +139,6 @@ jobs:
           else:
             results.append({'menu':'overflowMenu','orientation':'horizontal-narrow','status':'skipped-not-needed'})
 
-          # Behavioral probe: record whether native details menus stay open after another menu opens/outside click.
           driver.set_window_size(1440, 900)
           driver.execute_script("applyToolbarOrientation('horizontal');")
           close_details()
