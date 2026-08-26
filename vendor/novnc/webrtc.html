@@ -285,6 +285,8 @@
       const [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
       const requestedFps = [15, 30, 45, 60].includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
       const requestedDisplayName = urlParams.get("display") === "Fly Remote" ? "Fly Remote" : "";
+      const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
+        ? urlParams.get("scale") : "contain";
       
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.host;
@@ -314,7 +316,10 @@
       let streamHeight = 1080;
       let macScreenWidth = 2560;
       let macScreenHeight = 1440;
-      let fitMode = "contain"; // "contain" or "fill"
+      let serverPixelWidth = 2560;
+      let serverPixelHeight = 1440;
+      let fitMode = requestedScaleMode; // "contain", "fill" or "sync"
+      let syncConfigureTimer = null;
       let reconnectAttempts = 0;
 
       function updateOverlay(show, title, subtext, showButton = false) {
@@ -432,7 +437,16 @@
                   streamHeight = msg.height || streamHeight;
                   macScreenWidth = msg.screenWidth || macScreenWidth;
                   macScreenHeight = msg.screenHeight || macScreenHeight;
+                  serverPixelWidth = msg.pixelWidth || serverPixelWidth;
+                  serverPixelHeight = msg.pixelHeight || serverPixelHeight;
                   resBadge.textContent = `${streamWidth}×${streamHeight}`;
+                  scheduleSyncConfigure();
+                } else if (msg.type === "display") {
+                  macScreenWidth = msg.screenWidth || macScreenWidth;
+                  macScreenHeight = msg.screenHeight || macScreenHeight;
+                  serverPixelWidth = msg.pixelWidth || serverPixelWidth;
+                  serverPixelHeight = msg.pixelHeight || serverPixelHeight;
+                  scheduleSyncConfigure();
                 } else if (msg.type === "status") {
                   if (msg.state === "tcc_required") {
                     statusBadge.textContent = "Требуется разрешение";
@@ -496,15 +510,33 @@
 
       function configureStream(force = false) {
         if (socket && socket.readyState === WebSocket.OPEN) {
+          const syncWidth = Math.max(640, Math.min(7680, Math.floor(serverPixelWidth / 2) * 2));
+          const syncHeight = Math.max(360, Math.min(4320, Math.floor(serverPixelHeight / 2) * 2));
           socket.send(JSON.stringify({
             type: "configure",
-            width: requestedWidth,
-            height: requestedHeight,
+            width: fitMode === "sync" ? syncWidth : requestedWidth,
+            height: fitMode === "sync" ? syncHeight : requestedHeight,
             fps: requestedFps,
             displayName: requestedDisplayName,
             force
           }));
         }
+      }
+
+      function scheduleSyncConfigure() {
+        if (fitMode !== "sync" || streamWidth === serverPixelWidth && streamHeight === serverPixelHeight) return;
+        clearTimeout(syncConfigureTimer);
+        syncConfigureTimer = setTimeout(() => configureStream(), 120);
+      }
+
+      function applyFitMode() {
+        const button = document.getElementById("scaleModeBtn");
+        const sync = fitMode === "sync";
+        canvas.style.objectFit = fitMode === "fill" ? "fill" : "contain";
+        button.textContent = sync ? "Sync" : (fitMode === "fill" ? "Fill" : "Fit");
+        button.title = sync
+          ? `Sync: поток ${serverPixelWidth}×${serverPixelHeight}, пропорции без растяжения`
+          : (fitMode === "fill" ? "Fill: растянуть на всё окно" : "Fit: вписать в окно");
       }
       window.flyConfigureStream = configureStream;
 
@@ -680,12 +712,15 @@
       document.getElementById("scaleModeBtn").onclick = (e) => {
         if (fitMode === "contain") {
           fitMode = "fill";
-          canvas.style.objectFit = "fill";
-          e.target.textContent = "Fill";
+        } else if (fitMode === "fill") {
+          fitMode = "sync";
         } else {
           fitMode = "contain";
-          canvas.style.objectFit = "contain";
-          e.target.textContent = "Fit";
+        }
+        applyFitMode();
+        configureStream();
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: "fly-desktop-scale-mode", mode: fitMode }, window.location.origin);
         }
       };
 
@@ -702,6 +737,7 @@
       };
 
       // Start
+      applyFitMode();
       connect();
     })();
   </script>

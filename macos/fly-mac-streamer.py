@@ -31,12 +31,10 @@ PORT = int(os.environ.get("FLY_STREAMER_PORT", 5905))
 TARGET_FPS = int(os.environ.get("FLY_STREAMER_FPS", 60))
 TARGET_WIDTH = int(os.environ.get("FLY_STREAMER_WIDTH", 1920))
 TARGET_HEIGHT = int(os.environ.get("FLY_STREAMER_HEIGHT", 1080))
-VALID_STREAM_CONFIGS = {
-    (1280, 720), (1600, 900), (1920, 1080), (2560, 1440),
-}
 VALID_STREAM_FPS = {15, 30, 45, 60}
 VALID_DISPLAY_NAMES = {"", "Fly Remote"}
 TARGET_DISPLAY_BOUNDS = [0.0, 0.0, 2560.0, 1440.0]
+TARGET_DISPLAY_PIXELS = [2560, 1440]
 
 # MARK: - CoreGraphics & AppKit ctypes setup
 
@@ -119,6 +117,15 @@ WEB_KEY_TO_MAC_VK = {
 
 def get_screen_dimensions():
     return int(TARGET_DISPLAY_BOUNDS[2]), int(TARGET_DISPLAY_BOUNDS[3])
+
+
+def valid_stream_dimensions(width: int, height: int):
+    return (
+        640 <= width <= 7680
+        and 360 <= height <= 4320
+        and width % 2 == 0
+        and height % 2 == 0
+    )
 
 
 def inject_mouse(event_type: str, x_norm: float, y_norm: float, button: int = 0):
@@ -284,7 +291,7 @@ class StreamServer:
         loop.create_task(self._log_encoder_stderr(encoder_proc))
 
     async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False):
-        if (width, height) not in VALID_STREAM_CONFIGS or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
+        if not valid_stream_dimensions(width, height) or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
             return False
         async with self.encoder_lock:
             if not force and (width, height, fps, display_name) == (self.target_width, self.target_height, self.target_fps, self.target_display_name):
@@ -309,6 +316,8 @@ class StreamServer:
                 "fps": fps,
                 "screenWidth": get_screen_dimensions()[0],
                 "screenHeight": get_screen_dimensions()[1],
+                "pixelWidth": TARGET_DISPLAY_PIXELS[0],
+                "pixelHeight": TARGET_DISPLAY_PIXELS[1],
             })
             return True
 
@@ -385,7 +394,19 @@ class StreamServer:
                 })
             geometry = re.search(r"Display geometry id=(\d+) name=.* x=(-?\d+) y=(-?\d+) width=(\d+) height=(\d+)", text)
             if geometry:
+                display_id = int(geometry.group(1))
                 TARGET_DISPLAY_BOUNDS[:] = [float(value) for value in geometry.groups()[1:]]
+                pixel_width = int(cg.CGDisplayPixelsWide(display_id))
+                pixel_height = int(cg.CGDisplayPixelsHigh(display_id))
+                if pixel_width > 0 and pixel_height > 0:
+                    TARGET_DISPLAY_PIXELS[:] = [pixel_width, pixel_height]
+                await self.broadcast_json({
+                    "type": "display",
+                    "screenWidth": int(TARGET_DISPLAY_BOUNDS[2]),
+                    "screenHeight": int(TARGET_DISPLAY_BOUNDS[3]),
+                    "pixelWidth": TARGET_DISPLAY_PIXELS[0],
+                    "pixelHeight": TARGET_DISPLAY_PIXELS[1],
+                })
 
     async def _read_encoder_frames(self, encoder_proc):
         loop = asyncio.get_running_loop()
@@ -424,7 +445,9 @@ class StreamServer:
             "height": self.target_height,
             "fps": self.target_fps,
             "screenWidth": screen_w,
-            "screenHeight": screen_h
+            "screenHeight": screen_h,
+            "pixelWidth": TARGET_DISPLAY_PIXELS[0],
+            "pixelHeight": TARGET_DISPLAY_PIXELS[1],
         }
         await websocket.send(json.dumps(init_payload))
 

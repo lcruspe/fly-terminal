@@ -69,6 +69,7 @@ VALID_TOOLBAR_ORIENTATIONS = frozenset({"horizontal", "vertical-left", "vertical
 VALID_SPLIT_LAYOUTS = frozenset({"grid", "columns", "rows", "master-left", "master-top"})
 VALID_FONT_SIZES = frozenset(range(8, 17))
 VALID_DESKTOP_MODES = frozenset({"webrtc", "vnc"})
+VALID_DESKTOP_SCALE_MODES = frozenset({"contain", "fill", "sync"})
 VALID_DESKTOP_RESOLUTIONS = frozenset({"1280x720", "1600x900", "1920x1080", "2560x1440"})
 VALID_DESKTOP_FPS = frozenset({15, 30, 45, 60})
 VALID_UI_FONT_FAMILIES = frozenset({
@@ -1644,6 +1645,10 @@ def normalize_ui_preferences(payload):
     desktop_mode = str(payload.get("desktopMode") or "").strip().lower()
     if desktop_mode in VALID_DESKTOP_MODES:
         preferences["desktopMode"] = desktop_mode
+
+    desktop_scale_mode = str(payload.get("desktopScaleMode") or "").strip().lower()
+    if desktop_scale_mode in VALID_DESKTOP_SCALE_MODES:
+        preferences["desktopScaleMode"] = desktop_scale_mode
 
     desktop_resolution = str(payload.get("desktopResolution") or "").strip().lower()
     if desktop_resolution in VALID_DESKTOP_RESOLUTIONS:

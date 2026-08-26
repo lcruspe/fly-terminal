@@ -1972,6 +1972,14 @@
                 </select>
               </div>
               <div class="settings-row">
+                <label for="desktopScaleMode">Масштаб RDC</label>
+                <select id="desktopScaleMode">
+                  <option value="contain">Fit — вписать</option>
+                  <option value="fill">Fill — растянуть</option>
+                  <option value="sync">Sync — как на сервере</option>
+                </select>
+              </div>
+              <div class="settings-row">
                 <label for="desktopFps">Частота RDC</label>
                 <select id="desktopFps">
                   <option value="15">15 FPS</option>
@@ -2806,6 +2814,7 @@
         density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
         toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal",
         desktopMode: ["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc",
+        desktopScaleMode: ["contain", "fill", "sync"].includes(raw.desktopScaleMode) ? raw.desktopScaleMode : "contain",
         desktopResolution: ["1280x720", "1600x900", "1920x1080", "2560x1440"].includes(raw.desktopResolution) ? raw.desktopResolution : "1920x1080",
         desktopFps: [15, 30, 45, 60].includes(Number(raw.desktopFps)) ? Number(raw.desktopFps) : 60,
         mainResolutionPresets: normalizeResolutionPresets(raw.mainResolutionPresets),
@@ -2848,7 +2857,7 @@
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopResolution", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
+        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopScaleMode", "desktopResolution", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
@@ -3048,7 +3057,7 @@
       }
       const streamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
       const displayParam = targetDisplay === "Fly Remote" ? "&display=Fly%20Remote" : "";
-      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}${displayParam}`;
+      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}&scale=${encodeURIComponent(preferences.desktopScaleMode || "contain")}${displayParam}`;
     }
 
     function viewModeSwitchMarkup() {
@@ -5628,6 +5637,7 @@
 
     // Desktop Mode Selector Logic
     const desktopModeSelect = document.getElementById("desktopMode");
+    const desktopScaleModeSelect = document.getElementById("desktopScaleMode");
     const desktopResolutionSelect = document.getElementById("desktopResolution");
     const desktopFpsSelect = document.getElementById("desktopFps");
     function reloadDesktopTabs() {
@@ -5662,6 +5672,24 @@
         setStatusText(`Разрешение RDC: ${preferences.desktopResolution.replace("x", "×")}`, 2400);
       };
     }
+    if (desktopScaleModeSelect) {
+      desktopScaleModeSelect.value = preferences.desktopScaleMode || "contain";
+      desktopScaleModeSelect.onchange = () => {
+        preferences.desktopScaleMode = desktopScaleModeSelect.value;
+        savePreferences();
+        reloadDesktopTabs();
+        setStatusText(`Масштаб RDC: ${desktopScaleModeSelect.options[desktopScaleModeSelect.selectedIndex].text}`, 2400);
+      };
+    }
+    window.addEventListener("message", event => {
+      if (event.origin !== window.location.origin || event.data?.type !== "fly-desktop-scale-mode") return;
+      const ownsSource = tabs.some(tab => (tab.type === "desktop" || tab.type === "mac-app")
+        && tab.wrapper?.querySelector("iframe")?.contentWindow === event.source);
+      if (!ownsSource || !["contain", "fill", "sync"].includes(event.data.mode)) return;
+      preferences.desktopScaleMode = event.data.mode;
+      if (desktopScaleModeSelect) desktopScaleModeSelect.value = event.data.mode;
+      savePreferences();
+    });
     if (desktopFpsSelect) {
       desktopFpsSelect.value = String(preferences.desktopFps);
       desktopFpsSelect.onchange = () => {
@@ -5963,6 +5991,7 @@
       document.body.classList.toggle("density-compact", preferences.density === "compact");
       toolbarOrientationSelect.value = preferences.toolbarOrientation;
       if (desktopModeSelect) desktopModeSelect.value = preferences.desktopMode || "webrtc";
+      if (desktopScaleModeSelect) desktopScaleModeSelect.value = preferences.desktopScaleMode || "contain";
       if (desktopResolutionSelect) desktopResolutionSelect.value = preferences.desktopResolution;
       if (desktopFpsSelect) desktopFpsSelect.value = String(preferences.desktopFps);
       renderDisplayResolutionControl("main");
