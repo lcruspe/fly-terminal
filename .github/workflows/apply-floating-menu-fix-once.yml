@@ -1,0 +1,79 @@
+name: Apply floating menu fix once
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'arm floating menu fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply fix
+        run: python3 tools/_fix_floating_menus_once.py
+
+      - name: Validate source
+        run: |
+          python -m py_compile session-control.py
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path('index.html').read_text(encoding='utf-8')
+          start = html.rfind('<script>')
+          end = html.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('inline script not found')
+          Path('/tmp/fly-terminal-index.js').write_text(html[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check /tmp/fly-terminal-index.js
+          git diff --check
+          grep -q 'function closeFloatingMenus' index.html
+          grep -q 'const fixedBase = fixedPositionBaseFor(menu);' index.html
+          grep -q 'const fittedRect = menu.getBoundingClientRect();' index.html
+          grep -q '## Floating menus' UI.md
+
+      - name: Prepare browser smoke test
+        run: |
+          python -m pip install --quiet selenium
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/flyterm-http.log 2>&1 &
+          sleep 2
+
+      - name: Run browser smoke test
+        id: smoke
+        continue-on-error: true
+        run: python3 tools/_test_floating_menus_once.py
+
+      - name: Finalize main
+        if: always()
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [ "$SMOKE_OUTCOME" != "success" ]; then
+            git restore --source=HEAD -- index.html UI.md
+          fi
+          rm -f tools/_fix_floating_menus_once.py
+          rm -f tools/_test_floating_menus_once.py
+          rm -f .github/workflows/apply-floating-menu-fix-once.yml
+          git diff --check
+          git add -A
+          if ! git diff --cached --quiet; then
+            if [ "$SMOKE_OUTCOME" = "success" ]; then
+              git commit -m 'Fix floating menu viewport behavior'
+            else
+              git commit -m 'chore: remove failed floating menu fix runner'
+            fi
+            git push origin HEAD:main
+          fi
+          if [ "$SMOKE_OUTCOME" != "success" ]; then
+            exit 1
+          fi
