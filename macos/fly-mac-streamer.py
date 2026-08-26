@@ -5,6 +5,7 @@ import ctypes.util
 import json
 import logging
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -30,6 +31,12 @@ PORT = int(os.environ.get("FLY_STREAMER_PORT", 5905))
 TARGET_FPS = int(os.environ.get("FLY_STREAMER_FPS", 60))
 TARGET_WIDTH = int(os.environ.get("FLY_STREAMER_WIDTH", 1920))
 TARGET_HEIGHT = int(os.environ.get("FLY_STREAMER_HEIGHT", 1080))
+VALID_STREAM_CONFIGS = {
+    (1280, 720), (1600, 900), (1920, 1080), (2560, 1440),
+}
+VALID_STREAM_FPS = {15, 30, 45, 60}
+VALID_DISPLAY_NAMES = {"", "Fly Remote"}
+TARGET_DISPLAY_BOUNDS = [0.0, 0.0, 2560.0, 1440.0]
 
 # MARK: - CoreGraphics & AppKit ctypes setup
 
@@ -111,16 +118,13 @@ WEB_KEY_TO_MAC_VK = {
 
 
 def get_screen_dimensions():
-    main_id = cg.CGMainDisplayID()
-    w = cg.CGDisplayPixelsWide(main_id) or 2560
-    h = cg.CGDisplayPixelsHigh(main_id) or 1440
-    return int(w), int(h)
+    return int(TARGET_DISPLAY_BOUNDS[2]), int(TARGET_DISPLAY_BOUNDS[3])
 
 
 def inject_mouse(event_type: str, x_norm: float, y_norm: float, button: int = 0):
     screen_w, screen_h = get_screen_dimensions()
-    x = max(0.0, min(float(screen_w), x_norm * screen_w))
-    y = max(0.0, min(float(screen_h), y_norm * screen_h))
+    x = TARGET_DISPLAY_BOUNDS[0] + max(0.0, min(float(screen_w), x_norm * screen_w))
+    y = TARGET_DISPLAY_BOUNDS[1] + max(0.0, min(float(screen_h), y_norm * screen_h))
     pos = CGPoint(x, y)
 
     if event_type == "move":
@@ -221,6 +225,11 @@ class StreamServer:
         self.running = False
         self.tcc_required = False
         self.status_message = "Инициализация захвата экрана..."
+        self.target_width = TARGET_WIDTH
+        self.target_height = TARGET_HEIGHT
+        self.target_fps = TARGET_FPS
+        self.target_display_name = os.environ.get("FLY_STREAMER_DISPLAY_NAME", "")
+        self.encoder_lock = asyncio.Lock()
 
     async def broadcast_json(self, msg: dict):
         if not self.clients:
@@ -251,16 +260,57 @@ class StreamServer:
         logger.info("Initializing Unix socket server...")
         await self._start_unix_socket_server()
 
-        logger.info("Starting fly-mac-encoder subprocess: %s", ENCODER_BIN)
-        self.encoder_proc = subprocess.Popen(
+        encoder_env = os.environ.copy()
+        encoder_env.update({
+            "FLY_STREAMER_WIDTH": str(self.target_width),
+            "FLY_STREAMER_HEIGHT": str(self.target_height),
+            "FLY_STREAMER_FPS": str(self.target_fps),
+            "FLY_STREAMER_DISPLAY_NAME": self.target_display_name,
+        })
+        logger.info(
+            "Starting fly-mac-encoder subprocess: %s (%dx%d @ %d FPS)",
+            ENCODER_BIN, self.target_width, self.target_height, self.target_fps,
+        )
+        encoder_proc = subprocess.Popen(
             [str(ENCODER_BIN)],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            env=encoder_env,
         )
+        self.encoder_proc = encoder_proc
 
         loop = asyncio.get_running_loop()
-        loop.create_task(self._read_encoder_frames())
-        loop.create_task(self._log_encoder_stderr())
+        loop.create_task(self._read_encoder_frames(encoder_proc))
+        loop.create_task(self._log_encoder_stderr(encoder_proc))
+
+    async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False):
+        if (width, height) not in VALID_STREAM_CONFIGS or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
+            return False
+        async with self.encoder_lock:
+            if not force and (width, height, fps, display_name) == (self.target_width, self.target_height, self.target_fps, self.target_display_name):
+                return True
+            self.target_width, self.target_height, self.target_fps = width, height, fps
+            self.target_display_name = display_name
+            self.latest_keyframe = b""
+            previous = self.encoder_proc
+            self.encoder_proc = None
+            if previous and previous.poll() is None:
+                previous.terminate()
+                try:
+                    await asyncio.wait_for(asyncio.to_thread(previous.wait), timeout=3)
+                except asyncio.TimeoutError:
+                    previous.kill()
+            await self.start_encoder()
+            await self.broadcast_json({
+                "type": "init",
+                "codec": "avc1.42E01F",
+                "width": width,
+                "height": height,
+                "fps": fps,
+                "screenWidth": get_screen_dimensions()[0],
+                "screenHeight": get_screen_dimensions()[1],
+            })
+            return True
 
     async def _start_unix_socket_server(self):
         sock_path = "/tmp/fly-mac-stream.sock"
@@ -309,10 +359,10 @@ class StreamServer:
                     dead_clients.add(client)
             self.clients.difference_update(dead_clients)
 
-    async def _log_encoder_stderr(self):
+    async def _log_encoder_stderr(self, encoder_proc):
         loop = asyncio.get_running_loop()
-        while self.running and self.encoder_proc:
-            line = await loop.run_in_executor(None, self.encoder_proc.stderr.readline)
+        while self.running and encoder_proc.poll() is None:
+            line = await loop.run_in_executor(None, encoder_proc.stderr.readline)
             if not line:
                 break
             text = line.decode(errors="ignore").strip()
@@ -327,28 +377,32 @@ class StreamServer:
                 })
             elif "Capture started" in text or "Found display" in text:
                 self.tcc_required = False
-                self.status_message = "Захват экрана активен (60 FPS)"
+                self.status_message = f"Захват экрана активен ({self.target_fps} FPS)"
                 await self.broadcast_json({
                     "type": "status",
                     "state": "capturing",
                     "message": self.status_message
                 })
+            geometry = re.search(r"Display geometry id=(\d+) name=.* x=(-?\d+) y=(-?\d+) width=(\d+) height=(\d+)", text)
+            if geometry:
+                TARGET_DISPLAY_BOUNDS[:] = [float(value) for value in geometry.groups()[1:]]
 
-    async def _read_encoder_frames(self):
+    async def _read_encoder_frames(self, encoder_proc):
         loop = asyncio.get_running_loop()
         logger.info("Beginning encoder frame consumption loop...")
-        while self.running and self.encoder_proc:
+        while self.running and encoder_proc.poll() is None:
             try:
-                len_bytes = await loop.run_in_executor(None, self.encoder_proc.stdout.read, 4)
+                len_bytes = await loop.run_in_executor(None, encoder_proc.stdout.read, 4)
                 if not len_bytes or len(len_bytes) < 4:
-                    logger.warning("Encoder output ended, restarting in 2s...")
-                    await asyncio.sleep(2)
-                    if self.running:
-                        await self.start_encoder()
+                    if self.running and self.encoder_proc is encoder_proc:
+                        logger.warning("Encoder output ended, restarting in 2s...")
+                        await asyncio.sleep(2)
+                        if self.running and self.encoder_proc is encoder_proc:
+                            await self.start_encoder()
                     break
 
                 payload_len = struct.unpack("!I", len_bytes)[0]
-                payload = await loop.run_in_executor(None, self.encoder_proc.stdout.read, payload_len)
+                payload = await loop.run_in_executor(None, encoder_proc.stdout.read, payload_len)
                 if not payload or len(payload) < payload_len:
                     continue
 
@@ -366,9 +420,9 @@ class StreamServer:
         init_payload = {
             "type": "init",
             "codec": "avc1.42E01F",
-            "width": TARGET_WIDTH,
-            "height": TARGET_HEIGHT,
-            "fps": TARGET_FPS,
+            "width": self.target_width,
+            "height": self.target_height,
+            "fps": self.target_fps,
             "screenWidth": screen_w,
             "screenHeight": screen_h
         }
@@ -393,7 +447,15 @@ class StreamServer:
                     try:
                         data = json.loads(message)
                         msg_type = data.get("type")
-                        if msg_type == "mousemove":
+                        if msg_type == "configure":
+                            await self.configure_encoder(
+                                int(data.get("width", 0)),
+                                int(data.get("height", 0)),
+                                int(data.get("fps", 0)),
+                                str(data.get("displayName", "")),
+                                bool(data.get("force", False)),
+                            )
+                        elif msg_type == "mousemove":
                             inject_mouse("move", data.get("x", 0), data.get("y", 0))
                         elif msg_type == "mousedown":
                             inject_mouse("down", data.get("x", 0), data.get("y", 0), data.get("button", 0))

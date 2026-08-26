@@ -890,6 +890,26 @@
       font-weight: 700;
     }
 
+    .display-resolution-control {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    .display-resolution-control select,
+    .display-resolution-control input {
+      grid-column: 1 / -1;
+    }
+
+    .display-resolution-control button {
+      min-height: 34px;
+      padding: 7px 10px;
+    }
+
+    .display-resolution-control .resolution-remove {
+      color: var(--danger);
+    }
+
     .settings-action {
       border-top: 1px solid var(--border);
       display: grid;
@@ -1938,9 +1958,49 @@
               <div class="settings-row">
                 <label for="desktopMode">Удаленный стол</label>
                 <select id="desktopMode">
-                  <option value="webrtc">H.264 / WebRTC (60 FPS)</option>
+                  <option value="webrtc">H.264 / WebSocket</option>
                   <option value="vnc">noVNC (Совместимость)</option>
                 </select>
+              </div>
+              <div class="settings-row">
+                <label for="desktopResolution">Разрешение RDC</label>
+                <select id="desktopResolution">
+                  <option value="1280x720">1280×720</option>
+                  <option value="1600x900">1600×900</option>
+                  <option value="1920x1080">1920×1080</option>
+                  <option value="2560x1440">2560×1440</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <label for="desktopFps">Частота RDC</label>
+                <select id="desktopFps">
+                  <option value="15">15 FPS</option>
+                  <option value="30">30 FPS</option>
+                  <option value="45">45 FPS</option>
+                  <option value="60">60 FPS</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <label for="mainDisplayResolution">Основной экран</label>
+                <div class="display-resolution-control" data-display-target="main">
+                  <select id="mainDisplayResolution" aria-label="Пресет разрешения основного экрана"></select>
+                  <input id="mainDisplayResolutionCustom" type="text" inputmode="numeric" placeholder="Например, 1920x1080" aria-label="Пользовательское разрешение основного экрана" />
+                  <button type="button" class="resolution-add">Добавить</button>
+                  <button type="button" class="resolution-apply">Применить</button>
+                  <button type="button" class="resolution-remove">Удалить</button>
+                </div>
+                <div class="settings-action-status" id="mainDisplayResolutionStatus"></div>
+              </div>
+              <div class="settings-row">
+                <label for="virtualDisplayResolution">Виртуальный экран</label>
+                <div class="display-resolution-control" data-display-target="virtual">
+                  <select id="virtualDisplayResolution" aria-label="Пресет разрешения виртуального экрана"></select>
+                  <input id="virtualDisplayResolutionCustom" type="text" inputmode="numeric" placeholder="Например, 2048x1152" aria-label="Пользовательское разрешение виртуального экрана" />
+                  <button type="button" class="resolution-add">Добавить</button>
+                  <button type="button" class="resolution-apply">Применить</button>
+                  <button type="button" class="resolution-remove">Удалить</button>
+                </div>
+                <div class="settings-action-status" id="virtualDisplayResolutionStatus"></div>
               </div>
               <div class="settings-row">
                 <label for="fontSize">Размер</label>
@@ -2732,6 +2792,10 @@
           content: snippet.content.slice(0, 4000)
         })).filter(snippet => snippet.id && snippet.name && snippet.content)
         : [];
+      const normalizeResolutionPresets = values => Array.isArray(values)
+        ? [...new Set(values.map(value => String(value).trim().toLowerCase().replace("×", "x"))
+          .filter(value => /^\d{3,4}x\d{3,4}$/.test(value)))].slice(0, 20)
+        : [];
       return {
         theme: themes[raw.theme] ? raw.theme : "paper",
         fontSize: fontSizes.includes(Number(raw.fontSize)) ? Number(raw.fontSize) : 12,
@@ -2742,6 +2806,10 @@
         density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
         toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal",
         desktopMode: ["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc",
+        desktopResolution: ["1280x720", "1600x900", "1920x1080", "2560x1440"].includes(raw.desktopResolution) ? raw.desktopResolution : "1920x1080",
+        desktopFps: [15, 30, 45, 60].includes(Number(raw.desktopFps)) ? Number(raw.desktopFps) : 60,
+        mainResolutionPresets: normalizeResolutionPresets(raw.mainResolutionPresets),
+        virtualResolutionPresets: normalizeResolutionPresets(raw.virtualResolutionPresets),
         snippets
       };
     }
@@ -2780,7 +2848,7 @@
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "snippets"];
+        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopResolution", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
@@ -2973,13 +3041,14 @@
       return browserConfig.url || "about:blank";
     }
 
-    function buildDesktopUrl() {
+    function buildDesktopUrl(targetDisplay = "") {
       const mode = preferences.desktopMode || "webrtc";
       if (mode === "vnc") {
         return desktopConfig.vncUrl || desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true";
       }
       const streamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
-      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&fps=60`;
+      const displayParam = targetDisplay === "Fly Remote" ? "&display=Fly%20Remote" : "";
+      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}${displayParam}`;
     }
 
     function viewModeSwitchMarkup() {
@@ -3394,7 +3463,7 @@
 
     function addMacAppTab(appName) {
       focusMacApp(appName);
-      const tab = addDesktopTab(`App: ${appName}`, `App: ${appName}`, `macOS · ${appName}`);
+      const tab = addDesktopTab(`App: ${appName}`, `App: ${appName}`, `macOS · ${appName}`, "Fly Remote");
       tab.type = "mac-app";
       tab.appName = appName;
       setStatusText(`Открыто приложение ${appName}`, 2500);
@@ -5033,9 +5102,9 @@
       return tab;
     }
 
-    function addDesktopTab(label = "Mac Desktop", customLabel = null, subtext = "macOS Screen Sharing") {
+    function addDesktopTab(label = "Mac Desktop", customLabel = null, subtext = "macOS Screen Sharing", targetDisplay = "") {
       const id = createId();
-      const desktopUrl = buildDesktopUrl();
+      const desktopUrl = buildDesktopUrl(targetDisplay);
       const wrapper = document.createElement("div");
       wrapper.className = "terminal-frame-wrapper";
       wrapper.id = `wrapper-${id}`;
@@ -5060,7 +5129,7 @@
         </div>
       `;
 
-      const tab = { id, type: "desktop", sessionId: null, label, customLabel, wrapper };
+      const tab = { id, type: "desktop", sessionId: null, label, customLabel, targetDisplay, wrapper };
       tabs.push(tab);
       terminalContainer.appendChild(wrapper);
 
@@ -5097,6 +5166,7 @@
         const iframe = activeTab.wrapper.querySelector("iframe");
         try {
           iframe?.contentWindow?.focus();
+          iframe?.contentWindow?.flyConfigureStream?.();
           if (activeTab.type === "terminal") {
             const textarea = iframe?.contentDocument?.querySelector(".xterm-helper-textarea");
             textarea?.focus({ preventScroll: true });
@@ -5372,7 +5442,7 @@
           iframe.src = buildBrowserUrl();
         } else if (tab.type === "desktop" || tab.type === "mac-app") {
           if (tab.type === "mac-app" && tab.appName) focusMacApp(tab.appName);
-          iframe.src = buildDesktopUrl();
+          iframe.src = buildDesktopUrl(tab.targetDisplay || "");
         } else {
           iframe.src = buildTerminalUrl(tab.sessionId);
         }
@@ -5558,28 +5628,166 @@
 
     // Desktop Mode Selector Logic
     const desktopModeSelect = document.getElementById("desktopMode");
+    const desktopResolutionSelect = document.getElementById("desktopResolution");
+    const desktopFpsSelect = document.getElementById("desktopFps");
+    function reloadDesktopTabs() {
+      tabs.forEach(tab => {
+        if (tab.type === "desktop" || tab.type === "mac-app") {
+          const newUrl = buildDesktopUrl(tab.targetDisplay || "");
+          const iframe = tab.wrapper?.querySelector("iframe");
+          if (iframe) iframe.src = newUrl;
+          const link = tab.wrapper?.querySelector(".frame-control[target='_blank']");
+          if (link) link.href = newUrl;
+        }
+      });
+      const openDesktopTabBtn = document.getElementById("openDesktopTab");
+      if (openDesktopTabBtn && desktopConfig.enabled) openDesktopTabBtn.href = buildDesktopUrl();
+    }
     if (desktopModeSelect) {
       desktopModeSelect.value = preferences.desktopMode || "webrtc";
       desktopModeSelect.onchange = () => {
         const val = desktopModeSelect.value;
         preferences.desktopMode = val;
         savePreferences();
-        const newUrl = buildDesktopUrl();
-        tabs.forEach(tab => {
-          if (tab.type === "desktop" || tab.type === "mac-app") {
-            const iframe = tab.wrapper?.querySelector("iframe");
-            if (iframe) iframe.src = newUrl;
-            const link = tab.wrapper?.querySelector(".frame-control[target='_blank']");
-            if (link) link.href = newUrl;
-          }
-        });
-        const openDesktopTabBtn = document.getElementById("openDesktopTab");
-        if (openDesktopTabBtn && desktopConfig.enabled) {
-          openDesktopTabBtn.href = newUrl;
-        }
-        setStatusText(`Режим рабочего стола: ${val === "webrtc" ? "H.264 / WebRTC (60 FPS)" : "noVNC"}`, 2400);
+        reloadDesktopTabs();
+        setStatusText(`Режим рабочего стола: ${val === "webrtc" ? "H.264 / WebSocket" : "noVNC"}`, 2400);
       };
     }
+    if (desktopResolutionSelect) {
+      desktopResolutionSelect.value = preferences.desktopResolution;
+      desktopResolutionSelect.onchange = () => {
+        preferences.desktopResolution = desktopResolutionSelect.value;
+        savePreferences();
+        reloadDesktopTabs();
+        setStatusText(`Разрешение RDC: ${preferences.desktopResolution.replace("x", "×")}`, 2400);
+      };
+    }
+    if (desktopFpsSelect) {
+      desktopFpsSelect.value = String(preferences.desktopFps);
+      desktopFpsSelect.onchange = () => {
+        preferences.desktopFps = Number(desktopFpsSelect.value);
+        savePreferences();
+        reloadDesktopTabs();
+        setStatusText(`Частота RDC: ${preferences.desktopFps} FPS`, 2400);
+      };
+    }
+
+    const displayResolutionDefaults = {
+      main: ["1280x720", "1920x1080", "2560x1440"],
+      virtual: ["1280x720", "1600x900", "1920x1080", "2560x1440"]
+    };
+    const displayResolutionState = { main: { resolution: "", modes: [] }, virtual: { resolution: "", modes: [] } };
+
+    function normalizeDisplayResolution(value) {
+      const normalized = String(value || "").trim().toLowerCase().replace("×", "x");
+      const match = normalized.match(/^(\d{3,4})x(\d{3,4})$/);
+      if (!match) return "";
+      const width = Number(match[1]);
+      const height = Number(match[2]);
+      return width >= 640 && width <= 7680 && height >= 360 && height <= 4320 ? `${width}x${height}` : "";
+    }
+
+    function displayResolutionElements(target) {
+      const prefix = target === "main" ? "main" : "virtual";
+      const host = document.querySelector(`[data-display-target="${target}"]`);
+      return {
+        host,
+        select: document.getElementById(`${prefix}DisplayResolution`),
+        input: document.getElementById(`${prefix}DisplayResolutionCustom`),
+        status: document.getElementById(`${prefix}DisplayResolutionStatus`),
+        preferenceKey: target === "main" ? "mainResolutionPresets" : "virtualResolutionPresets"
+      };
+    }
+
+    function renderDisplayResolutionControl(target, selected = "") {
+      const elements = displayResolutionElements(target);
+      if (!elements.select) return;
+      const custom = preferences[elements.preferenceKey] || [];
+      const current = displayResolutionState[target].resolution;
+      const values = [...new Set([...displayResolutionDefaults[target], ...custom, current].filter(Boolean))];
+      elements.select.innerHTML = "";
+      values.forEach(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = `${value.replace("x", "×")}${custom.includes(value) ? " · свой" : ""}${value === current ? " · текущий" : ""}`;
+        elements.select.appendChild(option);
+      });
+      const next = selected || current || values[0] || "";
+      elements.select.value = next;
+      elements.input.value = next;
+    }
+
+    async function loadDisplayResolutions() {
+      try {
+        const response = await localApiFetch("/api/desktop/displays");
+        const payload = await response.json();
+        ["main", "virtual"].forEach(target => {
+          if (payload?.[target]) displayResolutionState[target] = payload[target];
+          renderDisplayResolutionControl(target);
+        });
+      } catch (error) {
+        ["main", "virtual"].forEach(target => {
+          const { status } = displayResolutionElements(target);
+          if (status) status.textContent = "Не удалось прочитать режимы дисплея";
+        });
+      }
+    }
+
+    function bindDisplayResolutionControl(target) {
+      const elements = displayResolutionElements(target);
+      if (!elements.host) return;
+      elements.select.onchange = () => { elements.input.value = elements.select.value; };
+      elements.host.querySelector(".resolution-add").onclick = () => {
+        const resolution = normalizeDisplayResolution(elements.input.value);
+        if (!resolution) {
+          elements.status.textContent = "Формат: ширинаxвысота, например 2048x1152";
+          return;
+        }
+        const presets = preferences[elements.preferenceKey] || [];
+        preferences[elements.preferenceKey] = [...new Set([...presets, resolution])].slice(0, 20);
+        savePreferences();
+        renderDisplayResolutionControl(target, resolution);
+        elements.status.textContent = "Пользовательский пресет сохранён";
+      };
+      elements.host.querySelector(".resolution-remove").onclick = () => {
+        const resolution = elements.select.value;
+        preferences[elements.preferenceKey] = (preferences[elements.preferenceKey] || []).filter(value => value !== resolution);
+        savePreferences();
+        renderDisplayResolutionControl(target);
+        elements.status.textContent = "Пользовательский пресет удалён";
+      };
+      elements.host.querySelector(".resolution-apply").onclick = async () => {
+        const resolution = normalizeDisplayResolution(elements.input.value || elements.select.value);
+        if (!resolution) {
+          elements.status.textContent = "Некорректное разрешение";
+          return;
+        }
+        elements.status.textContent = "Применяю...";
+        try {
+          const response = await localApiFetch("/api/desktop/display-resolution", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target, resolution, presets: preferences[elements.preferenceKey] || [] })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          displayResolutionState[target].resolution = resolution;
+          renderDisplayResolutionControl(target, resolution);
+          tabs.forEach(tab => {
+            const isTarget = target === "virtual" ? tab.targetDisplay === "Fly Remote" : !tab.targetDisplay;
+            if (isTarget) tab.wrapper?.querySelector("iframe")?.contentWindow?.flyConfigureStream?.(true);
+          });
+          elements.status.textContent = `Применено: ${resolution.replace("x", "×")}`;
+        } catch (error) {
+          elements.status.textContent = error.message === "resolution_not_supported"
+            ? "Этот режим не поддерживается дисплеем"
+            : `Не удалось применить: ${error.message || error}`;
+        }
+      };
+    }
+    bindDisplayResolutionControl("main");
+    bindDisplayResolutionControl("virtual");
+    loadDisplayResolutions();
 
     document.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -5755,6 +5963,10 @@
       document.body.classList.toggle("density-compact", preferences.density === "compact");
       toolbarOrientationSelect.value = preferences.toolbarOrientation;
       if (desktopModeSelect) desktopModeSelect.value = preferences.desktopMode || "webrtc";
+      if (desktopResolutionSelect) desktopResolutionSelect.value = preferences.desktopResolution;
+      if (desktopFpsSelect) desktopFpsSelect.value = String(preferences.desktopFps);
+      renderDisplayResolutionControl("main");
+      renderDisplayResolutionControl("virtual");
       applyToolbarOrientation(preferences.toolbarOrientation);
       applyPanelCollapsedPref();
       applyShellTheme();

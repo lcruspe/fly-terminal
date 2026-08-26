@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import json
+import ctypes
+import ctypes.util
 import os
 import posixpath
 import re
@@ -33,6 +35,9 @@ CONTAINER_FILE_BROWSER_BLOCKED_ROOTS = ("/proc", "/sys", "/dev", "/run")
 CONTAINER_FILE_BROWSER_MAX_ENTRIES = int(os.environ.get("FLY_TERMINAL_CONTAINER_FILE_MAX_ENTRIES", "2000"))
 CONTAINER_FILE_BROWSER_TIMEOUT_SECONDS = int(os.environ.get("FLY_TERMINAL_CONTAINER_FILE_TIMEOUT_SECONDS", "15"))
 DESKTOP_FIELD_CODE_RE = re.compile(r"%[A-Za-z]")
+DISPLAY_RESOLUTION_RE = re.compile(r"^(\d{3,4})x(\d{3,4})$")
+BETTERDISPLAY_BIN = Path("/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay")
+DEFAULT_VIRTUAL_RESOLUTIONS = ("1280x720", "1600x900", "1920x1080", "2560x1440")
 APP_DESKTOP_DIRS = (
     "/config/Desktop",
     "/config/.local/share/applications",
@@ -64,6 +69,8 @@ VALID_TOOLBAR_ORIENTATIONS = frozenset({"horizontal", "vertical-left", "vertical
 VALID_SPLIT_LAYOUTS = frozenset({"grid", "columns", "rows", "master-left", "master-top"})
 VALID_FONT_SIZES = frozenset(range(8, 17))
 VALID_DESKTOP_MODES = frozenset({"webrtc", "vnc"})
+VALID_DESKTOP_RESOLUTIONS = frozenset({"1280x720", "1600x900", "1920x1080", "2560x1440"})
+VALID_DESKTOP_FPS = frozenset({15, 30, 45, 60})
 VALID_UI_FONT_FAMILIES = frozenset({
     "Menlo, monospace",
     "Monaco, monospace",
@@ -1123,6 +1130,131 @@ def get_running_mac_apps():
         return []
 
 
+def betterdisplay_remote_geometry():
+    if not BETTERDISPLAY_BIN.exists():
+        return None
+    try:
+        result = subprocess.run(
+            [str(BETTERDISPLAY_BIN), "get", "-identifiers"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        devices = json.loads(f"[{result.stdout.strip()}]")
+        remote = next((item for item in devices if item.get("deviceType") == "VirtualScreen" and item.get("name") == "Fly Remote"), None)
+        if not remote:
+            return None
+        display_id = int(remote["displayID"])
+
+        class CGPoint(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+        class CGSize(ctypes.Structure):
+            _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+        class CGRect(ctypes.Structure):
+            _fields_ = [("origin", CGPoint), ("size", CGSize)]
+
+        core_graphics = ctypes.CDLL(ctypes.util.find_library("CoreGraphics"))
+        core_graphics.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        core_graphics.CGDisplayBounds.restype = CGRect
+        bounds = core_graphics.CGDisplayBounds(display_id)
+        return {
+            "displayId": display_id,
+            "x": int(bounds.origin.x),
+            "y": int(bounds.origin.y),
+            "width": int(bounds.size.width),
+            "height": int(bounds.size.height),
+        }
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.TimeoutExpired):
+        return None
+
+
+def normalize_display_resolution(value):
+    resolution = str(value or "").strip().lower().replace("×", "x")
+    match = DISPLAY_RESOLUTION_RE.fullmatch(resolution)
+    if not match:
+        return ""
+    width, height = (int(part) for part in match.groups())
+    if not (640 <= width <= 7680 and 360 <= height <= 4320):
+        return ""
+    return f"{width}x{height}"
+
+
+def betterdisplay_command(*arguments):
+    if not BETTERDISPLAY_BIN.exists():
+        return None, "betterdisplay_unavailable"
+    try:
+        result = subprocess.run(
+            [str(BETTERDISPLAY_BIN), *arguments],
+            capture_output=True,
+            text=True,
+            timeout=12,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, str(exc)
+    output = (result.stdout or result.stderr).strip()
+    if result.returncode != 0:
+        return None, output or f"exit_{result.returncode}"
+    return output, ""
+
+
+def display_identifier_args(target):
+    return ["-displayWithMainStatus"] if target == "main" else ["-name=Fly Remote"]
+
+
+def get_display_resolution(target):
+    output, error = betterdisplay_command("get", *display_identifier_args(target), "-resolution")
+    return (normalize_display_resolution(output), error) if output is not None else ("", error)
+
+
+def get_display_modes(target):
+    output, error = betterdisplay_command("get", *display_identifier_args(target), "-displayModeList")
+    if output is None:
+        return [], error
+    modes = sorted(set(re.findall(r"\b\d{3,4}x\d{3,4}\b", output)), key=lambda item: tuple(map(int, item.split("x"))))
+    return modes, ""
+
+
+def set_display_resolution(target, resolution, virtual_presets=()):
+    resolution = normalize_display_resolution(resolution)
+    if target not in {"main", "virtual"} or not resolution:
+        return False, "invalid_display_resolution"
+
+    current, error = get_display_resolution(target)
+    if error:
+        return False, error
+    if target == "virtual":
+        resolution_list = []
+        for value in (*DEFAULT_VIRTUAL_RESOLUTIONS, *virtual_presets, resolution):
+            normalized = normalize_display_resolution(value)
+            if normalized and normalized not in resolution_list:
+                resolution_list.append(normalized)
+        _, error = betterdisplay_command(
+            "set", "-name=Fly Remote", "-useResolutionList=on",
+            f"-resolutionList={','.join(resolution_list)}",
+        )
+        if error:
+            return False, error
+        time.sleep(1)
+    else:
+        modes, error = get_display_modes(target)
+        if error:
+            return False, error
+        if resolution not in modes:
+            return False, "resolution_not_supported"
+
+    if current != resolution or target == "virtual":
+        _, error = betterdisplay_command("set", *display_identifier_args(target), f"-resolution={resolution}")
+        if error:
+            return False, error
+        time.sleep(1)
+    applied, error = get_display_resolution(target)
+    return (applied == resolution, error or ("" if applied == resolution else "resolution_apply_failed"))
+
+
 def focus_mac_app(app_name):
     clean_name = str(app_name or "").strip()
     if not clean_name:
@@ -1133,6 +1265,9 @@ def focus_mac_app(app_name):
         return False, str(exc)
 
     def _isolate():
+        geometry = betterdisplay_remote_geometry()
+        if not geometry:
+            return
         escaped = clean_name.replace('"', '\\"')
         script = f"""
         tell application "{escaped}"
@@ -1144,15 +1279,11 @@ def focus_mac_app(app_name):
             tell process "{escaped}"
                 set frontmost to true
                 try
-                    set value of attribute "AXFullScreen" of window 1 to true
-                on error
-                    try
-                        set position of window 1 to {{0, 0}}
-                        set size of window 1 to {{2560, 1440}}
-                    end try
+                    set value of attribute "AXFullScreen" of window 1 to false
                 end try
+                set position of window 1 to {{{geometry['x']}, {geometry['y']}}}
+                set size of window 1 to {{{geometry['width']}, {geometry['height']}}}
             end tell
-            set visible of (every process whose name is not "{escaped}" and name is not "Finder" and name is not "Dock" and name is not "System Events") to false
         end tell
         """
         try:
@@ -1514,6 +1645,27 @@ def normalize_ui_preferences(payload):
     if desktop_mode in VALID_DESKTOP_MODES:
         preferences["desktopMode"] = desktop_mode
 
+    desktop_resolution = str(payload.get("desktopResolution") or "").strip().lower()
+    if desktop_resolution in VALID_DESKTOP_RESOLUTIONS:
+        preferences["desktopResolution"] = desktop_resolution
+
+    try:
+        desktop_fps = int(payload.get("desktopFps"))
+    except (TypeError, ValueError):
+        desktop_fps = 0
+    if desktop_fps in VALID_DESKTOP_FPS:
+        preferences["desktopFps"] = desktop_fps
+
+    for key in ("mainResolutionPresets", "virtualResolutionPresets"):
+        values = payload.get(key)
+        if isinstance(values, list):
+            normalized_values = []
+            for value in values[:20]:
+                normalized = normalize_display_resolution(value)
+                if normalized and normalized not in normalized_values:
+                    normalized_values.append(normalized)
+            preferences[key] = normalized_values
+
     try:
         font_size = int(payload.get("fontSize"))
     except (TypeError, ValueError):
@@ -1659,6 +1811,18 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/api/desktop/displays":
+            main_resolution, main_error = get_display_resolution("main")
+            virtual_resolution, virtual_error = get_display_resolution("virtual")
+            main_modes, _ = get_display_modes("main")
+            virtual_modes, _ = get_display_modes("virtual")
+            send_json(self, 200, {
+                "ok": not (main_error or virtual_error),
+                "main": {"resolution": main_resolution, "modes": main_modes, "error": main_error},
+                "virtual": {"resolution": virtual_resolution, "modes": virtual_modes, "error": virtual_error},
+            })
+            return
+
         if self.path == "/api/mac/apps/list":
             apps = get_running_mac_apps()
             send_json(self, 200, {"ok": True, "apps": apps})
@@ -1746,6 +1910,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_launch_app()
         elif self.path == "/api/mac/apps/focus":
             self._handle_mac_app_focus()
+        elif self.path == "/api/desktop/display-resolution":
+            self._handle_display_resolution()
         elif self.path == "/api/system/recover":
             self._handle_recover()
         elif self.path == "/api/system/update":
@@ -1768,6 +1934,24 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 500, {"ok": False, "error": "focus_failed", "details": details})
             return
         send_json(self, 200, {"ok": True, "app": app_name})
+
+    def _handle_display_resolution(self):
+        payload, error = self._read_json_body()
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+        target = str(payload.get("target") or "").strip().lower()
+        resolution = normalize_display_resolution(payload.get("resolution"))
+        presets = payload.get("presets") if isinstance(payload.get("presets"), list) else []
+        if target not in {"main", "virtual"} or not resolution:
+            send_json(self, 400, {"ok": False, "error": "invalid_display_resolution"})
+            return
+        ok, details = set_display_resolution(target, resolution, presets)
+        if not ok:
+            status = 409 if details == "resolution_not_supported" else 500
+            send_json(self, status, {"ok": False, "error": details})
+            return
+        send_json(self, 200, {"ok": True, "target": target, "resolution": resolution})
 
     def _read_json_body(self, max_bytes=262144):
         try:

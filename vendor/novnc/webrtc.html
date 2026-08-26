@@ -280,6 +280,11 @@
     (function () {
       const urlParams = new URLSearchParams(window.location.search);
       const wsPath = urlParams.get("path") || "desktop-stream-ws";
+      const requestedResolution = /^(1280x720|1600x900|1920x1080|2560x1440)$/.test(urlParams.get("resolution") || "")
+        ? urlParams.get("resolution") : "1920x1080";
+      const [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
+      const requestedFps = [15, 30, 45, 60].includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
+      const requestedDisplayName = urlParams.get("display") === "Fly Remote" ? "Fly Remote" : "";
       
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.host;
@@ -415,7 +420,7 @@
             updateOverlay(false);
             statusBadge.textContent = "60 FPS H.264";
             statusBadge.className = "hud-badge badge-status";
-            socket.send(JSON.stringify({ type: "init" }));
+            configureStream();
           };
 
           socket.onmessage = (event) => {
@@ -489,13 +494,42 @@
         }
       }
 
+      function configureStream(force = false) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "configure",
+            width: requestedWidth,
+            height: requestedHeight,
+            fps: requestedFps,
+            displayName: requestedDisplayName,
+            force
+          }));
+        }
+      }
+      window.flyConfigureStream = configureStream;
+
       // MARK: - Mouse & Keyboard Event Forwarding
 
       let mouseMoveRaf = null;
       let lastPendingMousePos = null;
 
-      function getNormalizedCoords(e) {
+      function getRenderedScreenRect() {
         const rect = canvas.getBoundingClientRect();
+        if (fitMode === "fill" || !streamWidth || !streamHeight) return rect;
+
+        const scale = Math.min(rect.width / streamWidth, rect.height / streamHeight);
+        const width = streamWidth * scale;
+        const height = streamHeight * scale;
+        return {
+          left: rect.left + (rect.width - width) / 2,
+          top: rect.top + (rect.height - height) / 2,
+          width,
+          height
+        };
+      }
+
+      function getNormalizedCoords(e) {
+        const rect = getRenderedScreenRect();
         const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const normY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
         return { x: normX, y: normY };

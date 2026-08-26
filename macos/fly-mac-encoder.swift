@@ -5,6 +5,7 @@ import CoreVideo
 import CoreMedia
 import CoreGraphics
 import IOKit.pwr_mgt
+import AppKit
 
 final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var scStream: SCStream?
@@ -15,17 +16,19 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate {
     private let targetHeight: Int32
     private let fps: Int32
     private let bitrate: Int32
+    private let displayName: String
     private let queue = DispatchQueue(label: "ai.kruspe.fly-terminal.encoder", qos: .userInteractive)
     private let outHandle = FileHandle.standardOutput
     private var socketFD: Int32 = -1
     private var powerAssertionID: IOPMAssertionID = 0
     private var isCapturing = false
     
-    init(width: Int32 = 1920, height: Int32 = 1080, fps: Int32 = 60, bitrate: Int32 = 4_500_000) {
+    init(width: Int32 = 1920, height: Int32 = 1080, fps: Int32 = 60, bitrate: Int32 = 4_500_000, displayName: String = "") {
         self.targetWidth = width
         self.targetHeight = height
         self.fps = fps
         self.bitrate = bitrate
+        self.displayName = displayName
         super.init()
         connectUnixSocket()
     }
@@ -97,11 +100,18 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate {
                 try await Task.sleep(nanoseconds: 200_000_000)
                 
                 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-                guard let display = content.displays.first else {
+                let requestedDisplayID = NSScreen.screens.first(where: { $0.localizedName == displayName })?
+                    .deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+                let display = requestedDisplayID.flatMap { number in
+                    content.displays.first(where: { $0.displayID == CGDirectDisplayID(number.uint32Value) })
+                } ?? content.displays.first
+                guard let display = display else {
                     fputs("[Encoder] No active displays found. Retrying in 2s...\n", stderr)
                     try await Task.sleep(nanoseconds: 2_000_000_000)
                     continue
                 }
+                let displayBounds = CGDisplayBounds(display.displayID)
+                fputs("[Encoder] Display geometry id=\(display.displayID) name=\(displayName.isEmpty ? "default" : displayName) x=\(Int(displayBounds.origin.x)) y=\(Int(displayBounds.origin.y)) width=\(Int(displayBounds.width)) height=\(Int(displayBounds.height))\n", stderr)
                 
                 fputs("[Encoder] Found display \(display.displayID): \(display.width)x\(display.height)\n", stderr)
                 setupVideoToolbox()
@@ -301,7 +311,12 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 }
 
-let encoder = ScreenEncoder()
+let environment = ProcessInfo.processInfo.environment
+let encoderWidth = Int32(environment["FLY_STREAMER_WIDTH"] ?? "") ?? 1920
+let encoderHeight = Int32(environment["FLY_STREAMER_HEIGHT"] ?? "") ?? 1080
+let encoderFps = Int32(environment["FLY_STREAMER_FPS"] ?? "") ?? 60
+let encoderDisplayName = environment["FLY_STREAMER_DISPLAY_NAME"] ?? ""
+let encoder = ScreenEncoder(width: encoderWidth, height: encoderHeight, fps: encoderFps, displayName: encoderDisplayName)
 encoder.start()
 
 signal(SIGINT) { _ in exit(0) }

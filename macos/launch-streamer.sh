@@ -18,6 +18,10 @@ export PYTHONUNBUFFERED=1
 FLY_DESKTOP_ENABLED="${FLY_DESKTOP_ENABLED:-1}"
 [ "${FLY_DESKTOP_ENABLED}" = "1" ] || exit 0
 
+if [ -x "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" ]; then
+  "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" || echo "WARNING: BetterDisplay virtual screen is unavailable." >&2
+fi
+
 export FLY_STREAMER_PORT="${FLY_STREAMER_PORT:-5905}"
 export FLY_STREAMER_FPS="${FLY_STREAMER_FPS:-60}"
 export FLY_STREAMER_WIDTH="${FLY_STREAMER_WIDTH:-1920}"
@@ -55,6 +59,16 @@ EOF
   echo "Compiling FlyDesktopCapture..."
   swiftc -O "${ENCODER_SRC}" -o "${ENCODER_BIN}"
   codesign --force --deep -s - "${APP_DIR}" 2>/dev/null || true
+fi
+
+# Run the current build from the stable user Applications path so macOS keeps
+# Screen Recording permission attached to the app bundle across repo updates.
+USER_APP_DIR="${HOME}/Applications/FlyDesktopCapture.app"
+USER_ENCODER_BIN="${USER_APP_DIR}/Contents/MacOS/FlyDesktopCapture"
+if [ ! -f "${USER_ENCODER_BIN}" ] || [ "${ENCODER_BIN}" -nt "${USER_ENCODER_BIN}" ]; then
+  mkdir -p "${HOME}/Applications"
+  /usr/bin/ditto "${APP_DIR}" "${USER_APP_DIR}"
+  codesign --force --deep -s - "${USER_APP_DIR}" 2>/dev/null || true
 fi
 
 # Find Python with websockets

@@ -97,7 +97,7 @@ else
   printf 'FLY_BROWSER_BASIC_AUTH=%s\n' "${browser_basic_auth}" >>"${ENV_FILE}"
 fi
 
-chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/set-password.sh"
+chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" "${SCRIPT_DIR}/set-password.sh"
 
 cat >"${TTYD_PLIST}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
