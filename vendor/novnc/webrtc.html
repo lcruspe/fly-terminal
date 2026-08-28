@@ -486,9 +486,14 @@
             }
           };
 
-          socket.onclose = () => {
+          socket.onclose = (event) => {
             statusBadge.textContent = "Отключено";
             statusBadge.className = "hud-badge badge-status warn";
+            if (event.code === 4000) {
+              reconnectAttempts = 0;
+              updateOverlay(true, "Сеанс отключён", "5 минут бездействия. Нажмите «Повторить попытку», чтобы подключиться снова.", true);
+              return;
+            }
             reconnectAttempts++;
             const delay = Math.min(5000, 1000 * Math.pow(1.5, reconnectAttempts));
             updateOverlay(true, "Соединение разорвано", `Повторное подключение через ${(delay/1000).toFixed(1)} с...`, true);

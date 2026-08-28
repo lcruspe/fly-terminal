@@ -16,6 +16,8 @@ from typing import Set
 import websockets
 from aiohttp import web
 
+from remote_session import DEFAULT_IDLE_TIMEOUT_SECONDS, RemoteSessionIdleGuard, is_user_activity_message
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -31,6 +33,7 @@ PORT = int(os.environ.get("FLY_STREAMER_PORT", 5905))
 TARGET_FPS = int(os.environ.get("FLY_STREAMER_FPS", 60))
 TARGET_WIDTH = int(os.environ.get("FLY_STREAMER_WIDTH", 1920))
 TARGET_HEIGHT = int(os.environ.get("FLY_STREAMER_HEIGHT", 1080))
+REMOTE_IDLE_TIMEOUT_SECONDS = int(os.environ.get("FLY_DESKTOP_IDLE_TIMEOUT_SECONDS", DEFAULT_IDLE_TIMEOUT_SECONDS))
 VALID_STREAM_FPS = {15, 30, 45, 60}
 VALID_DISPLAY_NAMES = {"", "Fly Remote"}
 TARGET_DISPLAY_BOUNDS = [0.0, 0.0, 2560.0, 1440.0]
@@ -464,12 +467,28 @@ class StreamServer:
             except Exception:
                 pass
 
+        idle_guard = RemoteSessionIdleGuard(REMOTE_IDLE_TIMEOUT_SECONDS)
         try:
-            async for message in websocket:
+            while True:
+                remaining = idle_guard.remaining()
+                if remaining <= 0:
+                    await websocket.close(code=4000, reason="remote desktop idle timeout")
+                    logger.info("Remote desktop session closed after %ds of inactivity", REMOTE_IDLE_TIMEOUT_SECONDS)
+                    break
+                try:
+                    message = await asyncio.wait_for(websocket.recv(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    await websocket.close(code=4000, reason="remote desktop idle timeout")
+                    logger.info("Remote desktop session closed after %ds of inactivity", REMOTE_IDLE_TIMEOUT_SECONDS)
+                    break
+                except websockets.exceptions.ConnectionClosed:
+                    break
                 if isinstance(message, str):
                     try:
                         data = json.loads(message)
                         msg_type = data.get("type")
+                        if is_user_activity_message(msg_type):
+                            idle_guard.mark_activity()
                         if msg_type == "configure":
                             await self.configure_encoder(
                                 int(data.get("width", 0)),

@@ -175,8 +175,11 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_DESKTOP_ENABLED` | `1` | Включает кнопку Mac Desktop в UI и endpoint `/api/desktop/config`. |
 | `FLY_DESKTOP_URL` | `/desktop/` | URL noVNC веб-клиента для удаленного управления Mac mini. |
 | `FLY_DESKTOP_PORT` | `5901` | Порт WebSocket-моста `websockify`. |
+| `FLY_DESKTOP_IDLE_TIMEOUT_SECONDS` | `300` | Таймаут бездействия H.264 Remote Desktop. Через 5 минут без мыши/клавиатуры/скролла/clipboard WebSocket закрывается; технические `configure`/heartbeat не продлевают сеанс. |
 | `FLY_DESKTOP_TARGET` | `127.0.0.1:5900` | Внутренний целевой VNC-порт macOS Screen Sharing. |
 | `FLY_DESKTOP_PASSWORD` | *Не задано* | Пароль VNC для автоматической авторизации при открытии вкладки. |
+
+Для H.264 Remote Desktop действует серверный idle timeout: через 300 секунд без пользовательского ввода WebSocket закрывается кодом `4000`. Технические сообщения конфигурации и heartbeat не считаются активностью, а клиент после такого закрытия не переподключается автоматически.
 
 Browser-модуль автоматически использует два независимых профиля Selkies:
 
