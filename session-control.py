@@ -24,6 +24,9 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+SESSION_IDLE_TTL_MINUTES = int(os.environ.get("FLY_TERMINAL_SESSION_IDLE_TTL_MINUTES", "120"))
+SESSION_CLEANUP_INTERVAL_SECONDS = max(60, int(os.environ.get("FLY_TERMINAL_SESSION_CLEANUP_INTERVAL_SECONDS", "300")))
+SESSION_PREFIX = "fly-terminal-"
 CODEX_ANSWER_END_RE = re.compile(r"^\s*─+\s+Worked for\b")
 CODEX_ANSWER_START_RE = re.compile(r"^\s*─{8,}\s*$")
 MAX_UPLOAD_BYTES = int(os.environ.get("FLY_TERMINAL_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
@@ -131,6 +134,54 @@ TOOL_ERROR_MESSAGES = {
     "container_file_access_denied": "Нет доступа к выбранному файлу контейнера.",
     "container_file_read_failed": "Не удалось скачать выбранный файл из контейнера.",
 }
+
+
+def prune_stale_tmux_sessions(now_epoch=None):
+    """Terminate detached Fly Terminal tmux sessions idle beyond the configured TTL."""
+    if SESSION_IDLE_TTL_MINUTES <= 0:
+        return 0
+    now_epoch = int(time.time() if now_epoch is None else now_epoch)
+    result = subprocess.run(
+        ["tmux", "list-sessions", "-F", "#{session_name}|#{session_attached}|#{session_activity}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return 0
+    cutoff = SESSION_IDLE_TTL_MINUTES * 60
+    killed = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            continue
+        session_name, attached, activity = parts
+        if not session_name.startswith(SESSION_PREFIX) or attached != "0":
+            continue
+        try:
+            idle_seconds = now_epoch - int(activity)
+        except ValueError:
+            continue
+        if idle_seconds <= cutoff:
+            continue
+        kill = subprocess.run(
+            ["tmux", "kill-session", "-t", session_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        killed += int(kill.returncode == 0)
+    return killed
+
+
+def session_cleanup_loop():
+    while True:
+        try:
+            prune_stale_tmux_sessions()
+        except OSError:
+            pass
+        time.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
 
 
 def _happ_config_id(config):
@@ -2738,6 +2789,9 @@ class SessionControlHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    prune_stale_tmux_sessions()
+    cleanup_thread = threading.Thread(target=session_cleanup_loop, name="tmux-session-cleanup", daemon=True)
+    cleanup_thread.start()
     port = int(os.environ.get("FLY_TERMINAL_CONTROL_PORT", "7683"))
     server = ThreadingHTTPServer(("127.0.0.1", port), SessionControlHandler)
     server.serve_forever()
