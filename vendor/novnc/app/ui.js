@@ -19,6 +19,7 @@ import RFB from "../core/rfb.js";
 import * as WebUtil from "./webutil.js";
 
 const PAGE_TITLE = "noVNC";
+const REMOTE_DESKTOP_IDLE_TIMEOUT_MS = 300000;
 
 const UI = {
 
@@ -29,6 +30,7 @@ const UI = {
     hideKeyboardTimeout: null,
     idleControlbarTimeout: null,
     closeControlbarTimeout: null,
+    remoteDesktopIdleTimeout: null,
 
     controlbarGrabbed: false,
     controlbarDrag: false,
@@ -108,6 +110,9 @@ const UI = {
         UI.addConnectionControlHandlers();
         UI.addClipboardHandlers();
         UI.addSettingsHandlers();
+        ["pointermove", "pointerdown", "wheel", "keydown", "touchstart", "input"].forEach((eventName) => {
+            document.addEventListener(eventName, UI.noteRemoteDesktopActivity, true);
+        });
         document.getElementById("noVNC_status")
             .addEventListener('click', UI.hideStatus);
 
@@ -1073,7 +1078,24 @@ const UI = {
         UI.updateViewOnly(); // requires UI.rfb
     },
 
+    armRemoteDesktopIdleTimeout() {
+        clearTimeout(UI.remoteDesktopIdleTimeout);
+        if (!UI.connected) return;
+        UI.remoteDesktopIdleTimeout = setTimeout(() => {
+            if (!UI.connected || !UI.rfb) return;
+            UI.disconnect();
+        }, REMOTE_DESKTOP_IDLE_TIMEOUT_MS);
+    },
+
+    noteRemoteDesktopActivity() {
+        if (UI.connected) {
+            UI.armRemoteDesktopIdleTimeout();
+        }
+    },
+
     disconnect() {
+        clearTimeout(UI.remoteDesktopIdleTimeout);
+        UI.remoteDesktopIdleTimeout = null;
         UI.rfb.disconnect();
 
         UI.connected = false;
@@ -1112,6 +1134,7 @@ const UI = {
     connectFinished(e) {
         UI.connected = true;
         UI.inhibitReconnect = false;
+        UI.armRemoteDesktopIdleTimeout();
 
         let msg;
         if (UI.getSetting('encrypt')) {
@@ -1134,6 +1157,8 @@ const UI = {
         // the server, we need to do it here as well since
         // UI.disconnect() won't be used in those cases.
         UI.connected = false;
+        clearTimeout(UI.remoteDesktopIdleTimeout);
+        UI.remoteDesktopIdleTimeout = null;
 
         UI.rfb = undefined;
 
