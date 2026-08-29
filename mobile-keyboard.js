@@ -16,6 +16,13 @@
       if (typeof iframe?.contentWindow?.flyOpenKeyboard === "function") {
         return iframe.contentWindow.flyOpenKeyboard() !== false;
       }
+      const selkiesButton = iframe?.contentDocument?.querySelector(
+        'button[title="Pop Keyboard"], button[aria-label="Pop Keyboard"]'
+      );
+      if (selkiesButton) {
+        selkiesButton.click();
+        return true;
+      }
       const textarea = iframe?.contentDocument?.querySelector(
         ".xterm-helper-textarea, #keyboard-input-assist, #noVNC_keyboardinput"
       );

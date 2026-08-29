@@ -45,16 +45,24 @@ test("keyboard action focuses the noVNC touch input in browser tabs", () => {
 
 test("keyboard action focuses the Selkies mobile input in browser tabs", () => {
   let focused = 0;
+  let clicked = 0;
+  const input = { focus: () => { focused += 1; } };
+  const popKeyboard = { click: () => { clicked += 1; input.focus(); } };
   const tab = {
     type: "browser",
     wrapper: {
       querySelector: () => ({
         contentWindow: {},
-        contentDocument: { querySelector: (selector) => selector.includes("keyboard-input-assist") ? { focus: () => { focused += 1; } } : null },
+        contentDocument: {
+          querySelector: (selector) => selector.includes("Pop Keyboard")
+            ? popKeyboard
+            : selector.includes("keyboard-input-assist") ? input : null,
+        },
       }),
     },
   };
   assert.equal(focusTerminalKeyboard(tab), true);
+  assert.equal(clicked, 1);
   assert.equal(focused, 1);
 });
 
