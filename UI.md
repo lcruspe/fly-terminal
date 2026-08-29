@@ -7,7 +7,7 @@ The main Fly Terminal toolbar uses two sequential degradation levels when horizo
 1. **Icon-only mode.** If the full toolbar no longer fits, text labels are hidden while representative icons remain visible. Tooltips and `aria-label` values remain available so actions are still identifiable.
 2. **Overflow menu.** If the icon-only toolbar still does not fit, actions are moved from the right edge into the overflow menu. The overflow trigger is always represented by the three-dot icon. Items moved into the menu regain their text labels.
 
-On touch-capable devices, every active tab exposes a **Клавиатура** action. It synchronously focuses the tab's native mobile input: ttyd's xterm helper textarea for Terminal, noVNC's touch input for compatible Browser/Desktop frames, or the WebRTC desktop text bridge. The action is hidden on non-touch devices. Terminal and noVNC keystrokes flow directly to the remote session; the WebRTC bridge clears its temporary text field after sending or cancelling.
+On touch-capable devices, every active tab exposes a **Клавиатура** action. It synchronously focuses the tab's native mobile input: ttyd's xterm helper textarea for Terminal, Selkies/noVNC's touch input for compatible Browser/Desktop frames, or the WebRTC desktop text bridge. The action is hidden on non-touch devices. Terminal, Selkies, and noVNC keystrokes flow directly to the remote session; the WebRTC bridge clears its temporary text field after sending or cancelling.
 
 The collapse/expand-panel action stays directly accessible and switches to icon-only mode together with the rest of the toolbar, but is not moved into overflow.
 

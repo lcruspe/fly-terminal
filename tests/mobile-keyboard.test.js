@@ -43,6 +43,21 @@ test("keyboard action focuses the noVNC touch input in browser tabs", () => {
   assert.equal(focused, 1);
 });
 
+test("keyboard action focuses the Selkies mobile input in browser tabs", () => {
+  let focused = 0;
+  const tab = {
+    type: "browser",
+    wrapper: {
+      querySelector: () => ({
+        contentWindow: {},
+        contentDocument: { querySelector: (selector) => selector.includes("keyboard-input-assist") ? { focus: () => { focused += 1; } } : null },
+      }),
+    },
+  };
+  assert.equal(focusTerminalKeyboard(tab), true);
+  assert.equal(focused, 1);
+});
+
 test("keyboard action uses a remote desktop keyboard bridge when available", () => {
   let opened = 0;
   const tab = {

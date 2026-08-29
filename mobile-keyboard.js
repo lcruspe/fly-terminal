@@ -17,7 +17,7 @@
         return iframe.contentWindow.flyOpenKeyboard() !== false;
       }
       const textarea = iframe?.contentDocument?.querySelector(
-        ".xterm-helper-textarea, #noVNC_keyboardinput"
+        ".xterm-helper-textarea, #keyboard-input-assist, #noVNC_keyboardinput"
       );
       if (!textarea) return false;
       textarea.focus({ preventScroll: true });
