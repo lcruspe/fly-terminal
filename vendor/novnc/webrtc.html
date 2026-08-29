@@ -307,6 +307,13 @@
       const clipboardModal = document.getElementById("clipboardModal");
       const clipboardText = document.getElementById("clipboardText");
 
+      window.flyOpenKeyboard = () => {
+        clipboardModal.classList.remove("hidden");
+        clipboardText.value = "";
+        clipboardText.focus({ preventScroll: true });
+        return document.activeElement === clipboardText;
+      };
+
       let socket = null;
       let decoder = null;
       let isDecoderReady = false;
@@ -697,12 +704,11 @@
             }
           }
         } catch (e) {}
-        clipboardModal.classList.remove("hidden");
-        clipboardText.value = "";
-        clipboardText.focus();
+        window.flyOpenKeyboard();
       };
 
       document.getElementById("clipboardCancelBtn").onclick = () => {
+        clipboardText.value = "";
         clipboardModal.classList.add("hidden");
       };
 
@@ -711,6 +717,7 @@
         if (text && socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "clipboard", text }));
         }
+        clipboardText.value = "";
         clipboardModal.classList.add("hidden");
       };
 

@@ -1896,6 +1896,10 @@
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="10" height="12" rx="1"/><path d="M2 5v9a1 1 0 0 0 1 1h7"/></svg>
               Копировать
             </button>
+            <button type="button" id="openKeyboard" title="Открыть экранную клавиатуру" aria-label="Открыть экранную клавиатуру" hidden>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M4 6h.01M7 6h.01M10 6h.01M12.5 6h.01M4 9h.01M6.5 9h.01M9 9h.01M11.5 9h.01M4 11h8"/></svg>
+              Клавиатура
+            </button>
           </div>
           <div id="commandPalette" class="command-palette-backdrop" hidden>
             <div class="command-palette-panel">
@@ -2156,6 +2160,7 @@
     </div>
   </dialog>
   
+  <script src="/mobile-keyboard.js"></script>
   <script>
     const STORAGE_KEY = "fly-terminal-preferences-v2";
     const SESSIONS_STORE_KEY = "fly-terminal-active-sessions-v1";
@@ -2682,6 +2687,7 @@
     const snippetEditorStatus = document.getElementById("snippetEditorStatus");
     const reloadActiveBtn = document.getElementById("reloadSession");
     const copySelectionBtn = document.getElementById("copySelection");
+    const openKeyboardBtn = document.getElementById("openKeyboard");
     const directLink = document.getElementById("directLink");
     const bottomPanel = document.getElementById("bottomPanel");
     const togglePanelBtn = document.getElementById("togglePanel");
@@ -5206,6 +5212,7 @@
       renderTabs();
       
       const activeTab = tabs.find(t => t.id === id);
+      updateMobileKeyboardButton(activeTab);
       if (activeTab) {
         if (activeTab.type === "mac-app" && activeTab.appName) {
           focusMacApp(activeTab.appName);
@@ -5220,6 +5227,13 @@
           }
         } catch(e) {}
       }
+    }
+
+    function updateMobileKeyboardButton(tab = tabs.find(t => t.id === activeTabId)) {
+      if (!openKeyboardBtn) return;
+      const touchDevice = window.FlyTerminalMobileKeyboard?.isTouchDevice(window) || false;
+      openKeyboardBtn.hidden = !touchDevice || !tab;
+      scheduleResponsiveToolbarLayout();
     }
 
     async function closeTab(id, event) {
@@ -6006,6 +6020,14 @@
         copySelectionBtn.disabled = false;
       }
     };
+
+    if (openKeyboardBtn) {
+      openKeyboardBtn.onclick = () => {
+        const tab = tabs.find(t => t.id === activeTabId);
+        const opened = window.FlyTerminalMobileKeyboard?.focusTerminalKeyboard(tab) || false;
+        setStatusText(opened ? "Клавиатура открыта" : "Вкладка ещё загружается", opened ? 1400 : 2600);
+      };
+    }
 
     // Auto-switch on resize
     const resizeObserver = new ResizeObserver(entries => {
