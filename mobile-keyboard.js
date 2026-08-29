@@ -19,7 +19,7 @@
       const selkiesButton = iframe?.contentDocument?.querySelector(
         'button[title="Pop Keyboard"], button[aria-label="Pop Keyboard"]'
       );
-      if (selkiesButton) {
+      if (typeof selkiesButton?.click === "function") {
         selkiesButton.click();
         return true;
       }
