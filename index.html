@@ -184,7 +184,7 @@
       display: none !important;
     }
 
-    .shell[class*="orientation-vertical-"].sidebar-compact .settings summary::after {
+    .shell[class*="orientation-vertical-"].sidebar-compact .settings > summary::after {
       display: none;
     }
 
@@ -893,6 +893,26 @@
       padding: 4px 8px;
     }
 
+    .remote-desktop-settings {
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+    .remote-desktop-settings > summary {
+      align-items: center;
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      font-size: 12px;
+      font-weight: 700;
+      justify-content: space-between;
+      list-style: none;
+      min-height: 36px;
+      user-select: none;
+    }
+    .remote-desktop-settings > summary::-webkit-details-marker { display: none; }
+    .settings .remote-desktop-settings > summary::after { content: "▾"; color: var(--muted); }
+    .settings .remote-desktop-settings[open] > summary::after { content: "▴"; }
+    .remote-desktop-settings-body { display: grid; gap: 14px; padding-top: 10px; }
     .settings-row {
       align-items: center;
       display: grid;
@@ -2010,61 +2030,66 @@
                   <option value="vertical-right">Вертикальная (справа)</option>
                 </select>
               </div>
-              <div class="settings-row">
-                <label for="desktopMode">Удаленный стол</label>
-                <select id="desktopMode">
-                  <option value="webrtc">H.264 / WebSocket</option>
-                  <option value="vnc">noVNC (Совместимость)</option>
-                </select>
-              </div>
-              <div class="settings-row">
-                <label for="desktopResolution">Разрешение RDC</label>
-                <select id="desktopResolution">
-                  <option value="1280x720">1280×720</option>
-                  <option value="1600x900">1600×900</option>
-                  <option value="1920x1080">1920×1080</option>
-                  <option value="2560x1440">2560×1440</option>
-                </select>
-              </div>
-              <div class="settings-row">
-                <label for="desktopScaleMode">Масштаб RDC</label>
-                <select id="desktopScaleMode">
-                  <option value="contain">Fit — вписать</option>
-                  <option value="fill">Fill — растянуть</option>
-                  <option value="sync">Sync — как на сервере</option>
-                </select>
-              </div>
-              <div class="settings-row">
-                <label for="desktopFps">Частота RDC</label>
-                <select id="desktopFps">
-                  <option value="15">15 FPS</option>
-                  <option value="30">30 FPS</option>
-                  <option value="45">45 FPS</option>
-                  <option value="60">60 FPS</option>
-                </select>
-              </div>
-              <div class="settings-row">
-                <label for="mainDisplayResolution">Основной экран</label>
-                <div class="display-resolution-control" data-display-target="main">
-                  <select id="mainDisplayResolution" aria-label="Пресет разрешения основного экрана"></select>
-                  <input id="mainDisplayResolutionCustom" type="text" inputmode="numeric" placeholder="Например, 1920x1080" aria-label="Пользовательское разрешение основного экрана" />
-                  <button type="button" class="resolution-add">Добавить</button>
-                  <button type="button" class="resolution-apply">Применить</button>
-                  <button type="button" class="resolution-remove">Удалить</button>
+              <details class="remote-desktop-settings">
+                <summary>Remote Desktop</summary>
+                <div class="remote-desktop-settings-body">
+                  <div class="settings-row">
+                  <label for="desktopMode">Удаленный стол</label>
+                  <select id="desktopMode">
+                    <option value="webrtc">H.264 / WebSocket</option>
+                    <option value="vnc">noVNC (Совместимость)</option>
+                  </select>
                 </div>
-                <div class="settings-action-status" id="mainDisplayResolutionStatus"></div>
-              </div>
-              <div class="settings-row">
-                <label for="virtualDisplayResolution">Виртуальный экран</label>
-                <div class="display-resolution-control" data-display-target="virtual">
-                  <select id="virtualDisplayResolution" aria-label="Пресет разрешения виртуального экрана"></select>
-                  <input id="virtualDisplayResolutionCustom" type="text" inputmode="numeric" placeholder="Например, 2048x1152" aria-label="Пользовательское разрешение виртуального экрана" />
-                  <button type="button" class="resolution-add">Добавить</button>
-                  <button type="button" class="resolution-apply">Применить</button>
-                  <button type="button" class="resolution-remove">Удалить</button>
+                <div class="settings-row">
+                  <label for="desktopResolution">Разрешение RDC</label>
+                  <select id="desktopResolution">
+                    <option value="1280x720">1280×720</option>
+                    <option value="1600x900">1600×900</option>
+                    <option value="1920x1080">1920×1080</option>
+                    <option value="2560x1440">2560×1440</option>
+                  </select>
                 </div>
-                <div class="settings-action-status" id="virtualDisplayResolutionStatus"></div>
-              </div>
+                <div class="settings-row">
+                  <label for="desktopScaleMode">Масштаб RDC</label>
+                  <select id="desktopScaleMode">
+                    <option value="contain">Fit — вписать</option>
+                    <option value="fill">Fill — растянуть</option>
+                    <option value="sync">Sync — как на сервере</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label for="desktopFps">Частота RDC</label>
+                  <select id="desktopFps">
+                    <option value="15">15 FPS</option>
+                    <option value="30">30 FPS</option>
+                    <option value="45">45 FPS</option>
+                    <option value="60">60 FPS</option>
+                  </select>
+                </div>
+                <div class="settings-row">
+                  <label for="mainDisplayResolution">Основной экран</label>
+                  <div class="display-resolution-control" data-display-target="main">
+                    <select id="mainDisplayResolution" aria-label="Пресет разрешения основного экрана"></select>
+                    <input id="mainDisplayResolutionCustom" type="text" inputmode="numeric" placeholder="Например, 1920x1080" aria-label="Пользовательское разрешение основного экрана" />
+                    <button type="button" class="resolution-add">Добавить</button>
+                    <button type="button" class="resolution-apply">Применить</button>
+                    <button type="button" class="resolution-remove">Удалить</button>
+                  </div>
+                  <div class="settings-action-status" id="mainDisplayResolutionStatus"></div>
+                </div>
+                <div class="settings-row">
+                  <label for="virtualDisplayResolution">Виртуальный экран</label>
+                  <div class="display-resolution-control" data-display-target="virtual">
+                    <select id="virtualDisplayResolution" aria-label="Пресет разрешения виртуального экрана"></select>
+                    <input id="virtualDisplayResolutionCustom" type="text" inputmode="numeric" placeholder="Например, 2048x1152" aria-label="Пользовательское разрешение виртуального экрана" />
+                    <button type="button" class="resolution-add">Добавить</button>
+                    <button type="button" class="resolution-apply">Применить</button>
+                    <button type="button" class="resolution-remove">Удалить</button>
+                  </div>
+                  <div class="settings-action-status" id="virtualDisplayResolutionStatus"></div>
+                </div>
+                </div>
+              </details>
               <div class="settings-row">
                 <label for="fontSize">Размер</label>
                 <select id="fontSize"></select>

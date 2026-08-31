@@ -32,3 +32,9 @@ Settings, Tools, dropdown, responsive overflow, and Apps surfaces are positioned
 Only one top-level menu surface remains active at a time. A transparent fixed `menuBackdrop` is placed above terminal/browser frames, including frame fullscreen, and below the toolbar/menu surfaces. Its `pointerdown` closes all menu types through the shared `closeAllMenus()` path, so a click in iframe-covered workspace cannot be swallowed by the iframe. `Escape` uses the same close path; clicks inside the currently open menu do not dismiss it.
 
 On coarse-pointer/touch devices, floating menus switch to a viewport bottom-sheet presentation: 8 px viewport inset, height capped at roughly 78% of the dynamic viewport, safe-area-aware bottom padding, and controls with at least 48 px touch height. Apps uses the same sheet surface but replaces desktop cascade flyouts with one level at a time; entering Mac Apps, VM Apps, or Snippets shows the selected level and an in-sheet **Назад** action restores the Apps root. These behaviors are part of the menu interaction contract and should be covered by automated and browser smoke tests whenever menu positioning or state management changes.
+
+## Remote Desktop settings
+
+Remote Desktop-specific controls inside Settings are grouped under a native collapsed `details.remote-desktop-settings` section. The section is closed on every page load; its expanded/collapsed state is intentionally not persisted.
+
+The group contains desktop transport mode, RDC resolution, RDC scale mode, FPS, and both main/virtual display resolution controls. General UI controls such as density, toolbar orientation, font size/family, and window title remain outside the group. Existing control IDs and preference bindings must remain stable when the group presentation changes.
