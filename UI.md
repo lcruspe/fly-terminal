@@ -33,8 +33,18 @@ Only one top-level menu surface remains active at a time. A transparent fixed `m
 
 On coarse-pointer/touch devices, floating menus switch to a viewport bottom-sheet presentation: 8 px viewport inset, height capped at roughly 78% of the dynamic viewport, safe-area-aware bottom padding, and controls with at least 48 px touch height. Apps uses the same sheet surface but replaces desktop cascade flyouts with one level at a time; entering Mac Apps, VM Apps, or Snippets shows the selected level and an in-sheet **Назад** action restores the Apps root. These behaviors are part of the menu interaction contract and should be covered by automated and browser smoke tests whenever menu positioning or state management changes.
 
-## Remote Desktop settings
+## Settings information architecture
 
-Remote Desktop-specific controls inside Settings are grouped under a native collapsed `details.remote-desktop-settings` section. The section is closed on every page load; its expanded/collapsed state is intentionally not persisted.
+The top-level menus follow a task-based boundary: **Apps** launches environments and applications, **Settings** contains user preferences, and **Tools** contains operational actions that affect the local/remote environment. Do not place operational commands in Settings merely because they have configurable parameters.
 
-The group contains desktop transport mode, RDC resolution, RDC scale mode, FPS, and both main/virtual display resolution controls. General UI controls such as density, toolbar orientation, font size/family, and window title remain outside the group. Existing control IDs and preference bindings must remain stable when the group presentation changes.
+Settings is a sectioned hub with three panels: **Внешний вид** (theme, UI density, font size/family), **Рабочая область** (toolbar orientation and tab title), and **Remote Desktop** (transport, stream resolution, scale mode, and FPS). Desktop uses persistent left-side section navigation inside the popup; touch/coarse-pointer layouts move the same navigation to a horizontally scrollable selector above the content. Only one section panel is visible at a time. Arrow keys plus Home/End move between section tabs.
+
+The active Settings section is intentionally session-local UI state and is not persisted as a preference. Existing control IDs and preference bindings remain stable when controls move between sections.
+
+## Tools information architecture
+
+Tools is also sectioned by operation rather than rendered as one long scrolling column: **VPN**, **Файлы**, **Displays**, and **Система**. Desktop uses the same left-side section-navigation pattern as Settings; touch/coarse-pointer layouts expose a horizontal four-item selector.
+
+Display resolution controls belong to **Tools → Displays** because applying them changes actual macOS display modes. They must not be presented as ordinary Remote Desktop preferences. `desktopResolution` remains in Settings because it controls the Remote Desktop stream; `mainDisplayResolution` and `virtualDisplayResolution` remain operational controls under Tools.
+
+When adding new menu functionality, classify it first: launchers go to Apps, durable presentation/behavior preferences go to Settings, and environment-changing commands go to Tools. Prefer extending an existing section over adding another top-level menu.
