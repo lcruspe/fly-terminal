@@ -626,6 +626,22 @@
       position: relative;
     }
 
+    .menu-backdrop {
+      background: transparent;
+      inset: 0;
+      position: fixed;
+      touch-action: manipulation;
+      z-index: 2500;
+    }
+
+    .menu-backdrop[hidden] {
+      display: none;
+    }
+
+    body.menu-surface-open .bottom-panel {
+      z-index: 3000;
+    }
+
     .settings-panel {
       background: var(--panel-solid);
       border: 1px solid var(--border);
@@ -1748,6 +1764,41 @@
       text-transform: uppercase;
     }
 
+    @media (hover: none), (pointer: coarse) {
+      .settings-panel,
+      .dropdown-menu,
+      .apps-flyout,
+      .apps-flyout-submenu {
+        border-radius: 18px;
+        box-sizing: border-box;
+        max-height: min(78dvh, calc(100dvh - 16px));
+        max-width: calc(100vw - 16px);
+        min-width: 0;
+        overscroll-behavior: contain;
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+        width: calc(100vw - 16px);
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .settings-panel button,
+      .settings-panel select,
+      .settings-panel input,
+      .dropdown-menu button,
+      .dropdown-menu a.button,
+      .apps-flyout button,
+      .apps-flyout a.button {
+        min-height: 48px;
+      }
+
+      .apps-menu-back {
+        border-bottom: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        color: var(--muted) !important;
+        font-weight: 700 !important;
+        margin-bottom: 4px;
+      }
+    }
+
     @media (max-width: 760px) {
       body {
         overflow: auto;
@@ -2103,6 +2154,8 @@
     </div>
   </main>
 
+  <div class="menu-backdrop" id="menuBackdrop" hidden aria-hidden="true"></div>
+
   <dialog class="container-file-dialog" id="containerFileDialog">
     <div class="container-file-picker">
       <div class="container-file-picker-header">
@@ -2122,6 +2175,7 @@
   </dialog>
 
   <div class="apps-flyout" id="appsRootMenu" role="menu" aria-labelledby="appsMenuButton" hidden>
+    <button type="button" class="apps-menu-back" id="appsMenuBack" data-mobile-apps-back hidden>← Назад</button>
     <button type="button" class="apps-cascade-trigger" data-apps-submenu="macAppsList" aria-expanded="false" aria-haspopup="menu">Mac Apps</button>
     <button type="button" class="apps-cascade-trigger" data-apps-submenu="vmAppsList" aria-expanded="false" aria-haspopup="menu">VM Apps</button>
     <button type="button" class="apps-cascade-trigger" data-apps-submenu="snippetsList" aria-expanded="false" aria-haspopup="menu">Snippets</button>
@@ -2676,6 +2730,9 @@
     const addDesktopBtn = document.getElementById("addDesktop");
     const appsMenuButton = document.getElementById("appsMenuButton");
     const appsRootMenu = document.getElementById("appsRootMenu");
+    const appsMenuBack = document.getElementById("appsMenuBack");
+    const menuBackdrop = document.getElementById("menuBackdrop");
+    const touchMenuMedia = window.matchMedia("(hover: none), (pointer: coarse)");
     const macAppsList = document.querySelector("#macAppsList [data-dynamic-app-list]");
     const vmAppsList = document.querySelector("#vmAppsList [data-dynamic-app-list]");
     const snippetsList = document.getElementById("snippetsList");
@@ -3494,6 +3551,34 @@
         .filter(item => !item.hidden && getComputedStyle(item).display !== "none");
     }
 
+    function isTouchMenuMode() {
+      return !!touchMenuMedia?.matches;
+    }
+
+    function hasOpenMenuSurface() {
+      const floatingOpen = !!document.querySelector("details.settings[open], details.dropdown[open]");
+      const appsOpen = !!(
+        (appsRootMenu && !appsRootMenu.hidden) ||
+        (activeAppsSubmenu && !activeAppsSubmenu.hidden)
+      );
+      return floatingOpen || appsOpen;
+    }
+
+    function syncMenuSurfaceState() {
+      const open = hasOpenMenuSurface();
+      document.body.classList.toggle("menu-surface-open", open);
+      if (menuBackdrop) {
+        menuBackdrop.hidden = !open;
+        menuBackdrop.setAttribute("aria-hidden", String(!open));
+      }
+    }
+
+    function closeAllMenus() {
+      closeAppsMenu();
+      closeFloatingMenus();
+      syncMenuSurfaceState();
+    }
+
     function refreshAppsSubmenuDivider(submenuId) {
       const submenu = appsSubmenuElement(submenuId);
       const divider = submenu?.querySelector("[data-static-divider]");
@@ -3512,10 +3597,16 @@
       panel.style.top = "0px";
       panel.style.bottom = "auto";
       panel.style.maxHeight = "";
+      panel.style.maxWidth = "";
     }
 
     function positionAppsRootMenu() {
       if (!appsRootMenu || appsRootMenu.hidden || !appsMenuButton) return;
+      if (isTouchMenuMode()) {
+        resetAppsPanelPosition(appsRootMenu);
+        positionTouchMenuSurface(appsRootMenu);
+        return;
+      }
       const pad = 10;
       const gap = 8;
       resetAppsPanelPosition(appsRootMenu);
@@ -3555,7 +3646,13 @@
     }
 
     function positionAppsSubmenu(trigger, submenu) {
-      if (!trigger || !submenu || submenu.hidden) return;
+      if (!submenu || submenu.hidden) return;
+      if (isTouchMenuMode()) {
+        resetAppsPanelPosition(submenu);
+        positionTouchMenuSurface(submenu);
+        return;
+      }
+      if (!trigger) return;
       const pad = 10;
       const gap = 6;
       resetAppsPanelPosition(submenu);
@@ -3591,22 +3688,62 @@
       activeAppsSubmenu.hidden = true;
       resetAppsPanelPosition(activeAppsSubmenu);
       trigger?.setAttribute("aria-expanded", "false");
+      if (appsMenuBack && appsRootMenu && appsMenuBack.parentElement !== appsRootMenu) {
+        appsRootMenu.prepend(appsMenuBack);
+      }
+      if (appsMenuBack) appsMenuBack.hidden = true;
       activeAppsSubmenu = null;
       if (focusTrigger) trigger?.focus();
+    }
+
+    function showMobileAppsLevel(submenu = null, { trigger = null, focusFirst = false } = {}) {
+      if (!isTouchMenuMode() || !appsRootMenu) return false;
+      clearTimeout(appsSubmenuCloseTimer);
+
+      if (!submenu) {
+        closeAppsSubmenu();
+        appsRootMenu.hidden = false;
+        if (appsMenuBack) appsMenuBack.hidden = true;
+        requestAnimationFrame(() => {
+          positionAppsRootMenu();
+          if (focusFirst) appsMenuItems(appsRootMenu)[0]?.focus();
+        });
+        syncMenuSurfaceState();
+        return true;
+      }
+
+      if (activeAppsSubmenu && activeAppsSubmenu !== submenu) closeAppsSubmenu();
+      activeAppsSubmenu = submenu;
+      appsRootMenu.hidden = true;
+      submenu.hidden = false;
+      if (appsMenuBack) {
+        appsMenuBack.hidden = false;
+        submenu.prepend(appsMenuBack);
+      }
+      trigger?.setAttribute("aria-expanded", "true");
+      requestAnimationFrame(() => {
+        positionAppsSubmenu(trigger, submenu);
+        if (focusFirst) appsMenuItems(submenu).find(item => item !== appsMenuBack)?.focus();
+      });
+      syncMenuSurfaceState();
+      return true;
     }
 
     function closeAppsMenu({ restoreFocus = false } = {}) {
       closeAppsSubmenu();
       if (appsRootMenu) appsRootMenu.hidden = true;
       appsMenuButton?.setAttribute("aria-expanded", "false");
+      syncMenuSurfaceState();
       if (restoreFocus) appsMenuButton?.focus();
     }
 
     function openAppsMenu({ focusFirst = false } = {}) {
       if (!appsRootMenu || !appsMenuButton) return;
-      document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach(details => details.removeAttribute("open"));
-      appsRootMenu.hidden = false;
+      closeFloatingMenus();
       appsMenuButton.setAttribute("aria-expanded", "true");
+      if (showMobileAppsLevel(null, { focusFirst })) return;
+      appsRootMenu.hidden = false;
+      syncMenuSurfaceState();
       requestAnimationFrame(() => {
         positionAppsRootMenu();
         if (focusFirst) appsMenuItems(appsRootMenu)[0]?.focus();
@@ -3616,11 +3753,13 @@
     function openAppsSubmenu(trigger, { focusFirst = false } = {}) {
       const submenu = appsSubmenuElement(trigger?.dataset.appsSubmenu);
       if (!submenu) return;
+      if (showMobileAppsLevel(submenu, { trigger, focusFirst })) return;
       clearTimeout(appsSubmenuCloseTimer);
       if (activeAppsSubmenu && activeAppsSubmenu !== submenu) closeAppsSubmenu();
       activeAppsSubmenu = submenu;
       submenu.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
+      syncMenuSurfaceState();
       requestAnimationFrame(() => {
         positionAppsSubmenu(trigger, submenu);
         if (focusFirst) appsMenuItems(submenu)[0]?.focus();
@@ -3628,6 +3767,7 @@
     }
 
     function scheduleAppsSubmenuClose() {
+      if (isTouchMenuMode()) return;
       clearTimeout(appsSubmenuCloseTimer);
       appsSubmenuCloseTimer = setTimeout(() => closeAppsSubmenu(), 180);
     }
@@ -3785,8 +3925,9 @@
     function bindAppsMenu() {
       if (!appsMenuButton || !appsRootMenu) return;
       appsMenuButton.onclick = () => {
-        if (appsRootMenu.hidden) openAppsMenu();
-        else closeAppsMenu();
+        const appsOpen = !appsRootMenu.hidden || !!(activeAppsSubmenu && !activeAppsSubmenu.hidden);
+        if (appsOpen) closeAppsMenu();
+        else openAppsMenu();
       };
       appsMenuButton.onkeydown = event => {
         if (["ArrowDown", "Enter", " "].includes(event.key)) {
@@ -3796,8 +3937,8 @@
       };
 
       appsRootMenu.querySelectorAll("[data-apps-submenu]").forEach(trigger => {
-        trigger.onmouseenter = () => openAppsSubmenu(trigger);
-        trigger.onmouseleave = scheduleAppsSubmenuClose;
+        trigger.onmouseenter = () => { if (!isTouchMenuMode()) openAppsSubmenu(trigger); };
+        trigger.onmouseleave = () => { if (!isTouchMenuMode()) scheduleAppsSubmenuClose(); };
         trigger.onclick = () => openAppsSubmenu(trigger, { focusFirst: true });
         trigger.onkeydown = event => {
           if (["ArrowRight", "Enter", " "].includes(event.key)) {
@@ -3814,7 +3955,8 @@
         submenu.addEventListener("keydown", event => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
-            closeAppsSubmenu({ focusTrigger: true });
+            if (isTouchMenuMode()) showMobileAppsLevel(null, { focusFirst: true });
+            else closeAppsSubmenu({ focusTrigger: true });
           }
         });
       });
@@ -3835,13 +3977,15 @@
 
       document.getElementById("openBrowserTab")?.addEventListener("click", () => closeAppsMenu());
       document.getElementById("openDesktopTab")?.addEventListener("click", () => closeAppsMenu());
+      if (appsMenuBack) appsMenuBack.onclick = () => showMobileAppsLevel(null, { focusFirst: true });
       document.addEventListener("pointerdown", event => {
-        if (appsRootMenu.hidden) return;
+        if (appsRootMenu.hidden && (!activeAppsSubmenu || activeAppsSubmenu.hidden)) return;
         const insideMenu = event.composedPath().some(node => node === appsMenuButton || node === appsRootMenu || node === activeAppsSubmenu);
         if (!insideMenu) closeAppsMenu();
       });
       window.addEventListener("resize", positionOpenAppsMenus, { passive: true });
       window.addEventListener("scroll", positionOpenAppsMenus, { passive: true });
+      touchMenuMedia.addEventListener?.("change", closeAllMenus);
 
       document.getElementById("closeSnippetEditor").onclick = closeSnippetEditor;
       snippetEditorDialog.addEventListener("click", event => {
@@ -3897,11 +4041,39 @@
       return { left: 0, top: 0 };
     }
 
+    function positionTouchMenuSurface(menu) {
+      if (!menu || menu.hidden) return;
+      const viewportPad = 8;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const fixedBase = fixedPositionBaseFor(menu);
+      const maxHeight = Math.min(viewportHeight * 0.78, viewportHeight - viewportPad * 2);
+      const maxWidth = Math.max(1, viewportWidth - viewportPad * 2);
+
+      menu.style.position = "fixed";
+      menu.style.left = `${Math.round(viewportPad - fixedBase.left)}px`;
+      menu.style.right = "auto";
+      menu.style.top = `${Math.round(viewportPad - fixedBase.top)}px`;
+      menu.style.bottom = "auto";
+      menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
+      menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
+
+      const fittedRect = menu.getBoundingClientRect();
+      const fittedHeight = Math.min(fittedRect.height, maxHeight);
+      const top = viewportHeight - viewportPad - fittedHeight;
+      menu.style.top = `${Math.round(top - fixedBase.top)}px`;
+      menu.style.transformOrigin = "bottom center";
+    }
+
     function positionFloatingMenu(details) {
       if (!details?.open) return;
       const summary = details.querySelector(":scope > summary");
       const menu = floatingMenuFor(details);
       if (!summary || !menu) return;
+      if (isTouchMenuMode()) {
+        positionTouchMenuSurface(menu);
+        return;
+      }
 
       const viewportPad = 10;
       const gap = 8;
@@ -4032,6 +4204,7 @@
         details.removeAttribute("open");
         resetFloatingMenuPosition(details);
       });
+      syncMenuSurfaceState();
     }
 
     function bindFloatingMenus() {
@@ -4042,19 +4215,18 @@
         closeFloatingMenus({ except: containingMenu });
       });
 
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") closeFloatingMenus();
-      });
-
       document.querySelectorAll("details.settings, details.dropdown").forEach((details) => {
         const menu = floatingMenuFor(details);
         if (menu) floatingMenuResizeObserver.observe(menu);
         details.addEventListener("toggle", () => {
           if (details.open) {
+            closeAppsMenu();
+            closeFloatingMenus({ except: details });
             requestAnimationFrame(() => positionFloatingMenu(details));
           } else {
             resetFloatingMenuPosition(details);
           }
+          syncMenuSurfaceState();
         });
       });
       window.addEventListener("resize", positionOpenFloatingMenus, { passive: true });
@@ -4064,6 +4236,7 @@
           if (!details.contains(event.target)) details.removeAttribute("open");
         });
       });
+      if (menuBackdrop) menuBackdrop.addEventListener("pointerdown", closeAllMenus);
     }
 
     function wrapToolbarActionLabel(action) {
@@ -5883,8 +6056,8 @@
           else closeShortcutsModal();
         }
       }
+      if (event.key === "Escape") closeAllMenus();
       if (event.key === "Escape") {
-        if (appsRootMenu && !appsRootMenu.hidden) closeAppsMenu({ restoreFocus: true });
         if (!commandPalette.hidden) closeCommandPalette();
         if (shortcutsModal && !shortcutsModal.hidden) closeShortcutsModal();
         if (fullscreenTabId) setFrameFullscreen(fullscreenTabId, false);
