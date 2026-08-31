@@ -90,6 +90,7 @@ HAPP_RECONNECT_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
 HAPP_CACHE_DIR = Path.home() / "Library/Containers/su.ffg.happ.plus/Data/Library/Caches/su.ffg.happ.plus/fsCachedData"
 HAPP_CACHE_DB = HAPP_CACHE_DIR.parent / "Cache.db"
+HAPP_NATIVE_SUBSCRIPTIONS_DIR = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Application Support/Xray/subscriptionConfigs"
 HAPP_SUBSCRIPTION_REFRESH_TIMEOUT_SECONDS = 8
 HAPP_SUBSCRIPTION_MAX_BYTES = 5 * 1024 * 1024
 HAPP_SUBSCRIPTION_REFRESH_CACHE_TTL_SECONDS = 60
@@ -641,6 +642,20 @@ def happ_subscription_catalog():
             current_subscription_id = matches[0][0]["id"]
             current_location_id = matches[0][1]["id"]
 
+    if current_subscription_id:
+        current_subscription = next(
+            (item for item in subscriptions if item["id"] == current_subscription_id),
+            None,
+        )
+        if current_subscription is not None:
+            _attach_happ_native_ids(
+                current_subscription,
+                HAPP_NATIVE_SUBSCRIPTIONS_DIR,
+                _read_happ_preference("XRAY_CURRENT_SUBSCRIPTION"),
+                _read_happ_preference("XRAY_CURRENT"),
+                current_config,
+            )
+
     current_subscription_label = next(
         (item["label"] for item in subscriptions if item["id"] == current_subscription_id),
         "",
@@ -654,18 +669,83 @@ def happ_subscription_catalog():
     }
 
 
-def _write_happ_current_config(location):
-    config_json = json.dumps(location["config"], ensure_ascii=False, separators=(",", ":"))
-    result = subprocess.run(
-        ["plutil", "-replace", "connectedConfigJson", "-string", config_json, str(HAPP_PREFERENCES)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-        timeout=10,
+def _attach_happ_native_ids(subscription, native_root, native_subscription_id, native_server_id, current_config):
+    locations = subscription.get("locations") if isinstance(subscription, dict) else None
+    if not isinstance(locations, list) or not locations or not native_subscription_id or not native_server_id:
+        return False
+
+    native_subscription_dir = Path(native_root) / native_subscription_id
+    try:
+        native_servers = sorted(
+            (item for item in native_subscription_dir.iterdir() if item.is_dir()),
+            key=lambda item: (
+                getattr(item.stat(), "st_birthtime", item.stat().st_ctime),
+                item.stat().st_ctime,
+                item.name,
+            ),
+        )
+    except OSError:
+        return False
+    if len(native_servers) != len(locations):
+        return False
+
+    current_config_id = _happ_config_id(current_config) if current_config else ""
+    current_index = next(
+        (index for index, location in enumerate(locations) if location.get("id") == current_config_id),
+        None,
     )
-    if result.returncode != 0:
-        return False, (result.stderr or result.stdout).strip()
+    if current_index is None:
+        current_label = str((current_config or {}).get("remarks") or "").strip()
+        label_matches = [
+            index for index, location in enumerate(locations)
+            if str(location.get("label") or "").strip() == current_label
+        ]
+        if len(label_matches) == 1:
+            current_index = label_matches[0]
+    if current_index is None or native_servers[current_index].name != native_server_id:
+        return False
+
+    subscription["nativeSubscriptionId"] = native_subscription_id
+    for location, native_server in zip(locations, native_servers):
+        location["nativeServerId"] = native_server.name
+    return True
+
+
+def _read_happ_preference(key):
+    domain = str(HAPP_PREFERENCES.with_suffix(""))
+    try:
+        result = subprocess.run(
+            ["defaults", "read", domain, key],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _write_happ_current_config(subscription, location):
+    native_subscription_id = str(subscription.get("nativeSubscriptionId") or "")
+    native_server_id = str(location.get("nativeServerId") or "")
+    if not native_subscription_id or not native_server_id:
+        return False, "happ_native_selection_unavailable"
+
+    config_json = json.dumps(location["config"], ensure_ascii=False, separators=(",", ":"))
+    domain = str(HAPP_PREFERENCES.with_suffix(""))
+    values = (
+        ("XRAY_CURRENT_SUBSCRIPTION", native_subscription_id),
+        ("XRAY_CURRENT", native_server_id),
+        ("connectedConfigJson", config_json),
+    )
+    for key, value in values:
+        try:
+            result = subprocess.run(
+                ["defaults", "write", domain, key, "-string", value],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, str(exc)
+        if result.returncode != 0:
+            return False, (result.stderr or result.stdout).strip()
     return True, ""
 
 
@@ -725,7 +805,7 @@ def apply_happ_location(subscription, location):
     happ://routing/off command — the same semantic fallback as Happ's manual
     "Запуск" action, but without GUI automation.
     """
-    written, write_error = _write_happ_current_config(location)
+    written, write_error = _write_happ_current_config(subscription, location)
     if not written:
         return False, write_error, False
 

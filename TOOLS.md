@@ -69,6 +69,8 @@ Control API разделяет ошибку на два уровня:
 
 `GET /api/vpn/happ/subscriptions` возвращает `subscriptions[]`, внутри каждой — `locations[]`, а также `currentSubscriptionId` и `currentLocationId`, если текущий `connectedConfigJson` удалось сопоставить с кэшем. Старый `GET /api/vpn/happ/locations` сохранён как совместимый alias того же каталога. `POST /api/vpn/happ/location` принимает `subscriptionId` + `locationId`; перед применением backend проверяет, что локация действительно принадлежит выбранной подписке.
 
+Выбор сервера должен сохраняться в нативном состоянии Happ, а не только в `connectedConfigJson`. Для текущей подписки backend сопоставляет позиции серверов из subscription response с каталогами `subscriptionConfigs/<subscription UUID>/<server UUID>` и принимает mapping только после контрольного совпадения текущей локации с `XRAY_CURRENT`. При переключении через `defaults` для App Group одновременно записываются `XRAY_CURRENT_SUBSCRIPTION`, `XRAY_CURRENT` и `connectedConfigJson`. Это предотвращает откат на старую локацию после повторного чтения настроек Happ или жёсткой перезагрузки Fly Terminal. Если нативное сопоставление нельзя доказать (например, число серверов в локальном store Happ уже расходится с актуальной подпиской), backend не угадывает UUID и не сообщает ложный успех.
+
 Если `Cache.db` отсутствует или недоступен, остаётся fallback на прямое чтение `fsCachedData`. Если `Cache.db` есть, но отдельные `fsCachedData` уже очищены macOS, используется описанное выше восстановление по сохранённому запросу Happ. Внешние ответы не сохраняются Fly Terminal на диск: источником истины остаётся Happ/CFNetwork.
 
 ### Маршрутизация подписки и восстановление Xray
