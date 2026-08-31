@@ -21,6 +21,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
+from urllib.request import Request, urlopen
 
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -89,6 +90,11 @@ HAPP_RECONNECT_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
 HAPP_CACHE_DIR = Path.home() / "Library/Containers/su.ffg.happ.plus/Data/Library/Caches/su.ffg.happ.plus/fsCachedData"
 HAPP_CACHE_DB = HAPP_CACHE_DIR.parent / "Cache.db"
+HAPP_SUBSCRIPTION_REFRESH_TIMEOUT_SECONDS = 8
+HAPP_SUBSCRIPTION_MAX_BYTES = 5 * 1024 * 1024
+HAPP_SUBSCRIPTION_REFRESH_CACHE_TTL_SECONDS = 60
+HAPP_SUBSCRIPTION_REFRESH_CACHE = {}
+HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK = threading.Lock()
 
 TOOL_ERROR_MESSAGES = {
     "invalid_json": "Сервер получил некорректный запрос. Обновите страницу и повторите действие.",
@@ -245,6 +251,62 @@ def _happ_cached_response_body(receiver_data, is_data_on_fs):
     return raw
 
 
+def _happ_saved_request_headers(request_object):
+    archive = _resolve_plist_archive(request_object)
+    header_names = {
+        "User-Agent": "user-agent",
+        "X-HWID": "x-hwid",
+        "Accept": "accept",
+        "Accept-Language": "accept-language",
+    }
+    headers = {}
+    for output_name, normalized_name in header_names.items():
+        value = _find_named_value(archive, {normalized_name})
+        if isinstance(value, (bytes, bytearray)):
+            try:
+                value = bytes(value).decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+        value = str(value or "").strip()
+        if value and "\r" not in value and "\n" not in value:
+            headers[output_name] = value
+    return headers
+
+
+def _happ_refresh_subscription_body(request_key, request_object):
+    try:
+        parsed = urlsplit(str(request_key or ""))
+    except ValueError:
+        return b""
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return b""
+
+    headers = _happ_saved_request_headers(request_object)
+    if not headers.get("User-Agent"):
+        return b""
+
+    cache_material = str(request_key) + "\n" + json.dumps(headers, sort_keys=True, separators=(",", ":"))
+    cache_key = hashlib.sha256(cache_material.encode("utf-8")).hexdigest()
+    now = time.monotonic()
+    with HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK:
+        cached = HAPP_SUBSCRIPTION_REFRESH_CACHE.get(cache_key)
+        if cached and now - cached[0] < HAPP_SUBSCRIPTION_REFRESH_CACHE_TTL_SECONDS:
+            return cached[1]
+
+    try:
+        request = Request(str(request_key), headers=headers, method="GET")
+        with urlopen(request, timeout=HAPP_SUBSCRIPTION_REFRESH_TIMEOUT_SECONDS) as response:
+            body = response.read(HAPP_SUBSCRIPTION_MAX_BYTES + 1)
+    except (OSError, TimeoutError, ValueError):
+        return b""
+    if len(body) > HAPP_SUBSCRIPTION_MAX_BYTES:
+        return b""
+
+    with HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK:
+        HAPP_SUBSCRIPTION_REFRESH_CACHE[cache_key] = (now, body)
+    return body
+
+
 def _parse_happ_subscription_configs(raw_body):
     if not raw_body:
         return []
@@ -367,6 +429,14 @@ def _normalize_happ_subscription_title(value):
     elif explicit_base64:
         return ""
     return title[:80]
+
+
+def _happ_is_subscription_response(response_object):
+    archive = _resolve_plist_archive(response_object)
+    return _find_named_value(
+        archive,
+        {"profile-title", "profiletitle", "subscription-userinfo", "subscriptionuserinfo"},
+    ) not in (None, "")
 
 
 def _happ_subscription_title(response_object, request_key):
@@ -498,15 +568,17 @@ def happ_subscriptions():
                 f"""
                 SELECT r.entry_ID, r.request_key, r.time_stamp,
                        {fs_expr} AS is_data_on_fs,
-                       d.receiver_data, b.response_object
+                       d.receiver_data, b.response_object, b.request_object
                 FROM cfurl_cache_response AS r
                 JOIN cfurl_cache_receiver_data AS d USING (entry_ID)
                 LEFT JOIN cfurl_cache_blob_data AS b USING (entry_ID)
                 ORDER BY r.time_stamp DESC
                 """
             )
-            for entry_id, request_key, _timestamp, is_data_on_fs, receiver_data, response_object in rows:
+            for entry_id, request_key, _timestamp, is_data_on_fs, receiver_data, response_object, request_object in rows:
                 body = _happ_cached_response_body(receiver_data, is_data_on_fs)
+                if not body and _happ_is_subscription_response(response_object):
+                    body = _happ_refresh_subscription_body(request_key, request_object)
                 configs = _parse_happ_subscription_configs(body)
                 locations = _happ_locations_from_configs(configs)
                 if not locations:
