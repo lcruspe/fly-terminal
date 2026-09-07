@@ -90,3 +90,15 @@ test('remote desktop HUD stays compact until explicitly opened', () => {
   assert.match(webrtc, /function setHudPinned/);
   assert.doesNotMatch(webrtc, /#viewport:hover #hudBar/);
 });
+
+
+test('screen capture runs only while a remote desktop client is connected', () => {
+  const streamer = fs.readFileSync(new URL('../macos/fly-mac-streamer.py', import.meta.url), 'utf8');
+  assert.match(streamer, /if not self\.clients:[\s\S]*Encoder start skipped/);
+  assert.match(streamer, /async def ensure_encoder_started/);
+  assert.match(streamer, /async def stop_encoder_if_idle/);
+  assert.match(streamer, /Stopping screen capture: no active stream clients/);
+  assert.match(streamer, /self\.clients\.add\(websocket\)[\s\S]*await self\.ensure_encoder_started\(\)/);
+  assert.match(streamer, /self\.clients\.discard\(websocket\)[\s\S]*await self\.stop_encoder_if_idle\(\)/);
+  assert.doesNotMatch(streamer, /server\.running = True\s+await server\.start_encoder\(\)/);
+});

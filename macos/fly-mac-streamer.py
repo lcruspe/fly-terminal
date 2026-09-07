@@ -319,6 +319,11 @@ class StreamServer:
         self.clients.difference_update(dead)
 
     async def start_encoder(self):
+        if not self.clients:
+            logger.debug("Encoder start skipped: no active stream clients")
+            return
+        if self.encoder_proc and self.encoder_proc.poll() is None:
+            return
         if not ENCODER_BIN.exists():
             logger.info("Compiling native fly-mac-encoder...")
             swift_src = SCRIPT_DIR / "fly-mac-encoder.swift"
@@ -359,6 +364,29 @@ class StreamServer:
         loop = asyncio.get_running_loop()
         loop.create_task(self._read_encoder_frames(encoder_proc))
         loop.create_task(self._log_encoder_stderr(encoder_proc))
+
+    async def ensure_encoder_started(self):
+        async with self.encoder_lock:
+            await self.start_encoder()
+
+    async def stop_encoder_if_idle(self):
+        if self.clients:
+            return
+        async with self.encoder_lock:
+            if self.clients:
+                return
+            encoder_proc = self.encoder_proc
+            self.encoder_proc = None
+            self.latest_keyframe = b""
+            if not encoder_proc or encoder_proc.poll() is not None:
+                return
+            logger.info("Stopping screen capture: no active stream clients")
+            encoder_proc.terminate()
+            try:
+                await asyncio.wait_for(asyncio.to_thread(encoder_proc.wait), timeout=3)
+            except asyncio.TimeoutError:
+                encoder_proc.kill()
+                await asyncio.to_thread(encoder_proc.wait)
 
     async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False, track_request: bool = True):
         if not valid_stream_dimensions(width, height) or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
@@ -418,14 +446,17 @@ class StreamServer:
                 "state": "host_locked" if locked else "host_unlocked",
                 "message": "Mac заблокирован: показан основной дисплей для входа" if locked else "Mac разблокирован: возвращаю браузерный дисплей",
             })
-            await self.configure_encoder(
-                self.target_width,
-                self.target_height,
-                self.target_fps,
-                self.requested_display_name,
-                force=True,
-                track_request=False,
-            )
+            if self.clients:
+                await self.configure_encoder(
+                    self.target_width,
+                    self.target_height,
+                    self.target_fps,
+                    self.requested_display_name,
+                    force=True,
+                    track_request=False,
+                )
+            else:
+                self.target_display_name = next_display
 
     async def _start_unix_socket_server(self):
         sock_path = SOCKET_PATH
@@ -526,11 +557,12 @@ class StreamServer:
             try:
                 len_bytes = await loop.run_in_executor(None, encoder_proc.stdout.read, 4)
                 if not len_bytes or len(len_bytes) < 4:
-                    if self.running and self.encoder_proc is encoder_proc:
+                    if self.running and self.clients and self.encoder_proc is encoder_proc:
                         logger.warning("Encoder output ended, restarting in 2s...")
                         await asyncio.sleep(2)
-                        if self.running and self.encoder_proc is encoder_proc:
-                            await self.start_encoder()
+                        if self.running and self.clients and self.encoder_proc is encoder_proc:
+                            self.encoder_proc = None
+                            await self.ensure_encoder_started()
                     break
 
                 payload_len = struct.unpack("!I", len_bytes)[0]
@@ -546,6 +578,7 @@ class StreamServer:
     async def handle_websocket(self, websocket):
         logger.info("Client connected to stream WebSocket: %s", websocket.remote_address)
         self.clients.add(websocket)
+        await self.ensure_encoder_started()
         screen_w, screen_h = get_screen_dimensions()
 
         # Send Init metadata JSON
@@ -625,12 +658,12 @@ class StreamServer:
         finally:
             self.clients.discard(websocket)
             logger.info("Client disconnected from stream WebSocket")
+            await self.stop_encoder_if_idle()
 
 
 async def main():
     server = StreamServer()
     server.running = True
-    await server.start_encoder()
     lock_monitor = asyncio.create_task(server.monitor_lock_state())
 
     ws_server = await websockets.serve(
