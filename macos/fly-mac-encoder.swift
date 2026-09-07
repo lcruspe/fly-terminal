@@ -100,11 +100,15 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate {
                 try await Task.sleep(nanoseconds: 200_000_000)
                 
                 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-                let requestedDisplayID = NSScreen.screens.first(where: { $0.localizedName == displayName })?
-                    .deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-                let display = requestedDisplayID.flatMap { number in
-                    content.displays.first(where: { $0.displayID == CGDirectDisplayID(number.uint32Value) })
-                } ?? content.displays.first
+                let requestedDisplayID: CGDirectDisplayID
+                if displayName.isEmpty {
+                    requestedDisplayID = CGMainDisplayID()
+                } else {
+                    let screenNumber = NSScreen.screens.first(where: { $0.localizedName == displayName })?
+                        .deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+                    requestedDisplayID = screenNumber.map { CGDirectDisplayID($0.uint32Value) } ?? CGMainDisplayID()
+                }
+                let display = content.displays.first(where: { $0.displayID == requestedDisplayID }) ?? content.displays.first
                 guard let display = display else {
                     fputs("[Encoder] No active displays found. Retrying in 2s...\n", stderr)
                     try await Task.sleep(nanoseconds: 2_000_000_000)

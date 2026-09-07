@@ -56,6 +56,7 @@ FLY_NATIVE_BROWSER_PROFILE_DIR=$HOME/.local/share/fly-terminal/native-browser-pr
 FLY_NATIVE_BROWSER_STREAMER_PORT=5906
 FLY_NATIVE_BROWSER_STREAMER_SOCKET_PATH=/tmp/fly-native-browser-stream.sock
 FLY_NATIVE_BROWSER_DISPLAY_NAME=Fly\ Browser
+FLY_NATIVE_BROWSER_FOLLOW_MAIN_WHEN_LOCKED=1
 FLY_DESKTOP_ENABLED=1
 FLY_DESKTOP_URL=/desktop/
 FLY_DESKTOP_PORT=5901
@@ -132,6 +133,7 @@ ensure_env_line "FLY_NATIVE_BROWSER_PROFILE_DIR" "\$HOME/.local/share/fly-termin
 ensure_env_line "FLY_NATIVE_BROWSER_STREAMER_PORT" "5906"
 ensure_env_line "FLY_NATIVE_BROWSER_STREAMER_SOCKET_PATH" "/tmp/fly-native-browser-stream.sock"
 ensure_env_line "FLY_NATIVE_BROWSER_DISPLAY_NAME" "Fly\ Browser"
+ensure_env_line "FLY_NATIVE_BROWSER_FOLLOW_MAIN_WHEN_LOCKED" "1"
 ensure_env_line "FLY_DESKTOP_ENABLED" "1"
 ensure_env_line "FLY_DESKTOP_URL" "/desktop/"
 ensure_env_line "FLY_DESKTOP_PORT" "5901"

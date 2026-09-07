@@ -66,3 +66,11 @@ The containerized Chromium backend remains available at `/browser/` as a fallbac
 Native Browser is isolated from Mac Desktop: it uses its own virtual display, streamer port `5906`, and Unix socket `/tmp/fly-native-browser-stream.sock`. Do not reuse the Mac Desktop streamer port or socket for this backend.
 
 The public catalog must point Native Browser and Chromium fallback through the authenticated `:8443` Fly Terminal origin. Port `:10000` is reserved for Sprut.Hub in the current direct-macOS routing scheme.
+
+## Совместимость Remote Desktop
+
+Mac Desktop без явного выбора дисплея показывает главный дисплей macOS. Это гарантирует, что на lock screen видны пользователь и поле пароля; виртуальные `Fly Remote` и `Fly Browser` используются только при явном выборе.
+
+Native Browser в обычном состоянии показывает `Fly Browser`. Пока macOS заблокирован, backend автоматически переключает захват на главный дисплей, чтобы пользователь видел интерактивный lock screen и мог ввести пароль. После разблокировки тот же сеанс автоматически возвращается к `Fly Browser`.
+
+H.264-клиент получает фактический RFC 6381 codec из SPS потока VideoToolbox, а не использует жёстко заданный профиль/уровень. Он проверяет эту конфигурацию через WebCodecs и следит за появлением декодированных кадров. При отсутствии поддержки или если кадры не декодируются в течение нескольких секунд Mac Desktop автоматически открывает noVNC; для Native Browser аналогичная ошибка переводит вкладку на Chromium fallback.

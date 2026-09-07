@@ -34,6 +34,7 @@ TARGET_FPS = int(os.environ.get("FLY_STREAMER_FPS", 60))
 TARGET_WIDTH = int(os.environ.get("FLY_STREAMER_WIDTH", 1920))
 TARGET_HEIGHT = int(os.environ.get("FLY_STREAMER_HEIGHT", 1080))
 REMOTE_IDLE_TIMEOUT_SECONDS = int(os.environ.get("FLY_DESKTOP_IDLE_TIMEOUT_SECONDS", DEFAULT_IDLE_TIMEOUT_SECONDS))
+H264_CODEC = os.environ.get("FLY_STREAMER_H264_CODEC", "avc1.4D002A")
 SOCKET_PATH = os.environ.get("FLY_STREAMER_SOCKET_PATH", "/tmp/fly-mac-stream.sock")
 VALID_STREAM_FPS = {15, 30, 45, 60}
 VALID_DISPLAY_NAMES = {"", "Fly Remote", "Fly Browser"}
@@ -53,6 +54,16 @@ class CGRect(ctypes.Structure):
     _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double), ("w", ctypes.c_double), ("h", ctypes.c_double)]
 
 cg.CGMainDisplayID.restype = ctypes.c_uint32
+cg.CGSessionCopyCurrentDictionary.restype = ctypes.c_void_p
+cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+cf.CFDictionaryGetValue.restype = ctypes.c_void_p
+cf.CFDictionaryGetValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+cf.CFGetTypeID.restype = ctypes.c_ulong
+cf.CFGetTypeID.argtypes = [ctypes.c_void_p]
+cf.CFBooleanGetTypeID.restype = ctypes.c_ulong
+cf.CFBooleanGetValue.restype = ctypes.c_bool
+cf.CFBooleanGetValue.argtypes = [ctypes.c_void_p]
 cg.CGDisplayPixelsWide.restype = ctypes.c_size_t
 cg.CGDisplayPixelsWide.argtypes = [ctypes.c_uint32]
 cg.CGDisplayPixelsHigh.restype = ctypes.c_size_t
@@ -121,6 +132,49 @@ WEB_KEY_TO_MAC_VK = {
 
 def get_screen_dimensions():
     return int(TARGET_DISPLAY_BOUNDS[2]), int(TARGET_DISPLAY_BOUNDS[3])
+
+
+def detect_h264_codec(packet: bytes):
+    """Return an RFC 6381 avc1 codec string from the SPS in an Annex B packet."""
+    if len(packet) <= 9:
+        return None
+    data = packet[9:]
+    starts = []
+    i = 0
+    while i < len(data) - 3:
+        if data[i:i + 4] == b"\x00\x00\x00\x01":
+            starts.append((i, 4))
+            i += 4
+        elif data[i:i + 3] == b"\x00\x00\x01":
+            starts.append((i, 3))
+            i += 3
+        else:
+            i += 1
+    for index, (start, prefix_len) in enumerate(starts):
+        nal_start = start + prefix_len
+        nal_end = starts[index + 1][0] if index + 1 < len(starts) else len(data)
+        nal = data[nal_start:nal_end]
+        if len(nal) >= 4 and (nal[0] & 0x1F) == 7:
+            return f"avc1.{nal[1]:02X}{nal[2]:02X}{nal[3]:02X}"
+    return None
+
+
+def is_screen_locked():
+    session = cg.CGSessionCopyCurrentDictionary()
+    if not session:
+        return False
+    key = cf.CFStringCreateWithCString(None, b"CGSSessionScreenIsLocked", 0x08000100)
+    if not key:
+        cf.CFRelease(session)
+        return False
+    try:
+        value = cf.CFDictionaryGetValue(session, key)
+        if not value or cf.CFGetTypeID(value) != cf.CFBooleanGetTypeID():
+            return False
+        return bool(cf.CFBooleanGetValue(value))
+    finally:
+        cf.CFRelease(key)
+        cf.CFRelease(session)
 
 
 def valid_stream_dimensions(width: int, height: int):
@@ -232,6 +286,7 @@ class StreamServer:
     def __init__(self):
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
         self.latest_keyframe: bytes = b""
+        self.h264_codec = H264_CODEC
         self.encoder_proc: subprocess.Popen = None
         self.running = False
         self.tcc_required = False
@@ -239,8 +294,17 @@ class StreamServer:
         self.target_width = TARGET_WIDTH
         self.target_height = TARGET_HEIGHT
         self.target_fps = TARGET_FPS
-        self.target_display_name = os.environ.get("FLY_STREAMER_DISPLAY_NAME", "")
+        self.requested_display_name = os.environ.get("FLY_STREAMER_DISPLAY_NAME", "")
+        self.follow_main_when_locked = os.environ.get("FLY_STREAMER_FOLLOW_MAIN_WHEN_LOCKED", "0") == "1"
+        self.screen_locked = is_screen_locked()
+        self.target_display_name = self._effective_display_name()
         self.encoder_lock = asyncio.Lock()
+        self.unix_server = None
+
+    def _effective_display_name(self):
+        if self.follow_main_when_locked and self.screen_locked:
+            return ""
+        return self.requested_display_name
 
     async def broadcast_json(self, msg: dict):
         if not self.clients:
@@ -268,8 +332,9 @@ class StreamServer:
                 logger.error("Failed to compile fly-mac-encoder: %s", res.stderr)
                 raise RuntimeError("Failed to compile fly-mac-encoder")
 
-        logger.info("Initializing Unix socket server...")
-        await self._start_unix_socket_server()
+        if self.unix_server is None:
+            logger.info("Initializing Unix socket server...")
+            await self._start_unix_socket_server()
 
         encoder_env = os.environ.copy()
         encoder_env.update({
@@ -295,14 +360,17 @@ class StreamServer:
         loop.create_task(self._read_encoder_frames(encoder_proc))
         loop.create_task(self._log_encoder_stderr(encoder_proc))
 
-    async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False):
+    async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False, track_request: bool = True):
         if not valid_stream_dimensions(width, height) or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
             return False
+        if track_request:
+            self.requested_display_name = display_name
+        effective_display = self._effective_display_name()
         async with self.encoder_lock:
-            if not force and (width, height, fps, display_name) == (self.target_width, self.target_height, self.target_fps, self.target_display_name):
+            if not force and (width, height, fps, effective_display) == (self.target_width, self.target_height, self.target_fps, self.target_display_name):
                 return True
             self.target_width, self.target_height, self.target_fps = width, height, fps
-            self.target_display_name = display_name
+            self.target_display_name = effective_display
             self.latest_keyframe = b""
             previous = self.encoder_proc
             self.encoder_proc = None
@@ -315,7 +383,7 @@ class StreamServer:
             await self.start_encoder()
             await self.broadcast_json({
                 "type": "init",
-                "codec": "avc1.42E01F",
+                "codec": self.h264_codec,
                 "width": width,
                 "height": height,
                 "fps": fps,
@@ -323,8 +391,41 @@ class StreamServer:
                 "screenHeight": get_screen_dimensions()[1],
                 "pixelWidth": TARGET_DISPLAY_PIXELS[0],
                 "pixelHeight": TARGET_DISPLAY_PIXELS[1],
+                "screenLocked": self.screen_locked,
             })
             return True
+
+    async def monitor_lock_state(self):
+        if not self.follow_main_when_locked:
+            return
+        logger.info(
+            "Lock-aware display routing enabled: requested=%r, locked=%s, active=%r",
+            self.requested_display_name, self.screen_locked, self.target_display_name
+        )
+        while self.running:
+            await asyncio.sleep(1)
+            locked = is_screen_locked()
+            if locked == self.screen_locked:
+                continue
+            self.screen_locked = locked
+            next_display = self._effective_display_name()
+            logger.info(
+                "macOS lock state changed: locked=%s, switching capture %r -> %r",
+                locked, self.target_display_name, next_display
+            )
+            await self.broadcast_json({
+                "type": "status",
+                "state": "host_locked" if locked else "host_unlocked",
+                "message": "Mac заблокирован: показан основной дисплей для входа" if locked else "Mac разблокирован: возвращаю браузерный дисплей",
+            })
+            await self.configure_encoder(
+                self.target_width,
+                self.target_height,
+                self.target_fps,
+                self.requested_display_name,
+                force=True,
+                track_request=False,
+            )
 
     async def _start_unix_socket_server(self):
         sock_path = SOCKET_PATH
@@ -349,7 +450,7 @@ class StreamServer:
                     break
 
         try:
-            server = await asyncio.start_unix_server(handle_sock_client, path=sock_path)
+            self.unix_server = await asyncio.start_unix_server(handle_sock_client, path=sock_path)
             os.chmod(sock_path, 0o777)
             logger.info("Unix socket frame server listening on %s", sock_path)
         except Exception as e:
@@ -363,6 +464,11 @@ class StreamServer:
         if is_key:
             self.latest_keyframe = payload
             self.tcc_required = False
+            detected_codec = detect_h264_codec(payload)
+            if detected_codec and detected_codec != self.h264_codec:
+                logger.info("Detected H.264 codec from SPS: %s -> %s", self.h264_codec, detected_codec)
+                self.h264_codec = detected_codec
+                await self.broadcast_json({"type": "codec", "codec": detected_codec})
 
         if self.clients:
             dead_clients = set()
@@ -445,7 +551,7 @@ class StreamServer:
         # Send Init metadata JSON
         init_payload = {
             "type": "init",
-            "codec": "avc1.42E01F",
+            "codec": self.h264_codec,
             "width": self.target_width,
             "height": self.target_height,
             "fps": self.target_fps,
@@ -453,6 +559,7 @@ class StreamServer:
             "screenHeight": screen_h,
             "pixelWidth": TARGET_DISPLAY_PIXELS[0],
             "pixelHeight": TARGET_DISPLAY_PIXELS[1],
+            "screenLocked": self.screen_locked,
         }
         await websocket.send(json.dumps(init_payload))
 
@@ -524,6 +631,7 @@ async def main():
     server = StreamServer()
     server.running = True
     await server.start_encoder()
+    lock_monitor = asyncio.create_task(server.monitor_lock_state())
 
     ws_server = await websockets.serve(
         server.handle_websocket,
@@ -541,8 +649,12 @@ async def main():
         pass
     finally:
         server.running = False
+        lock_monitor.cancel()
         if server.encoder_proc:
             server.encoder_proc.terminate()
+        if server.unix_server:
+            server.unix_server.close()
+            await server.unix_server.wait_closed()
         ws_server.close()
         await ws_server.wait_closed()
 

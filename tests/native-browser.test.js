@@ -38,3 +38,43 @@ test('public routing keeps Browser on 8443 and removes obsolete 9443 funnel', ()
   assert.match(installer, /tailscale funnel --https=10000 --bg --yes/);
   assert.doesNotMatch(installer, /--https=9443 --bg/);
 });
+
+test('desktop capture defaults to the macOS main display instead of an arbitrary virtual display', () => {
+  const encoder = fs.readFileSync(new URL('../macos/fly-mac-encoder.swift', import.meta.url), 'utf8');
+  assert.match(encoder, /displayName\.isEmpty[\s\S]*?CGMainDisplayID\(\)/);
+  assert.match(encoder, /content\.displays\.first\(where: \{ \$0\.displayID == requestedDisplayID \}\)/);
+});
+
+test('H.264 codec metadata is derived from the encoder SPS', () => {
+  const streamer = fs.readFileSync(new URL('../macos/fly-mac-streamer.py', import.meta.url), 'utf8');
+  assert.match(streamer, /def detect_h264_codec/);
+  assert.match(streamer, /return f"avc1\.\{nal\[1\]:02X\}\{nal\[2\]:02X\}\{nal\[3\]:02X\}"/);
+  assert.match(streamer, /"type": "codec"/);
+  assert.match(webrtc, /msg.type === "codec"/);
+  assert.match(webrtc, /initVideoDecoder\(msg.codec/);
+  assert.doesNotMatch(webrtc, /avc1\.42E01F/);
+});
+
+test('restricted clients fall back when WebCodecs H.264 cannot render frames', () => {
+  assert.match(webrtc, /VideoDecoder\.isConfigSupported/);
+  assert.match(webrtc, /fallbackFromH264\("webcodecs_unavailable"\)/);
+  assert.match(webrtc, /fallbackFromH264\("no_decoded_frames"\)/);
+  assert.match(webrtc, /NO_VNC_URL/);
+});
+
+test('native Browser follows the main display while macOS is locked', () => {
+  const streamer = fs.readFileSync(new URL('../macos/fly-mac-streamer.py', import.meta.url), 'utf8');
+  const launcher = fs.readFileSync(new URL('../macos/launch-native-browser-streamer.sh', import.meta.url), 'utf8');
+  assert.match(streamer, /CGSSessionScreenIsLocked/);
+  assert.match(streamer, /follow_main_when_locked/);
+  assert.match(streamer, /return ""[\s\S]*requested_display_name/);
+  assert.match(streamer, /async def monitor_lock_state/);
+  assert.match(launcher, /FLY_STREAMER_FOLLOW_MAIN_WHEN_LOCKED/);
+});
+
+test('encoder restarts reuse one Unix socket server', () => {
+  const streamer = fs.readFileSync(new URL('../macos/fly-mac-streamer.py', import.meta.url), 'utf8');
+  assert.match(streamer, /self\.unix_server = None/);
+  assert.match(streamer, /if self\.unix_server is None:/);
+  assert.match(streamer, /self\.unix_server = await asyncio\.start_unix_server/);
+});

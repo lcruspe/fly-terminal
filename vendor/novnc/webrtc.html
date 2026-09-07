@@ -329,6 +329,12 @@
       let fitMode = requestedScaleMode; // "contain", "fill" or "sync"
       let syncConfigureTimer = null;
       let reconnectAttempts = 0;
+      let decodedFrameSeen = false;
+      let decoderWatchdog = null;
+      let decoderFallbackTriggered = false;
+      let activeCodec = "";
+      let pendingVideoPackets = [];
+      const NO_VNC_URL = "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
 
       function updateOverlay(show, title, subtext, showButton = false) {
         if (show) {
@@ -363,26 +369,91 @@
         const vncBtn = document.getElementById("fallbackVncBtn");
         if (vncBtn) {
           vncBtn.onclick = () => {
-            window.location.href = "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
+            window.location.href = NO_VNC_URL;
           };
         }
       }
 
-      function initVideoDecoder() {
-        if (!("VideoDecoder" in window)) {
-          console.warn("WebCodecs VideoDecoder not supported in this browser");
-          return false;
+      function fallbackFromH264(reason) {
+        if (decoderFallbackTriggered) return;
+        decoderFallbackTriggered = true;
+        clearTimeout(decoderWatchdog);
+        console.warn("H.264 stream fallback:", reason);
+        try { socket?.close(); } catch (_) {}
+
+        if (requestedDisplayName === "Fly Browser") {
+          if (window.parent !== window) {
+            updateOverlay(true, "Нативный Browser недоступен", "Переключение на Chromium fallback...");
+            window.parent.postMessage({ type: "fly-native-browser-unavailable", reason }, window.location.origin);
+            return;
+          }
+          window.location.replace("/browser/");
+          return;
         }
 
+        updateOverlay(true, "Совместимый режим", "H.264 недоступен в этом браузере. Переключение на noVNC...");
+        window.location.replace(NO_VNC_URL);
+      }
+
+      function decodeVideoPacket(buffer) {
+        if (!(buffer instanceof ArrayBuffer) || !isDecoderReady || !decoder) return false;
+        const view = new DataView(buffer);
+        if (view.byteLength < 10) return false;
+        const flags = view.getUint8(0);
+        const isKey = (flags & 0x01) !== 0;
+        const tsMs = Number(view.getBigInt64(1));
+        const naluData = new Uint8Array(buffer, 9);
         try {
+          decoder.decode(new EncodedVideoChunk({
+            type: isKey ? "key" : "delta",
+            timestamp: tsMs * 1000,
+            data: naluData
+          }));
+          return true;
+        } catch (decErr) {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "keyframe" }));
+          }
+          return false;
+        }
+      }
+
+      async function initVideoDecoder(codec) {
+        if (!("VideoDecoder" in window) || !("EncodedVideoChunk" in window)) {
+          fallbackFromH264("webcodecs_unavailable");
+          return false;
+        }
+        const normalizedCodec = /^avc1\.[0-9A-Fa-f]{6}$/.test(codec || "") ? codec : "avc1.4D002A";
+        if (decoder && isDecoderReady && activeCodec === normalizedCodec) return true;
+
+        isDecoderReady = false;
+        const config = { codec: normalizedCodec, optimizeForLatency: true };
+        try {
+          if (typeof VideoDecoder.isConfigSupported === "function") {
+            const support = await VideoDecoder.isConfigSupported(config);
+            if (!support.supported) {
+              fallbackFromH264(`h264_unsupported:${normalizedCodec}`);
+              return false;
+            }
+          }
+
+          try { decoder?.close(); } catch (_) {}
           decoder = new VideoDecoder({
             output: (frame) => {
+              decodedFrameSeen = true;
+              clearTimeout(decoderWatchdog);
               if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
                 canvas.width = frame.displayWidth;
                 canvas.height = frame.displayHeight;
                 resBadge.textContent = `${frame.displayWidth}×${frame.displayHeight}`;
               }
-              ctx.drawImage(frame, 0, 0);
+              try {
+                ctx.drawImage(frame, 0, 0);
+              } catch (drawErr) {
+                frame.close();
+                fallbackFromH264("canvas_draw_failed");
+                return;
+              }
               frame.close();
 
               frameCount++;
@@ -398,31 +469,27 @@
               console.error("VideoDecoder error:", err);
               statusBadge.textContent = "Ошибка декодера";
               statusBadge.className = "hud-badge badge-status error";
+              fallbackFromH264("decoder_error");
             }
           });
 
-          decoder.configure({
-            codec: "avc1.42E01F", // H.264 Main Profile Level 3.1
-            optimizeForLatency: true,
-            hardwareAcceleration: "prefer-hardware"
-          });
-
+          decoder.configure(config);
+          activeCodec = normalizedCodec;
           isDecoderReady = true;
+          const queued = pendingVideoPackets.splice(0);
+          queued.forEach(decodeVideoPacket);
           return true;
         } catch (e) {
           console.error("Failed to initialize WebCodecs VideoDecoder:", e);
+          fallbackFromH264("decoder_init_failed");
           return false;
         }
       }
 
-      function connect() {
+      async function connect() {
         updateOverlay(true, "Подключение к macOS...", "Установка WebSocket H.264 соединения...");
         statusBadge.textContent = "Подключение...";
         statusBadge.className = "hud-badge badge-status warn";
-
-        if (!decoder) {
-          initVideoDecoder();
-        }
 
         try {
           socket = new WebSocket(wsUrl);
@@ -430,17 +497,23 @@
 
           socket.onopen = () => {
             reconnectAttempts = 0;
+            decodedFrameSeen = false;
             updateOverlay(false);
             statusBadge.textContent = "60 FPS H.264";
             statusBadge.className = "hud-badge badge-status";
             configureStream();
+            clearTimeout(decoderWatchdog);
+            decoderWatchdog = setTimeout(() => {
+              if (!decodedFrameSeen) fallbackFromH264("no_decoded_frames");
+            }, 4000);
           };
 
-          socket.onmessage = (event) => {
+          socket.onmessage = async (event) => {
             if (typeof event.data === "string") {
               try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === "init") {
+                  if (!await initVideoDecoder(msg.codec || activeCodec)) return;
                   streamWidth = msg.width || streamWidth;
                   streamHeight = msg.height || streamHeight;
                   macScreenWidth = msg.screenWidth || macScreenWidth;
@@ -448,7 +521,13 @@
                   serverPixelWidth = msg.pixelWidth || serverPixelWidth;
                   serverPixelHeight = msg.pixelHeight || serverPixelHeight;
                   resBadge.textContent = `${streamWidth}×${streamHeight}`;
+                  if (msg.screenLocked) {
+                    statusBadge.textContent = "Mac заблокирован";
+                    statusBadge.className = "hud-badge badge-status warn";
+                  }
                   scheduleSyncConfigure();
+                } else if (msg.type === "codec") {
+                  await initVideoDecoder(msg.codec || activeCodec);
                 } else if (msg.type === "display") {
                   macScreenWidth = msg.screenWidth || macScreenWidth;
                   macScreenHeight = msg.screenHeight || macScreenHeight;
@@ -463,7 +542,11 @@
                     if (requestedDisplayName === "Fly Browser" && window.parent !== window) {
                       window.parent.postMessage({ type: "fly-native-browser-unavailable", reason: "tcc_required" }, window.location.origin);
                     }
-                  } else if (msg.state === "capturing") {
+                  } else if (msg.state === "host_locked") {
+                    updateOverlay(false);
+                    statusBadge.textContent = "Mac заблокирован";
+                    statusBadge.className = "hud-badge badge-status warn";
+                  } else if (msg.state === "host_unlocked" || msg.state === "capturing") {
                     updateOverlay(false);
                     statusBadge.textContent = "60 FPS H.264";
                     statusBadge.className = "hud-badge badge-status";
@@ -473,31 +556,19 @@
               return;
             }
 
-            if (event.data instanceof ArrayBuffer && isDecoderReady) {
-              const view = new DataView(event.data);
-              const flags = view.getUint8(0);
-              const isKey = (flags & 0x01) !== 0;
-              // Timestamp in big-endian int64
-              const tsMs = Number(view.getBigInt64(1));
-              const naluData = new Uint8Array(event.data, 9);
-
-              try {
-                const chunk = new EncodedVideoChunk({
-                  type: isKey ? "key" : "delta",
-                  timestamp: tsMs * 1000,
-                  data: naluData
-                });
-                decoder.decode(chunk);
-              } catch (decErr) {
-                // If decoding fails, request keyframe
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                  socket.send(JSON.stringify({ type: "keyframe" }));
-                }
+            if (event.data instanceof ArrayBuffer) {
+              if (!isDecoderReady) {
+                if (pendingVideoPackets.length >= 8) pendingVideoPackets.shift();
+                pendingVideoPackets.push(event.data);
+                return;
               }
+              decodeVideoPacket(event.data);
             }
           };
 
           socket.onclose = (event) => {
+            clearTimeout(decoderWatchdog);
+            if (decoderFallbackTriggered) return;
             statusBadge.textContent = "Отключено";
             statusBadge.className = "hud-badge badge-status warn";
             if (event.code === 4000) {

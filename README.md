@@ -199,6 +199,7 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_NATIVE_BROWSER_ENABLED` | `1` | Включает Native Chrome как основной Browser backend на direct macOS. |
 | `FLY_NATIVE_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/native-browser-profile` | Отдельный профиль нативного Chrome, не смешанный с обычным профилем пользователя. |
 | `FLY_NATIVE_BROWSER_DISPLAY_NAME` | `Fly Browser` | Виртуальный дисплей BetterDisplay, на котором размещается окно Native Chrome. |
+| `FLY_NATIVE_BROWSER_FOLLOW_MAIN_WHEN_LOCKED` | `1` | Пока macOS заблокирован, Native Browser временно захватывает главный дисплей с полем пароля; после разблокировки автоматически возвращается на `Fly Browser`. |
 | `FLY_NATIVE_BROWSER_STREAMER_PORT` | `5906` | Отдельный H.264/WebSocket streamer Native Chrome. |
 | `FLY_NATIVE_BROWSER_STREAMER_SOCKET_PATH` | `/tmp/fly-native-browser-stream.sock` | Unix socket между ScreenCaptureKit/VideoToolbox encoder и browser streamer. |
 | `FLY_NATIVE_BROWSER_STREAM_URL` | `/native-browser-stream-ws` | Same-origin WebSocket-маршрут Caddy для Native Chrome. |
@@ -208,6 +209,12 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_DESKTOP_IDLE_TIMEOUT_SECONDS` | `300` | Таймаут бездействия H.264 Remote Desktop. Через 5 минут без мыши/клавиатуры/скролла/clipboard WebSocket закрывается; технические `configure`/heartbeat не продлевают сеанс. |
 | `FLY_DESKTOP_TARGET` | `127.0.0.1:5900` | Внутренний целевой VNC-порт macOS Screen Sharing. |
 | `FLY_DESKTOP_PASSWORD` | *Не задано* | Пароль VNC для автоматической авторизации при открытии вкладки. |
+
+Для Remote Desktop без параметра `display` захватывается именно **главный дисплей macOS** (`CGMainDisplayID()`), а не первый дисплей из списка ScreenCaptureKit. Это важно на экране блокировки: поле ввода пароля находится на главном дисплее и остаётся доступным удалённо. Явные `display=Fly Remote` и `display=Fly Browser` по-прежнему выбирают соответствующие виртуальные дисплеи.
+
+Native Browser следит за состоянием блокировки через `CGSessionCopyCurrentDictionary`. Если Mac заблокирован, поток временно переключается с виртуального `Fly Browser` на главный дисплей, где macOS рисует интерактивное поле пароля. После разблокировки поток без новой сессии возвращается на `Fly Browser`. Это не меняет основной дисплей системы и не переносит окна между дисплеями.
+
+Параметр H.264 не фиксируется вручную: backend извлекает точный RFC 6381 codec (`avc1.PPCCLL`) из SPS каждого keyframe VideoToolbox и передаёт его клиенту при инициализации и при изменении профиля/уровня. Это устраняет чёрный экран в строгих WebCodecs-реализациях, когда фактический SPS не совпадает с заранее заданной строкой codec. Клиент проверяет поддержку полученной конфигурации и контролирует появление декодированных кадров; при несовместимости Mac Desktop автоматически переходит на noVNC, а Native Browser — на контейнерный Chromium fallback.
 
 Для Remote Desktop действует idle timeout 300 секунд. В H.264-режиме таймаут дополнительно контролируется сервером: WebSocket закрывается кодом `4000`, технические сообщения конфигурации и heartbeat не считаются активностью, а клиент не переподключается автоматически. Legacy noVNC применяет тот же 5-минутный таймаут на клиенте и вызывает штатный `RFB.disconnect()`, который также блокирует автопереподключение.
 
