@@ -7,40 +7,13 @@
 :{$CADDY_PORT:8080} {
 	root * {$FLY_TERMINAL_REPO_ROOT}/macos/gateway
 
-	@ytIcon path /yt-transcriber/apple-touch-icon.png
-	@ytLogin path /yt-login
-	@ytUi path /yt-transcriber /yt-transcriber/*
-	@gatewayProtected not path /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
-
-	basic_auth @gatewayProtected {
+	basic_auth {
 		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
 		{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
 	}
 
 	@assets path /gateway.css /gateway.js
 	@spruthubUser expression `{http.auth.user.id} == "{$CADDY_SPRUTHUB_AUTH_USER}"`
-
-	handle @ytIcon {
-		uri strip_prefix /yt-transcriber
-		reverse_proxy 127.0.0.1:8787
-	}
-
-	handle @ytLogin {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-			{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
-		}
-		rewrite * /session/bootstrap
-		reverse_proxy 127.0.0.1:8787 {
-			header_up X-Authenticated-User {http.auth.user.id}
-			header_up X-YT-Bootstrap-Secret {$YT_BOOTSTRAP_SECRET}
-		}
-	}
-
-	handle @ytUi {
-		uri strip_prefix /yt-transcriber
-		reverse_proxy 127.0.0.1:8787
-	}
 
 	handle @assets {
 		file_server
