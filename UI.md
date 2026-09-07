@@ -1,3 +1,11 @@
+## Public service gateway
+
+The direct macOS deployment exposes a small authenticated service selector on the default HTTPS origin. Caddy must complete Basic Auth before any gateway HTML or asset is returned. The gateway never relies on a session cookie to bypass Basic Auth.
+
+The selector is role-aware: the main `TERMINAL_USER` sees Fly Terminal (`:8443`), Remote Browser (`:10000`), and Sprut.Hub (`:9443`), while `FLY_SPRUTHUB_AUTH_USER` sees only Sprut.Hub (`:9443`). Links are built from the current hostname so the same static gateway works with the current Tailscale hostname. Direct service ports repeat Basic Auth because browser credential caches are origin-specific.
+
+Do not expose the browser upstream (`7690`) or Sprut.Hub LAN address directly through Funnel. Public ports must terminate at Caddy so authentication is always applied first.
+
 # UI behavior
 
 ## Responsive toolbar
@@ -48,3 +56,13 @@ Tools is also sectioned by operation rather than rendered as one long scrolling 
 Display resolution controls belong to **Tools → Displays** because applying them changes actual macOS display modes. They must not be presented as ordinary Remote Desktop preferences. `desktopResolution` remains in Settings because it controls the Remote Desktop stream; `mainDisplayResolution` and `virtualDisplayResolution` remain operational controls under Tools.
 
 When adding new menu functionality, classify it first: launchers go to Apps, durable presentation/behavior preferences go to Settings, and environment-changing commands go to Tools. Prefer extending an existing section over adding another top-level menu.
+
+## Native Browser backend
+
+On direct macOS, the **Browser** action uses Native Chrome as the primary backend. Google Chrome runs with a dedicated profile on the BetterDisplay virtual display **Fly Browser**. Its display is captured by ScreenCaptureKit and encoded by VideoToolbox, then delivered through the dedicated `/native-browser-stream-ws` route.
+
+The containerized Chromium backend remains available at `/browser/` as a fallback. Browser tabs expose a backend switch so the user can move between Native Chrome and Chromium without changing client proxy settings. If the Native Chrome stream reports a macOS screen-capture permission failure, the Browser tab switches to the Chromium fallback automatically when it is available.
+
+Native Browser is isolated from Mac Desktop: it uses its own virtual display, streamer port `5906`, and Unix socket `/tmp/fly-native-browser-stream.sock`. Do not reuse the Mac Desktop streamer port or socket for this backend.
+
+The public catalog must point Native Browser and Chromium fallback through the authenticated `:8443` Fly Terminal origin. Port `:10000` is reserved for Sprut.Hub in the current direct-macOS routing scheme.

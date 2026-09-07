@@ -2854,7 +2854,7 @@
     let preferences = readPreferences();
     let persistPreferencesTimer = null;
     let statusResetTimer = null;
-    let browserConfig = { enabled: false, url: "" };
+    let browserConfig = { enabled: false, url: "", nativeUrl: "", fallbackUrl: "", backend: "" };
     let desktopConfig = { enabled: false, url: "" };
     let macApps = [];
     let macAppsError = "";
@@ -3180,8 +3180,10 @@
       return `/terminal/?${params.toString()}`;
     }
 
-    function buildBrowserUrl() {
-      return browserConfig.url || "about:blank";
+    function buildBrowserUrl(backend = browserConfig.backend || "native") {
+      if (backend === "chromium" && browserConfig.fallbackUrl) return browserConfig.fallbackUrl;
+      if (backend === "native" && browserConfig.nativeUrl) return browserConfig.nativeUrl;
+      return browserConfig.url || browserConfig.nativeUrl || browserConfig.fallbackUrl || "about:blank";
     }
 
     function buildDesktopUrl(targetDisplay = "") {
@@ -3405,10 +3407,13 @@
         const config = await response.json();
         browserConfig = {
           enabled: Boolean(config.enabled && config.url),
-          url: typeof config.url === "string" ? config.url : ""
+          url: typeof config.url === "string" ? config.url : "",
+          nativeUrl: typeof config.nativeUrl === "string" ? config.nativeUrl : "",
+          fallbackUrl: typeof config.fallbackUrl === "string" ? config.fallbackUrl : "",
+          backend: config.backend === "chromium" ? "chromium" : "native"
         };
       } catch (e) {
-        browserConfig = { enabled: false, url: "" };
+        browserConfig = { enabled: false, url: "", nativeUrl: "", fallbackUrl: "", backend: "" };
       }
 
       addBrowserBtn.hidden = !browserConfig.enabled;
@@ -5383,9 +5388,45 @@
       return tab;
     }
 
-    function addBrowserTab(label = "Browser", customLabel = null, subtext = "remote chromium") {
+    function browserBackendState(backend = browserConfig.backend || "native") {
+      const fallbackAvailable = Boolean(browserConfig.fallbackUrl);
+      const nativeAvailable = Boolean(browserConfig.nativeUrl);
+      const normalized = backend === "chromium" && fallbackAvailable
+        ? "chromium"
+        : (nativeAvailable ? "native" : "chromium");
+      return {
+        backend: normalized,
+        url: buildBrowserUrl(normalized),
+        subtext: normalized === "native" ? "нативный Chrome · H.264" : "Chromium · fallback"
+      };
+    }
+
+    function setBrowserTabBackend(tab, backend, reload = true) {
+      if (!tab || tab.type !== "browser") return;
+      const state = browserBackendState(backend);
+      tab.browserBackend = state.backend;
+      const iframe = tab.wrapper?.querySelector("iframe");
+      const directLink = tab.wrapper?.querySelector("a.frame-control[target='_blank']");
+      const subtext = tab.wrapper?.querySelector(".tab-subtext");
+      const toggle = tab.wrapper?.querySelector(".browser-backend-toggle");
+      if (directLink) directLink.href = state.url;
+      if (subtext) subtext.textContent = state.subtext;
+      if (toggle) {
+        const target = state.backend === "native" ? "Chromium fallback" : "нативный Chrome";
+        toggle.title = `Переключить на ${target}`;
+        toggle.setAttribute("aria-label", toggle.title);
+      }
+      if (reload && iframe && iframe.src !== new URL(state.url, window.location.href).href) {
+        iframe.src = state.url;
+      }
+    }
+
+    function addBrowserTab(label = "Browser", customLabel = null, subtext = null, backend = browserConfig.backend || "native") {
       const id = createId();
-      const browserUrl = buildBrowserUrl();
+      const state = browserBackendState(backend);
+      const browserUrl = state.url;
+      const displaySubtext = subtext || state.subtext;
+      const canSwitchBackend = Boolean(browserConfig.nativeUrl && browserConfig.fallbackUrl);
       const wrapper = document.createElement("div");
       wrapper.className = "terminal-frame-wrapper";
       wrapper.id = `wrapper-${id}`;
@@ -5393,9 +5434,12 @@
         <div class="terminal-topbar">
           <div class="terminal-heading">
             <strong class="tab-label-text">${customLabel || label}</strong>
-            <span class="tab-subtext">${subtext}</span>
+            <span class="tab-subtext">${displaySubtext}</span>
           </div>
           <div class="terminal-actions">
+            ${canSwitchBackend ? `<button type="button" class="frame-control browser-backend-toggle" title="Переключить backend браузера" aria-label="Переключить backend браузера">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h8l-2-2M13 11H5l2 2"/><path d="M11 3l2 2-2 2M5 9l-2 2 2 2"/></svg>
+            </button>` : ""}
             <a class="frame-control" href="${browserUrl}" target="_blank" rel="noreferrer noopener" title="Открыть в отдельной вкладке" aria-label="Открыть в отдельной вкладке" style="text-decoration:none;">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l8-8M9 2h5v5M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/></svg>
             </a>
@@ -5410,47 +5454,49 @@
         </div>
       `;
 
-      const tab = { id, type: "browser", sessionId: null, label, customLabel, wrapper };
+      const tab = { id, type: "browser", sessionId: null, label, customLabel, wrapper, browserBackend: state.backend };
       tabs.push(tab);
       terminalContainer.appendChild(wrapper);
 
-      wrapper.addEventListener('mousedown', () => switchTab(id));
+      wrapper.addEventListener("mousedown", () => switchTab(id));
       wrapper.querySelector(".frame-fullscreen-btn").onclick = (event) => toggleFrameFullscreen(id, event);
+      const backendToggle = wrapper.querySelector(".browser-backend-toggle");
+      if (backendToggle) {
+        backendToggle.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const next = tab.browserBackend === "native" ? "chromium" : "native";
+          setBrowserTabBackend(tab, next, true);
+          setStatusText(next === "native" ? "Browser: нативный Chrome" : "Browser: Chromium fallback", 2200);
+        };
+      }
+      setBrowserTabBackend(tab, state.backend, false);
 
-      wrapper.querySelector("iframe").addEventListener("load", () => {
-        bindFrameImageHandlers(tab, wrapper.querySelector("iframe"));
-        setSessionState("badge-ok", "Browser готов");
-        // Inject error suppressor into KasmVNC iframe to swallow the
-        // "Cannot read properties of undefined (reading 'lastActiveAt')" crash
-        // that KasmVNC throws when session state is transiently null on first load.
+      const iframe = wrapper.querySelector("iframe");
+      iframe.addEventListener("load", () => {
+        bindFrameImageHandlers(tab, iframe);
+        setSessionState("badge-ok", tab.browserBackend === "native" ? "Native Browser готов" : "Chromium готов");
+        if (tab.browserBackend !== "chromium") return;
         try {
-          const win = wrapper.querySelector("iframe").contentWindow;
+          const win = iframe.contentWindow;
           if (!win) return;
-          // Patch onerror so the KasmVNC error modal is never shown
           const origOnError = win.onerror;
           win.onerror = function(msg, src, line, col, err) {
-            const s = String(msg || "");
-            if (s.includes("lastActiveAt") || s.includes("Cannot read properties of undefined")) {
-              // Silently swallow — KasmVNC recovers on its own after init
-              return true;
-            }
+            const text = String(msg || "");
+            if (text.includes("lastActiveAt") || text.includes("Cannot read properties of undefined")) return true;
             return origOnError ? origOnError.apply(this, arguments) : false;
           };
-          // Also hide any already-rendered KasmVNC error dialog
           const doc = win.document;
           const hideKasmError = () => {
-            doc.querySelectorAll(
-              ".kasm-error, .error-dialog, [class*=\"ErrorDialog\"], [class*=\"error-dialog\"]"
-            ).forEach(el => { el.style.display = "none"; });
+            doc.querySelectorAll(".kasm-error, .error-dialog, [class*=\"ErrorDialog\"], [class*=\"error-dialog\"]")
+              .forEach(el => { el.style.display = "none"; });
           };
           hideKasmError();
-          // Observe DOM mutations so the dialog is hidden as soon as it appears
           const observerTarget = doc.body || doc.documentElement;
           if (observerTarget) {
-            const obs = new win.MutationObserver(hideKasmError);
-            obs.observe(observerTarget, { childList: true, subtree: true });
-            // Stop watching after 15 s — by then KasmVNC init is done
-            setTimeout(() => obs.disconnect(), 15000);
+            const observer = new win.MutationObserver(hideKasmError);
+            observer.observe(observerTarget, { childList: true, subtree: true });
+            setTimeout(() => observer.disconnect(), 15000);
           }
         } catch (_) {}
       });
@@ -5808,7 +5854,7 @@
       if (tab) {
         const iframe = tab.wrapper.querySelector("iframe");
         if (tab.type === "browser") {
-          iframe.src = buildBrowserUrl();
+          iframe.src = buildBrowserUrl(tab.browserBackend || browserConfig.backend);
         } else if (tab.type === "desktop" || tab.type === "mac-app") {
           if (tab.type === "mac-app" && tab.appName) focusMacApp(tab.appName);
           iframe.src = buildDesktopUrl(tab.targetDisplay || "");
@@ -6049,6 +6095,15 @@
       preferences.desktopScaleMode = event.data.mode;
       if (desktopScaleModeSelect) desktopScaleModeSelect.value = event.data.mode;
       savePreferences();
+    });
+    window.addEventListener("message", event => {
+      if (event.origin !== window.location.origin || event.data?.type !== "fly-native-browser-unavailable") return;
+      const tab = tabs.find(item => item.type === "browser"
+        && item.browserBackend === "native"
+        && item.wrapper?.querySelector("iframe")?.contentWindow === event.source);
+      if (!tab || !browserConfig.fallbackUrl) return;
+      setBrowserTabBackend(tab, "chromium", true);
+      setStatusText("Native Browser требует разрешение macOS · включён Chromium fallback", 5000);
     });
     if (desktopFpsSelect) {
       desktopFpsSelect.value = String(preferences.desktopFps);

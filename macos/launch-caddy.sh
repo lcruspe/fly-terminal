@@ -27,11 +27,23 @@ fi
 
 export CADDY_BASIC_AUTH_USER="${TERMINAL_USER}"
 export CADDY_BASIC_AUTH_HASH="$(printf '%s\n' "${TERMINAL_PASSWORD}" | /opt/homebrew/bin/caddy hash-password --algorithm bcrypt)"
-export FLY_BROWSER_SESSION_TOKEN="$(
-  printf '%s:%s:%s' "${TERMINAL_USER}" "${TERMINAL_PASSWORD}" "${FLY_BROWSER_BASIC_AUTH:-}" |
-    /usr/bin/shasum -a 256 |
-    /usr/bin/awk '{print $1}'
-)"
+
+if [ "${FLY_SPRUTHUB_ENABLED:-0}" = "1" ]; then
+  if [ -z "${FLY_SPRUTHUB_AUTH_USER:-}" ] || [ -z "${FLY_SPRUTHUB_AUTH_HASH_B64:-}" ]; then
+    echo "FLY_SPRUTHUB_AUTH_USER, FLY_SPRUTHUB_AUTH_HASH_B64 are required when FLY_SPRUTHUB_ENABLED=1" >&2
+    exit 1
+  fi
+  if [ "${FLY_SPRUTHUB_AUTH_USER}" = "${TERMINAL_USER}" ]; then
+    echo "FLY_SPRUTHUB_AUTH_USER must differ from TERMINAL_USER" >&2
+    exit 1
+  fi
+  export CADDY_SPRUTHUB_AUTH_USER="${FLY_SPRUTHUB_AUTH_USER}"
+  export CADDY_SPRUTHUB_AUTH_HASH="$(printf '%s' "${FLY_SPRUTHUB_AUTH_HASH_B64}" | /usr/bin/base64 -D)"
+else
+  export CADDY_SPRUTHUB_AUTH_USER="__spruthub_disabled__"
+  export CADDY_SPRUTHUB_AUTH_HASH="$(printf '%s\n' "$(/usr/bin/uuidgen)$(/usr/bin/uuidgen)" | /opt/homebrew/bin/caddy hash-password --algorithm bcrypt)"
+fi
+
 
 exec /opt/homebrew/bin/caddy run \
   --config "${SCRIPT_DIR}/Caddyfile" \

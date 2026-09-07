@@ -284,7 +284,8 @@
         ? urlParams.get("resolution") : "1920x1080";
       const [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
       const requestedFps = [15, 30, 45, 60].includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
-      const requestedDisplayName = urlParams.get("display") === "Fly Remote" ? "Fly Remote" : "";
+      const displayParam = urlParams.get("display") || "";
+      const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
         ? urlParams.get("scale") : "contain";
       
@@ -459,6 +460,9 @@
                     statusBadge.textContent = "Требуется разрешение";
                     statusBadge.className = "hud-badge badge-status warn";
                     showPermissionPrompt(msg.message);
+                    if (requestedDisplayName === "Fly Browser" && window.parent !== window) {
+                      window.parent.postMessage({ type: "fly-native-browser-unavailable", reason: "tcc_required" }, window.location.origin);
+                    }
                   } else if (msg.state === "capturing") {
                     updateOverlay(false);
                     statusBadge.textContent = "60 FPS H.264";

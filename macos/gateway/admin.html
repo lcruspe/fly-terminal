@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Сервисы Mac mini</title>
+  <link rel="stylesheet" href="/gateway.css">
+</head>
+<body>
+  <main>
+    <h1>Сервисы Mac mini</h1>
+    <p>Выберите сервис. Прямой адрес с портом сразу открывает соответствующий сервис.</p>
+    <section class="services">
+      <a class="service" data-port="8443" href="#">
+        <strong>Fly Terminal</strong>
+        <span>Терминалы, Mac Desktop и встроенный удалённый браузер.</span>
+        <span class="port">:8443</span>
+      </a>
+      <a class="service" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#">
+        <strong>Remote Browser</strong>
+        <span>Нативный Google Chrome на Mac mini через аппаратный H.264.</span>
+        <span class="port">:8443 · native</span>
+      </a>
+      <a class="service" data-port="8443" data-path="/browser/" href="#">
+        <strong>Chromium fallback</strong>
+        <span>Резервный Chromium в контейнере на случай проблем с нативным браузером.</span>
+        <span class="port">:8443/browser/</span>
+      </a>
+      <a class="service" data-port="10000" href="#">
+        <strong>Sprut.Hub</strong>
+        <span>Прямой доступ к локальному Sprut.Hub через защищённый прокси.</span>
+        <span class="port">:10000</span>
+      </a>
+    </section>
+    <p class="note">Basic Auth проверяется на каждом публичном порту. Если браузер не сохранил креды для этого адреса, он запросит их заново.</p>
+  </main>
+  <script src="/gateway.js"></script>
+</body>
+</html>

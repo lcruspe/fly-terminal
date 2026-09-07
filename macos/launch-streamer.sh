@@ -6,11 +6,27 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIG_DIR="${HOME}/.config/fly-terminal-mac"
 ENV_FILE="${CONFIG_DIR}/fly-terminal.env"
 
+override_streamer_port="${FLY_STREAMER_PORT-}"
+override_streamer_fps="${FLY_STREAMER_FPS-}"
+override_streamer_width="${FLY_STREAMER_WIDTH-}"
+override_streamer_height="${FLY_STREAMER_HEIGHT-}"
+override_streamer_display_name="${FLY_STREAMER_DISPLAY_NAME-}"
+override_streamer_socket_path="${FLY_STREAMER_SOCKET_PATH-}"
+override_desktop_enabled="${FLY_DESKTOP_ENABLED-}"
+
 if [ -f "${ENV_FILE}" ]; then
   set -a
   . "${ENV_FILE}"
   set +a
 fi
+
+[ -n "${override_streamer_port}" ] && FLY_STREAMER_PORT="${override_streamer_port}"
+[ -n "${override_streamer_fps}" ] && FLY_STREAMER_FPS="${override_streamer_fps}"
+[ -n "${override_streamer_width}" ] && FLY_STREAMER_WIDTH="${override_streamer_width}"
+[ -n "${override_streamer_height}" ] && FLY_STREAMER_HEIGHT="${override_streamer_height}"
+[ -n "${override_streamer_display_name}" ] && FLY_STREAMER_DISPLAY_NAME="${override_streamer_display_name}"
+[ -n "${override_streamer_socket_path}" ] && FLY_STREAMER_SOCKET_PATH="${override_streamer_socket_path}"
+[ -n "${override_desktop_enabled}" ] && FLY_DESKTOP_ENABLED="${override_desktop_enabled}"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 export PYTHONUNBUFFERED=1

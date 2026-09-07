@@ -6,13 +6,15 @@
 
 *   **Двухпанельный интерфейс**: переключение между вкладками (Tabs) и разделением экрана (Split Screen) выполняется компактным одноуровневым переключателем в верхней панели каждой рабочей области, сразу справа от кнопки полноэкранного режима. Параметры компоновки Split Mode остаются в основной панели и показываются только в разделённом режиме.
 *   **Mac Desktop (Дистанционное управление macOS)**: отдельная вкладка с полнофункциональным удаленным рабочим столом Mac mini через noVNC и websockify. Оптимизировано под слабые каналы (Zlib сжатие, JPEG качество, локальный курсор, масштабирование).
-*   **Remote Browser для macOS**: отдельная browser-панель открывает Chromium в Docker/noVNC через сеть Mac mini, не смешиваясь с терминальными tmux-сессиями.
+*   **Remote Browser для macOS**: основным backend служит нативный Google Chrome на отдельном виртуальном дисплее `Fly Browser`; ScreenCaptureKit + VideoToolbox передают его через аппаратный H.264. Контейнерный Chromium сохранён как fallback.
 *   **Умное именование вкладок**: автоматическое отслеживание текущей рабочей директории (`cwd`) каждого tmux-сеанса с обновлением заголовка. Возможность ручного переименования по двойному клику.
 *   **Кастомизация UI**: 10 профессионально подобранных цветовых схем (5 светлых и 5 темных), выбор размера шрифта (8px - 16px) и шрифтового семейства с сохранением настроек в `localStorage`.
 *   **Синхронизацией истории**: общая история команд bash мгновенно синхронизируется между всеми сессиями и вкладками.
 *   **Оптимизация ресурсов**: автоматическая очистка неактивных tmux-сессий по таймауту (idle TTL) и ротация файла истории для предотвращения утечек памяти. Очистка выполняется централизованно `session-control.py` при старте и затем периодически, поэтому работает и в Docker, и в нативном macOS runtime.
 *   **Безопасность**: поддержка базовой авторизации (Basic Auth) и шифрованного туннелирования через Tailscale Funnel.
 *   **Два режима работы**: Docker (для Railway.app и локального запуска) и нативный macOS (с автозапуском служб через `launchd`).
+*   **Маршрут Sprut.Hub**: отдельная Basic Auth учётная запись может открывать локальный Sprut.Hub через loopback TCP-forwarder. Forwarder нужен намеренно: на текущем macOS/VPN-стеке прямой LAN-dial из Caddy/Go получает `no route to host`, тогда как Python socket работает корректно.
+*   **Публичный шлюз сервисов**: URL Mac mini без порта всегда проходит через Caddy Basic Auth и показывает каталог доступных сервисов. `:8443` открывает Fly Terminal, Native Chrome и Chromium fallback, `:10000` — Sprut.Hub. Cookie-обход авторизации не используется.
 
 ---
 
@@ -22,14 +24,21 @@
 
 ```mermaid
 graph TD
-    User([Пользователь / Браузер]) -->|HTTP / WebSocket| Proxy[Прокси: Nginx / Caddy]
+    User([Пользователь / Браузер]) -->|HTTPS :443| Gateway[Caddy: каталог сервисов]
+    User -->|HTTPS :8443| Proxy[Caddy: Fly Terminal + Browser]
+    User -->|HTTPS :10000| SprutProxy[Caddy: Sprut.Hub]
+    Gateway -->|Fly Terminal / Browser| Proxy
+    Gateway -->|Sprut.Hub| SprutProxy
     Proxy -->|Статический фронтенд /| IndexHtml[index.html]
     Proxy -->|Управление сессиями /api/*| ControlPy[session-control.py]
     Proxy -->|Терминальный поток /terminal/| Ttyd[ttyd]
     Proxy -->|noVNC /desktop/* & /desktop-ws| Websockify[websockify :5901]
     Websockify -->|RFB :5900| MacScreen[macOS Screen Sharing]
-    User -->|HTTPS :10000| Browser[Remote Chromium / noVNC]
-    
+    Proxy -->|/native-browser-stream-ws| NativeStreamer[Native Browser H.264 :5906]
+    NativeStreamer --> NativeChrome[Google Chrome / Fly Browser]
+    Proxy -->|/browser/*| Browser[Chromium fallback / container]
+    SprutProxy --> SprutForwarder[loopback forwarder :7693]
+    SprutForwarder --> SprutHub[Sprut.Hub :80]
     ControlPy -->|tmux list-panes / kill-session| Tmux[tmux]
     Ttyd -->|Запуск сессии| SessionSh[terminal-session.sh]
     SessionSh -->|Очистка сессий / Лимиты| Tmux
@@ -122,9 +131,10 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 
 Этот скрипт выполнит следующие действия:
 *   Создаст директорию конфигурации `~/.config/fly-terminal-mac/fly-terminal.env`.
-*   Зарегистрирует и запустит `launchd` агенты для `ttyd` + Python API, `caddy` и optional browser-модуля.
-*   Настроит `ttyd` на локальный порт `7682`, а `caddy` — на порт `8080`.
-*   Опубликует веб-интерфейс через `tailscale funnel`, а remote browser — на отдельном порту `10000`.
+*   Зарегистрирует и запустит `launchd` агенты для `ttyd` + Python API, Caddy, macOS Remote Desktop, нативного Chrome и контейнерного Chromium fallback.
+*   Создаст отдельный виртуальный дисплей BetterDisplay `Fly Browser` для нативного Chrome и отдельный H.264 streamer на `5906`.
+*   Настроит Caddy на внутренние порты `8080` (каталог), `8081` (Fly Terminal + оба browser backend) и `8082` (Sprut.Hub).
+*   Опубликует через `tailscale funnel`: каталог сервисов на стандартном HTTPS-порту, Fly Terminal на `8443`, Sprut.Hub на `10000`. Native Chrome и Chromium fallback доступны через `:8443`.
 
 #### 3. Управление паролем на macOS
 Для смены пароля доступа к терминалу на Mac выполните:
@@ -140,6 +150,10 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
     *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.ttyd.plist`
     *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.caddy.plist`
     *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.browser.plist`
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.native-browser.plist`
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.native-browser-streamer.plist`
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.streamer.plist`
+    *   `~/Library/LaunchAgents/ai.kruspe.fly-terminal.spruthub.plist`
 
 ---
 
@@ -152,7 +166,10 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `TS_AUTHKEY` | *Не задано* | Авторизационный ключ Tailscale. Если не задан, терминал будет работать только по локальной сети без подключения к VPN. |
 | `TERMINAL_USER` | *Не задано* | Имя пользователя для Basic Auth авторизации в веб-интерфейсе. |
 | `TERMINAL_PASSWORD` | *Не задано* | Пароль для Basic Auth авторизации. |
-| `PORT` | `7681` | Внешний порт, на котором слушает Nginx / Caddy. |
+| `PORT` | `7681` | Внешний порт Docker-варианта. Для direct macOS публичная схема задаётся отдельными Caddy/Funnel портами ниже. |
+| `CADDY_PORT` | `8080` | Внутренний Caddy-порт каталога сервисов, который публикуется как стандартный HTTPS `443`. |
+| `CADDY_TERMINAL_PORT` | `8081` | Внутренний Caddy-порт Fly Terminal, который публикуется как HTTPS `8443`. |
+| `CADDY_SPRUTHUB_PORT` | `8082` | Внутренний Caddy-порт Sprut.Hub, который публикуется как HTTPS `10000`. |
 | `TTYD_PORT` | `7682` | Внутренний порт для демона `ttyd`. |
 | `FLY_TERMINAL_CONTROL_PORT` | `7683` | Внутренний порт для Python API (`session-control.py`). |
 | `TERMINAL_SCROLLBACK` | `4000` | Размер буфера прокрутки (количество строк) в терминале. |
@@ -163,7 +180,14 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_TERMINAL_SESSION_CLEANUP_INTERVAL_SECONDS`| `300` | Интервал фоновой проверки старых tmux-сессий в `session-control.py`; минимум 60 секунд. |
 | `FLY_TERMINAL_DIAGNOSTICS` | `1` | Флаг включения вывода системной диагностики (лимиты cgroup, доступная ОЗУ, swap, процессы) в лог контейнера при запуске. |
 | `FLY_TERMINAL_HISTORY_DIR` | `/data/bash_history` (Docker) | Путь к директории хранения файла общей истории. |
-| `FLY_BROWSER_ENABLED` | `0` | Включает кнопку Browser в UI и endpoint `/api/browser/config`. Для direct macOS обычно `1`. |
+| `FLY_BROWSER_ENABLED` | `0` | Включает контейнерный Chromium fallback. В direct macOS обычно `1`; основным backend при этом остаётся Native Chrome. |
+| `FLY_SPRUTHUB_ENABLED` | `0` | Включает отдельную Basic Auth учётную запись, запросы которой целиком проксируются в локальный Sprut.Hub. |
+| `FLY_SPRUTHUB_AUTH_USER` | *Не задано* | Имя отдельного пользователя для входа в Sprut.Hub через публичный адрес Fly Terminal. Должно отличаться от `TERMINAL_USER`. |
+| `FLY_SPRUTHUB_AUTH_HASH_B64` | *Не задано* | Bcrypt-хеш пароля пользователя Sprut.Hub в Base64. Открытый пароль в конфигурации и репозитории не хранится. |
+| `FLY_SPRUTHUB_FORWARD_HOST` | `127.0.0.1` | Loopback-адрес локального TCP-forwarder для Sprut.Hub. |
+| `FLY_SPRUTHUB_FORWARD_PORT` | `7693` | Локальный порт TCP-forwarder. |
+| `FLY_SPRUTHUB_TARGET_HOST` | `192.168.1.100` | LAN-адрес Sprut.Hub. |
+| `FLY_SPRUTHUB_TARGET_PORT` | `80` | LAN-порт Sprut.Hub. |
 | `FLY_BROWSER_URL` | `/browser/` | URL remote browser внутри shell UI. Для iframe используется same-origin proxy через Caddy. |
 | `FLY_BROWSER_IMAGE` | `lscr.io/linuxserver/chromium:latest` | Docker image для remote Chromium. На Apple Silicon используется arm64 image без qemu. |
 | `FLY_BROWSER_HOST_PORT` | `7690` | Локальный порт Mac mini, на который проброшен web UI контейнера browser. |
@@ -172,6 +196,12 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/browser-profile` | Persistent profile Chromium для cookies и настроек. |
 | `FLY_BROWSER_PROFILE_VOLUME` | `fly-terminal-browser-profile` | Docker named volume с профилем Chromium. |
 | `FLY_BROWSER_BASIC_AUTH` | *Вычисляется установщиком* | Base64 для upstream Basic Auth `kasm_user:<password>`, который Caddy подставляет при проксировании `/browser/`. |
+| `FLY_NATIVE_BROWSER_ENABLED` | `1` | Включает Native Chrome как основной Browser backend на direct macOS. |
+| `FLY_NATIVE_BROWSER_PROFILE_DIR` | `$HOME/.local/share/fly-terminal/native-browser-profile` | Отдельный профиль нативного Chrome, не смешанный с обычным профилем пользователя. |
+| `FLY_NATIVE_BROWSER_DISPLAY_NAME` | `Fly Browser` | Виртуальный дисплей BetterDisplay, на котором размещается окно Native Chrome. |
+| `FLY_NATIVE_BROWSER_STREAMER_PORT` | `5906` | Отдельный H.264/WebSocket streamer Native Chrome. |
+| `FLY_NATIVE_BROWSER_STREAMER_SOCKET_PATH` | `/tmp/fly-native-browser-stream.sock` | Unix socket между ScreenCaptureKit/VideoToolbox encoder и browser streamer. |
+| `FLY_NATIVE_BROWSER_STREAM_URL` | `/native-browser-stream-ws` | Same-origin WebSocket-маршрут Caddy для Native Chrome. |
 | `FLY_DESKTOP_ENABLED` | `1` | Включает кнопку Mac Desktop в UI и endpoint `/api/desktop/config`. |
 | `FLY_DESKTOP_URL` | `/desktop/` | URL noVNC веб-клиента для удаленного управления Mac mini. |
 | `FLY_DESKTOP_PORT` | `5901` | Порт WebSocket-моста `websockify`. |
@@ -181,12 +211,7 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 
 Для Remote Desktop действует idle timeout 300 секунд. В H.264-режиме таймаут дополнительно контролируется сервером: WebSocket закрывается кодом `4000`, технические сообщения конфигурации и heartbeat не считаются активностью, а клиент не переподключается автоматически. Legacy noVNC применяет тот же 5-минутный таймаут на клиенте и вызывает штатный `RFB.disconnect()`, который также блокирует автопереподключение.
 
-Browser-модуль автоматически использует два независимых профиля Selkies:
-
-*   **Локальный** (`127.0.0.1`, `localhost`, `::1`): 60 FPS, H.264 CRF 22 и нативное разрешение для максимально четкого изображения.
-*   **Внешний** (включая Tailscale Funnel): 30 FPS, H.264 CRF 30 и CSS scaling для уменьшения задержки, трафика и нагрузки на клиентский компьютер.
-
-Настройки разделяются по полному URL Selkies в `localStorage` и принудительно восстанавливаются до загрузки клиента. Звук и микрофон отключены в обоих профилях, чтобы не создавать лишний медиапоток.
+В direct macOS Browser использует два backend. **Native Chrome** — основной: обычный Google Chrome запускается на отдельном дисплее `Fly Browser`, а изображение передаётся через ScreenCaptureKit и аппаратный H.264 VideoToolbox. **Chromium fallback** остаётся доступен через `/browser/` и используется вручную либо автоматически при недоступности нативного захвата. Оба backend работают через тот же Fly Terminal origin и не требуют настройки proxy на клиентском компьютере.
 
 ---
 
@@ -198,7 +223,7 @@ Browser-модуль автоматически использует два не
 ### Описание кнопок управления:
 *   **Вкладки / Сплит**: Переключает режим отображения. Режим **Сплит** делит экран на равные области для всех открытых вкладок. Переключение фокуса в режиме Сплит происходит автоматически при наведении курсора мыши или по клику.
 *   **Новая вкладка**: Запускает новый независимый сеанс tmux и добавляет его в текущее окно.
-*   **Browser**: Добавляет панель с удаленным Chromium/noVNC через `/browser/`. Закрытие browser-панели закрывает только UI-панель, контейнер продолжает работать.
+*   **Browser**: по умолчанию открывает Native Chrome на macOS через отдельный H.264 stream. В панели можно переключиться на контейнерный Chromium fallback; закрытие вкладки Fly Terminal не завершает сам browser backend.
 *   **Новое окно**: Генерирует уникальный идентификатор сессии и открывает чистый терминал в новой вкладке браузера (сессии не будут пересекаться).
 *   **Переподключить**: Перезагружает iframe активного терминала (полезно при сбое сетевого соединения).
 *   **Фокус**: Программно возвращает фокус ввода на текстовое поле xterm (терминал готов к вводу команд).
@@ -208,18 +233,35 @@ Browser-модуль автоматически использует два не
 
 ---
 
+## Публичный шлюз и маршрутизация
+
+Для direct macOS стандартный URL `https://<имя-mac-mini>/` больше не открывает один из сервисов напрямую. Сначала Caddy выполняет Basic Auth, после чего показывает каталог сервисов, разрешённых текущей учётной записи.
+
+| Публичный адрес | Результат после авторизации | Доступ |
+| :--- | :--- | :--- |
+| `https://<host>/` | Каталог доступных сервисов | `TERMINAL_USER` и отдельная учётная запись Sprut.Hub |
+| `https://<host>:8443/` | Fly Terminal напрямую | только `TERMINAL_USER` |
+| `https://<host>:8443/desktop/webrtc.html?...display=Fly%20Browser` | Native Chrome напрямую | только `TERMINAL_USER` |
+| `https://<host>:8443/browser/` | Chromium fallback | только `TERMINAL_USER` |
+| `https://<host>:10000/` | Sprut.Hub напрямую | `TERMINAL_USER` или `FLY_SPRUTHUB_AUTH_USER` |
+
+Basic Auth включён отдельно на каждом публичном порту. Caddy не использует cookie для обхода авторизации: если браузер не хранит Basic Auth для конкретного origin, он получает `401` и показывает стандартный запрос логина и пароля. Кэширование самих Basic Auth credentials выполняет браузер и привязано к origin, поэтому при первом переходе на другой порт запрос может появиться повторно.
+
+---
+
 ## Безопасность
 
-### 1. Basic Auth (Простая защита)
-Настраивается через переменные `TERMINAL_USER` и `TERMINAL_PASSWORD`. При переходе на URL-адрес терминала браузер потребует ввести логин и пароль.
+### 1. Basic Auth
+Основная учётная запись задаётся через `TERMINAL_USER` и `TERMINAL_PASSWORD`. Для Sprut.Hub используется отдельная учётная запись с bcrypt-хешем в `FLY_SPRUTHUB_AUTH_HASH_B64`; открытый пароль в репозитории не хранится. Все публичные Caddy-маршруты требуют Basic Auth до выдачи HTML, API или проксируемого сервиса.
 
-### 2. Tailscale Funnel (Рекомендуемый)
-Если вы хотите полностью закрыть терминал от внешнего мира и заходить на него только через ваше защищенное облако Tailnet:
-1.  На Railway в `entrypoint.sh` раскомментируйте или добавьте после инициализации tailscale:
-    ```bash
-    tailscale funnel $PORT
-    ```
-2.  Доступ к веб-панели получат только авторизованные устройства из вашей сети Tailnet.
+### 2. Tailscale Funnel
+Funnel публикует сервис в интернете на HTTPS-адресе Tailscale. Поэтому защита Caddy Basic Auth обязательна и не заменяется самим Funnel. Для доступа только внутри tailnet вместо Funnel следует использовать Tailscale Serve.
+
+Для Docker/Railway сценария команда публикации остаётся:
+
+```bash
+tailscale funnel $PORT
+```
 
 ---
 
@@ -252,7 +294,7 @@ ttyd запускается внутри tmux, поэтому обычный scr
 *   Используйте кнопку **Новое окно** в интерфейсе — она сгенерирует новый `sessionId`.
 
 ### Browser-панель показывает пустой iframe
-Browser-панель должна использовать `/browser/`, а не прямой `https://mac-mini.tail1c55c5.ts.net:10000/` внутри iframe. Caddy проксирует `/browser/` в локальный browser upstream и снимает frame-blocking заголовки. Если открыт старый iframe на `:10000`, сделайте hard reload страницы и создайте browser-панель заново.
+Browser-панель по умолчанию должна использовать Native Chrome через `/native-browser-stream-ws`. Контейнерный Chromium остаётся на `/browser/` как fallback. Порт `:10000` зарезервирован для Sprut.Hub; старые закладки Remote Browser на `:10000` больше не соответствуют текущей схеме.
 
 ### Внешний Browser работает рывками
 Проверьте в логах browser-контейнера строку `Stream settings active`. Для внешнего URL ожидается `FPS: 30.0` и `CRF: 30`; для локального URL — `FPS: 60.0` и `CRF: 22`. После обновления сделайте hard reload. Для одновременной работы Chromium и CPU-кодирования рекомендуется выделить Docker runtime не менее 4 CPU и 4 GiB памяти (для Colima: `colima start --cpus 4 --memory 4`).

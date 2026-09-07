@@ -34,8 +34,9 @@ TARGET_FPS = int(os.environ.get("FLY_STREAMER_FPS", 60))
 TARGET_WIDTH = int(os.environ.get("FLY_STREAMER_WIDTH", 1920))
 TARGET_HEIGHT = int(os.environ.get("FLY_STREAMER_HEIGHT", 1080))
 REMOTE_IDLE_TIMEOUT_SECONDS = int(os.environ.get("FLY_DESKTOP_IDLE_TIMEOUT_SECONDS", DEFAULT_IDLE_TIMEOUT_SECONDS))
+SOCKET_PATH = os.environ.get("FLY_STREAMER_SOCKET_PATH", "/tmp/fly-mac-stream.sock")
 VALID_STREAM_FPS = {15, 30, 45, 60}
-VALID_DISPLAY_NAMES = {"", "Fly Remote"}
+VALID_DISPLAY_NAMES = {"", "Fly Remote", "Fly Browser"}
 TARGET_DISPLAY_BOUNDS = [0.0, 0.0, 2560.0, 1440.0]
 TARGET_DISPLAY_PIXELS = [2560, 1440]
 
@@ -276,6 +277,7 @@ class StreamServer:
             "FLY_STREAMER_HEIGHT": str(self.target_height),
             "FLY_STREAMER_FPS": str(self.target_fps),
             "FLY_STREAMER_DISPLAY_NAME": self.target_display_name,
+            "FLY_STREAMER_SOCKET_PATH": SOCKET_PATH,
         })
         logger.info(
             "Starting fly-mac-encoder subprocess: %s (%dx%d @ %d FPS)",
@@ -325,7 +327,7 @@ class StreamServer:
             return True
 
     async def _start_unix_socket_server(self):
-        sock_path = "/tmp/fly-mac-stream.sock"
+        sock_path = SOCKET_PATH
         try:
             if os.path.exists(sock_path):
                 os.remove(sock_path)

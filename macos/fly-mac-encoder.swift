@@ -34,7 +34,7 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate {
     }
     
     private func connectUnixSocket() {
-        let sockPath = "/tmp/fly-mac-stream.sock"
+        let sockPath = ProcessInfo.processInfo.environment["FLY_STREAMER_SOCKET_PATH"] ?? "/tmp/fly-mac-stream.sock"
         guard socketFD < 0 else { return }
         guard FileManager.default.fileExists(atPath: sockPath) else { return }
         

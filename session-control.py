@@ -1981,15 +1981,27 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/browser/config":
-            enabled = os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
-            browser_url = os.environ.get("FLY_BROWSER_URL", "/browser/")
+            native_enabled = os.environ.get("FLY_NATIVE_BROWSER_ENABLED", "1") == "1"
+            fallback_enabled = os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
+            fallback_url = os.environ.get("FLY_BROWSER_URL", "/browser/")
+            native_stream_path = os.environ.get("FLY_NATIVE_BROWSER_STREAM_URL", "/native-browser-stream-ws")
+            native_url = (
+                "/desktop/webrtc.html?"
+                f"path={quote(native_stream_path.lstrip('/'))}"
+                "&autoconnect=true&resolution=1920x1080&fps=60&scale=contain"
+                "&display=Fly%20Browser"
+            ) if native_enabled else ""
+            primary_url = native_url or (fallback_url if fallback_enabled else "")
             send_json(
                 self,
                 200,
                 {
                     "ok": True,
-                    "enabled": enabled,
-                    "url": browser_url if enabled else "",
+                    "enabled": bool(primary_url),
+                    "url": primary_url,
+                    "nativeUrl": native_url,
+                    "fallbackUrl": fallback_url if fallback_enabled else "",
+                    "backend": "native" if native_url else ("chromium" if fallback_enabled else ""),
                 },
             )
             return
