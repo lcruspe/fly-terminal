@@ -58,33 +58,105 @@
       display: block;
     }
 
-    #hudBar {
+    #hudDock {
       position: absolute;
       top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
+      left: 12px;
+      z-index: 100;
+      max-width: calc(100% - 16px);
+      pointer-events: none;
+    }
+
+    #hudChip {
+      min-height: 30px;
+      display: inline-flex;
       align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border: 1px solid var(--panel-border);
+      border-radius: 9999px;
+      background: rgba(24, 28, 35, 0.68);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+      color: var(--fg);
+      font: inherit;
+      font-size: 10px;
+      cursor: pointer;
+      opacity: 0.72;
+      pointer-events: auto;
+      transition: opacity 0.18s ease, background 0.18s ease;
+    }
+
+    #hudChip:hover,
+    #hudChip:focus-visible {
+      opacity: 1;
+      background: rgba(24, 28, 35, 0.9);
+      outline: none;
+    }
+
+    .hud-chip-status {
+      color: var(--badge-ok-fg);
+      font-weight: 700;
+    }
+
+    .hud-chip-status.warn {
+      color: var(--badge-warn-fg);
+    }
+
+    .hud-chip-status.error {
+      color: var(--badge-err-fg);
+    }
+
+    .hud-chip-separator {
+      opacity: 0.35;
+    }
+
+    #hudBar {
+      display: none;
+      align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
-      padding: 6px 12px;
+      max-width: calc(100vw - 16px);
+      padding: 6px 8px;
       background: var(--panel-bg);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--panel-border);
-      border-radius: 9999px;
+      border-radius: 12px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-      z-index: 100;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: auto;
     }
 
-    #viewport:hover #hudBar,
-    #hudBar:hover,
-    #hudBar.pinned {
-      opacity: 1;
-      pointer-events: auto;
-      transform: translateX(-50%) translateY(0);
+    #hudDock.expanded #hudChip,
+    #hudDock.pinned #hudChip {
+      display: none;
+    }
+
+    #hudDock.expanded #hudBar,
+    #hudDock.pinned #hudBar {
+      display: flex;
+    }
+
+    .hud-icon-btn {
+      min-width: 28px;
+      justify-content: center;
+      padding-inline: 6px;
+    }
+
+    #hudDragHandle {
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #hudDragHandle:active {
+      cursor: grabbing;
+    }
+
+    #hudPinBtn.active {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #7dd3fc;
     }
 
     .hud-badge {
@@ -246,17 +318,29 @@
   <div id="viewport">
     <canvas id="screenCanvas" tabindex="0"></canvas>
 
-    <div id="hudBar">
-      <span class="hud-badge badge-status" id="statusBadge">60 FPS H.264</span>
-      <span class="hud-badge badge-fps" id="fpsBadge">60 fps</span>
-      <span class="hud-badge badge-res" id="resBadge">1920×1080</span>
-      <div class="hud-divider"></div>
-      <button type="button" class="hud-btn" id="spotlightBtn" title="Spotlight (Cmd+Пробел)">⌘ Space</button>
-      <button type="button" class="hud-btn" id="appSwitcherBtn" title="Переключение окон (Cmd+Tab)">⌘ Tab</button>
-      <button type="button" class="hud-btn" id="pasteBtn" title="Вставить текст в Mac">Вставка</button>
-      <div class="hud-divider"></div>
-      <button type="button" class="hud-btn" id="scaleModeBtn" title="Режим масштабирования">Fit</button>
-      <button type="button" class="hud-btn" id="fullscreenBtn" title="Во весь экран">⛶</button>
+    <div id="hudDock">
+      <button type="button" id="hudChip" title="Показать управление Remote Desktop" aria-label="Показать управление Remote Desktop">
+        <span class="hud-chip-status" id="hudChipStatus">H.264</span>
+        <span class="hud-chip-separator">·</span>
+        <span id="hudChipFps">60 fps</span>
+        <span class="hud-chip-separator">·</span>
+        <span id="hudChipRes">1920×1080</span>
+      </button>
+      <div id="hudBar" role="toolbar" aria-label="Управление Remote Desktop">
+        <button type="button" class="hud-btn hud-icon-btn" id="hudDragHandle" title="Перетащить панель" aria-label="Перетащить панель">⠿</button>
+        <span class="hud-badge badge-status" id="statusBadge">60 FPS H.264</span>
+        <span class="hud-badge badge-fps" id="fpsBadge">60 fps</span>
+        <span class="hud-badge badge-res" id="resBadge">1920×1080</span>
+        <div class="hud-divider"></div>
+        <button type="button" class="hud-btn" id="spotlightBtn" title="Spotlight (Cmd+Пробел)">⌘ Space</button>
+        <button type="button" class="hud-btn" id="appSwitcherBtn" title="Переключение окон (Cmd+Tab)">⌘ Tab</button>
+        <button type="button" class="hud-btn" id="pasteBtn" title="Вставить текст в Mac">Вставка</button>
+        <div class="hud-divider"></div>
+        <button type="button" class="hud-btn" id="scaleModeBtn" title="Режим масштабирования">Fit</button>
+        <button type="button" class="hud-btn hud-icon-btn" id="fullscreenBtn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
+        <button type="button" class="hud-btn hud-icon-btn" id="hudPinBtn" title="Закрепить панель" aria-label="Закрепить панель" aria-pressed="false">📌</button>
+        <button type="button" class="hud-btn hud-icon-btn" id="hudCollapseBtn" title="Свернуть панель" aria-label="Свернуть панель">⌃</button>
+      </div>
     </div>
 
     <div id="overlayMessage">
@@ -307,6 +391,179 @@
       const reconnectBtn = document.getElementById("reconnectBtn");
       const clipboardModal = document.getElementById("clipboardModal");
       const clipboardText = document.getElementById("clipboardText");
+      const viewport = document.getElementById("viewport");
+      const hudDock = document.getElementById("hudDock");
+      const hudBar = document.getElementById("hudBar");
+      const hudChip = document.getElementById("hudChip");
+      const hudChipStatus = document.getElementById("hudChipStatus");
+      const hudChipFps = document.getElementById("hudChipFps");
+      const hudChipRes = document.getElementById("hudChipRes");
+      const hudDragHandle = document.getElementById("hudDragHandle");
+      const hudPinBtn = document.getElementById("hudPinBtn");
+      const hudCollapseBtn = document.getElementById("hudCollapseBtn");
+      const HUD_AUTOHIDE_MS = 3000;
+      const HUD_PIN_KEY = "flyRemoteHudPinned";
+      const HUD_POSITION_KEY = "flyRemoteHudPosition";
+      let hudCollapseTimer = null;
+      let hudPinned = false;
+      let hudDragging = false;
+
+      function safeStorageGet(key) {
+        try { return localStorage.getItem(key); } catch (_) { return null; }
+      }
+
+      function safeStorageSet(key, value) {
+        try { localStorage.setItem(key, value); } catch (_) {}
+      }
+
+      function clampHudPosition() {
+        const maxX = Math.max(8, viewport.clientWidth - hudDock.offsetWidth - 8);
+        const maxY = Math.max(8, viewport.clientHeight - hudDock.offsetHeight - 8);
+        const currentX = Number.parseFloat(hudDock.style.left || "12");
+        const currentY = Number.parseFloat(hudDock.style.top || "12");
+        hudDock.style.left = `${Math.min(maxX, Math.max(8, currentX))}px`;
+        hudDock.style.top = `${Math.min(maxY, Math.max(8, currentY))}px`;
+      }
+
+      function saveHudPosition() {
+        safeStorageSet(HUD_POSITION_KEY, JSON.stringify({
+          x: Number.parseFloat(hudDock.style.left || "12"),
+          y: Number.parseFloat(hudDock.style.top || "12")
+        }));
+      }
+
+      function restoreHudPosition() {
+        try {
+          const saved = JSON.parse(safeStorageGet(HUD_POSITION_KEY) || "null");
+          if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+            hudDock.style.left = `${saved.x}px`;
+            hudDock.style.top = `${saved.y}px`;
+          }
+        } catch (_) {}
+        requestAnimationFrame(clampHudPosition);
+      }
+
+      function clearHudCollapseTimer() {
+        clearTimeout(hudCollapseTimer);
+        hudCollapseTimer = null;
+      }
+
+      function setHudExpanded(expanded) {
+        if (hudPinned) expanded = true;
+        hudDock.classList.toggle("expanded", expanded);
+        if (expanded) requestAnimationFrame(clampHudPosition);
+      }
+
+      function scheduleHudCollapse() {
+        clearHudCollapseTimer();
+        if (hudPinned || hudDragging || !hudDock.classList.contains("expanded")) return;
+        hudCollapseTimer = setTimeout(() => setHudExpanded(false), HUD_AUTOHIDE_MS);
+      }
+
+      function revealHud() {
+        setHudExpanded(true);
+        scheduleHudCollapse();
+      }
+
+      function setHudPinned(pinned) {
+        hudPinned = Boolean(pinned);
+        hudDock.classList.toggle("pinned", hudPinned);
+        hudPinBtn.classList.toggle("active", hudPinned);
+        hudPinBtn.setAttribute("aria-pressed", hudPinned ? "true" : "false");
+        hudPinBtn.title = hudPinned ? "Открепить панель" : "Закрепить панель";
+        safeStorageSet(HUD_PIN_KEY, hudPinned ? "1" : "0");
+        if (hudPinned) {
+          clearHudCollapseTimer();
+          setHudExpanded(true);
+        } else {
+          scheduleHudCollapse();
+        }
+      }
+
+      function syncHudChip() {
+        const statusText = statusBadge.textContent.trim();
+        let compactStatus = "H.264";
+        if (statusBadge.classList.contains("error")) compactStatus = "Ошибка";
+        else if (statusText.includes("заблокирован")) compactStatus = "Блокировка";
+        else if (statusText.includes("Подключение")) compactStatus = "Подключение";
+        else if (statusText.includes("Отключено")) compactStatus = "Отключено";
+        else if (statusText.includes("разрешен") || statusText.includes("Разрешен")) compactStatus = "Разрешение";
+        hudChipStatus.textContent = compactStatus;
+        hudChipStatus.classList.toggle("warn", statusBadge.classList.contains("warn"));
+        hudChipStatus.classList.toggle("error", statusBadge.classList.contains("error"));
+        hudChipFps.textContent = fpsBadge.textContent.trim();
+        hudChipRes.textContent = resBadge.textContent.trim();
+      }
+
+      const hudStatusObserver = new MutationObserver(syncHudChip);
+      [statusBadge, fpsBadge, resBadge].forEach((element) => hudStatusObserver.observe(element, {
+        subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class"]
+      }));
+
+      hudChip.addEventListener("mouseenter", revealHud);
+      hudChip.addEventListener("click", revealHud);
+      hudBar.addEventListener("pointermove", scheduleHudCollapse);
+      hudBar.addEventListener("mouseleave", scheduleHudCollapse);
+      hudBar.addEventListener("pointerdown", clearHudCollapseTimer);
+      hudBar.addEventListener("click", scheduleHudCollapse);
+      hudBar.addEventListener("focusin", clearHudCollapseTimer);
+      hudBar.addEventListener("focusout", scheduleHudCollapse);
+      hudPinBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setHudPinned(!hudPinned);
+      });
+      hudCollapseBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (hudPinned) setHudPinned(false);
+        clearHudCollapseTimer();
+        setHudExpanded(false);
+      });
+      viewport.addEventListener("pointerdown", (event) => {
+        if (!hudPinned && !hudDock.contains(event.target)) {
+          clearHudCollapseTimer();
+          setHudExpanded(false);
+        }
+      });
+
+      hudDragHandle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        hudDragging = true;
+        clearHudCollapseTimer();
+        hudDragHandle.setPointerCapture(event.pointerId);
+        const dockRect = hudDock.getBoundingClientRect();
+        const viewportRect = viewport.getBoundingClientRect();
+        const offsetX = event.clientX - dockRect.left;
+        const offsetY = event.clientY - dockRect.top;
+
+        const move = (moveEvent) => {
+          if (!hudDragging) return;
+          const x = moveEvent.clientX - viewportRect.left - offsetX;
+          const y = moveEvent.clientY - viewportRect.top - offsetY;
+          const maxX = Math.max(8, viewport.clientWidth - hudDock.offsetWidth - 8);
+          const maxY = Math.max(8, viewport.clientHeight - hudDock.offsetHeight - 8);
+          hudDock.style.left = `${Math.min(maxX, Math.max(8, x))}px`;
+          hudDock.style.top = `${Math.min(maxY, Math.max(8, y))}px`;
+        };
+        const finish = () => {
+          if (!hudDragging) return;
+          hudDragging = false;
+          hudDragHandle.removeEventListener("pointermove", move);
+          hudDragHandle.removeEventListener("pointerup", finish);
+          hudDragHandle.removeEventListener("pointercancel", finish);
+          saveHudPosition();
+          scheduleHudCollapse();
+        };
+        hudDragHandle.addEventListener("pointermove", move);
+        hudDragHandle.addEventListener("pointerup", finish);
+        hudDragHandle.addEventListener("pointercancel", finish);
+      });
+
+      window.addEventListener("resize", () => requestAnimationFrame(clampHudPosition));
+      hudPinned = safeStorageGet(HUD_PIN_KEY) === "1";
+      restoreHudPosition();
+      setHudPinned(hudPinned);
+      syncHudChip();
 
       window.flyOpenKeyboard = () => {
         clipboardModal.classList.remove("hidden");

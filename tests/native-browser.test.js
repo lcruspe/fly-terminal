@@ -78,3 +78,15 @@ test('encoder restarts reuse one Unix socket server', () => {
   assert.match(streamer, /if self\.unix_server is None:/);
   assert.match(streamer, /self\.unix_server = await asyncio\.start_unix_server/);
 });
+
+
+test('remote desktop HUD stays compact until explicitly opened', () => {
+  assert.match(webrtc, /id="hudChip"/);
+  assert.match(webrtc, /HUD_AUTOHIDE_MS = 3000/);
+  assert.match(webrtc, /flyRemoteHudPinned/);
+  assert.match(webrtc, /flyRemoteHudPosition/);
+  assert.match(webrtc, /id="hudDragHandle"/);
+  assert.match(webrtc, /function scheduleHudCollapse/);
+  assert.match(webrtc, /function setHudPinned/);
+  assert.doesNotMatch(webrtc, /#viewport:hover #hudBar/);
+});
