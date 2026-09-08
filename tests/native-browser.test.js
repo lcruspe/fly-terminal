@@ -119,3 +119,10 @@ test('screen capture runs only while a remote desktop client is connected', () =
   assert.match(streamer, /self\.clients\.pop\(websocket, None\)[\s\S]*await self\.stop_encoder_if_idle\(\)/);
   assert.doesNotMatch(streamer, /server\.running = True\s+await server\.start_encoder\(\)/);
 });
+
+test('Caddy launcher reuses the installed YT Transcriber bootstrap secret', () => {
+  const launcher = fs.readFileSync(new URL('../macos/launch-caddy.sh', import.meta.url), 'utf8');
+  assert.match(launcher, /com\.kruspe\.yttranscriber\.plist/);
+  assert.match(launcher, /EnvironmentVariables:YT_BOOTSTRAP_SECRET/);
+  assert.match(launcher, /export YT_BOOTSTRAP_SECRET/);
+});

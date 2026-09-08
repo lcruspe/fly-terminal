@@ -309,3 +309,5 @@ Browser-панель по умолчанию должна использоват
 
 ### Внешний Browser работает рывками
 Проверьте в логах browser-контейнера строку `Stream settings active`. Для внешнего URL ожидается `FPS: 30.0` и `CRF: 30`; для локального URL — `FPS: 60.0` и `CRF: 22`. После обновления сделайте hard reload. Для одновременной работы Chromium и CPU-кодирования рекомендуется выделить Docker runtime не менее 4 CPU и 4 GiB памяти (для Colima: `colima start --cpus 4 --memory 4`).
+
+YT Transcript использует двухэтапную авторизацию: Basic Auth завершается на Caddy, после чего `/yt-login` создаёт короткоживущую cookie-сессию приложения через `/session/bootstrap`. Для проверки внутреннего вызова используется `YT_BOOTSTRAP_SECRET`; `launch-caddy.sh` сначала читает его из `fly-terminal.env`, а если переменная не задана — из LaunchAgent `com.kruspe.yttranscriber.plist`. Поэтому секрет не нужно дублировать вручную при уже установленном транскрайбере.
