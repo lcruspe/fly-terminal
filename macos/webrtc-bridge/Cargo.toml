@@ -1,0 +1,20 @@
+[package]
+name = "fly-webrtc-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+axum = "0.7"
+base64 = "0.22"
+bytes = "1"
+futures-util = "0.3"
+hmac = "0.12"
+rtcp = "0.14.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+uuid = { version = "1", features = ["v4"] }
+webrtc = "0.14.0"

@@ -4,14 +4,18 @@ import ctypes
 import ctypes.util
 import json
 import logging
+import math
 import os
 import re
 import struct
 import subprocess
 import sys
 import time
+import uuid
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Set
+from typing import Deque, Dict, Optional
 
 import websockets
 from aiohttp import web
@@ -40,6 +44,17 @@ VALID_STREAM_FPS = {15, 30, 45, 60}
 VALID_DISPLAY_NAMES = {"", "Fly Remote", "Fly Browser"}
 TARGET_DISPLAY_BOUNDS = [0.0, 0.0, 2560.0, 1440.0]
 TARGET_DISPLAY_PIXELS = [2560, 1440]
+TARGET_BITRATE = int(os.environ.get("FLY_STREAMER_BITRATE", 4_500_000))
+MIN_BITRATE = 300_000
+MAX_BITRATE = 20_000_000
+STREAM_QUEUE_MAX_BYTES = int(os.environ.get("FLY_STREAM_QUEUE_MAX_BYTES", 4 * 1024 * 1024))
+STREAM_QUEUE_MAX_AGE_MS = int(os.environ.get("FLY_STREAM_QUEUE_MAX_AGE_MS", 250))
+STREAM_SEND_TIMEOUT_SECONDS = float(os.environ.get("FLY_STREAM_SEND_TIMEOUT_SECONDS", 0.35))
+STREAM_TRANSPORT_BUFFER_MAX_BYTES = int(os.environ.get("FLY_STREAM_TRANSPORT_BUFFER_MAX_BYTES", 1024 * 1024))
+KEYFRAME_REQUEST_COOLDOWN_MS = int(os.environ.get("FLY_KEYFRAME_REQUEST_COOLDOWN_MS", 250))
+EXTENDED_FRAME_HEADER_SIZE = 34
+EXTENDED_FRAME_FLAG = 0x80
+EXTENDED_FRAME_VERSION = 1
 
 # MARK: - CoreGraphics & AppKit ctypes setup
 
@@ -134,11 +149,37 @@ def get_screen_dimensions():
     return int(TARGET_DISPLAY_BOUNDS[2]), int(TARGET_DISPLAY_BOUNDS[3])
 
 
+def parse_frame_metadata(packet: bytes):
+    if not packet:
+        return {"flags": 0, "is_key": False, "frame_id": 0, "capture_pts_us": 0, "encode_start_ns": 0, "encode_done_ns": 0, "data_offset": 0}
+    flags = packet[0]
+    if flags & EXTENDED_FRAME_FLAG and len(packet) >= EXTENDED_FRAME_HEADER_SIZE and packet[1] == EXTENDED_FRAME_VERSION:
+        return {
+            "flags": flags,
+            "is_key": bool(flags & 1),
+            "frame_id": struct.unpack_from("!Q", packet, 2)[0],
+            "capture_pts_us": struct.unpack_from("!Q", packet, 10)[0],
+            "encode_start_ns": struct.unpack_from("!Q", packet, 18)[0],
+            "encode_done_ns": struct.unpack_from("!Q", packet, 26)[0],
+            "data_offset": EXTENDED_FRAME_HEADER_SIZE,
+        }
+    if len(packet) >= 9:
+        return {
+            "flags": flags,
+            "is_key": bool(flags & 1),
+            "frame_id": 0,
+            "capture_pts_us": max(0, struct.unpack_from("!q", packet, 1)[0]) * 1000,
+            "encode_start_ns": 0,
+            "encode_done_ns": 0,
+            "data_offset": 9,
+        }
+    return {"flags": flags, "is_key": bool(flags & 1), "frame_id": 0, "capture_pts_us": 0, "encode_start_ns": 0, "encode_done_ns": 0, "data_offset": 1}
+
+
 def detect_h264_codec(packet: bytes):
-    """Return an RFC 6381 avc1 codec string from the SPS in an Annex B packet."""
-    if len(packet) <= 9:
-        return None
-    data = packet[9:]
+    """Возвращает RFC 6381 avc1 codec из SPS Annex B пакета."""
+    metadata = parse_frame_metadata(packet)
+    data = packet[metadata["data_offset"]:]
     starts = []
     i = 0
     while i < len(data) - 3:
@@ -186,13 +227,20 @@ def valid_stream_dimensions(width: int, height: int):
     )
 
 
-def inject_mouse(event_type: str, x_norm: float, y_norm: float, button: int = 0):
+def inject_mouse(event_type: str, x_norm: float, y_norm: float, button: int = 0, drag_button: Optional[int] = None):
     screen_w, screen_h = get_screen_dimensions()
     x = TARGET_DISPLAY_BOUNDS[0] + max(0.0, min(float(screen_w), x_norm * screen_w))
     y = TARGET_DISPLAY_BOUNDS[1] + max(0.0, min(float(screen_h), y_norm * screen_h))
     pos = CGPoint(x, y)
 
-    if event_type == "move":
+    if event_type == "move" and drag_button is not None:
+        if drag_button == 0:
+            ev = cg.CGEventCreateMouseEvent(None, kCGEventLeftMouseDragged, pos, kCGMouseButtonLeft)
+        elif drag_button == 2:
+            ev = cg.CGEventCreateMouseEvent(None, kCGEventRightMouseDragged, pos, kCGMouseButtonRight)
+        else:
+            ev = cg.CGEventCreateMouseEvent(None, kCGEventOtherMouseDragged, pos, kCGMouseButtonCenter)
+    elif event_type == "move":
         ev = cg.CGEventCreateMouseEvent(None, kCGEventMouseMoved, pos, kCGMouseButtonLeft)
     elif event_type == "down":
         if button == 0:
@@ -216,8 +264,8 @@ def inject_mouse(event_type: str, x_norm: float, y_norm: float, button: int = 0)
         cf.CFRelease(ev)
 
 
-def inject_scroll(dx: float, dy: float):
-    # dx, dy in pixels
+def inject_scroll(dx: int, dy: int):
+    # CoreGraphics принимает целые пиксели; дробная часть сохраняется на уровне сессии.
     ev = cg.CGEventCreateScrollWheelEvent2(
         None,
         kCGScrollEventUnitPixel,
@@ -270,9 +318,7 @@ def inject_key(code: str, key: str, is_down: bool, modifiers: dict = None):
 
 def inject_clipboard(text: str):
     try:
-        proc = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-        proc.communicate(text.encode("utf-8"))
-        # Simulate Cmd+V
+        subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
         inject_key("KeyV", "v", True, {"meta": True})
         time.sleep(0.02)
         inject_key("KeyV", "v", False, {"meta": True})
@@ -280,11 +326,52 @@ def inject_clipboard(text: str):
         logger.warning("Clipboard injection error: %s", e)
 
 
+def inject_text(text: str):
+    for char in text:
+        inject_key("", char, True)
+
+
+@dataclass
+class OutboundMessage:
+    kind: str
+    payload: object
+    enqueued_ns: int
+    size: int = 0
+    is_key: bool = False
+    frame_id: int = 0
+
+
+@dataclass
+class ClientState:
+    websocket: object
+    client_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
+    queue: Deque[OutboundMessage] = field(default_factory=deque)
+    queue_event: asyncio.Event = field(default_factory=asyncio.Event)
+    queue_bytes: int = 0
+    waiting_for_keyframe: bool = True
+    sender_task: Optional[asyncio.Task] = None
+    pressed_buttons: set = field(default_factory=set)
+    pressed_keys: Dict[str, tuple] = field(default_factory=dict)
+    last_x: float = 0.5
+    last_y: float = 0.5
+    scroll_x: float = 0.0
+    scroll_y: float = 0.0
+    dropped_frames: int = 0
+    sent_frames: int = 0
+    window_bytes: int = 0
+    window_started_ns: int = field(default_factory=time.monotonic_ns)
+    queue_delay_total_ms: float = 0.0
+    queue_delay_samples: int = 0
+    queue_delay_max_ms: float = 0.0
+    media_bridge: bool = False
+    last_reliable_seq: int = 0
+
+
 # MARK: - Server & Encoder Orchestration
 
 class StreamServer:
     def __init__(self):
-        self.clients: Set[websockets.WebSocketServerProtocol] = set()
+        self.clients: Dict[object, ClientState] = {}
         self.latest_keyframe: bytes = b""
         self.h264_codec = H264_CODEC
         self.encoder_proc: subprocess.Popen = None
@@ -294,29 +381,162 @@ class StreamServer:
         self.target_width = TARGET_WIDTH
         self.target_height = TARGET_HEIGHT
         self.target_fps = TARGET_FPS
+        self.target_bitrate = TARGET_BITRATE
         self.requested_display_name = os.environ.get("FLY_STREAMER_DISPLAY_NAME", "")
         self.follow_main_when_locked = os.environ.get("FLY_STREAMER_FOLLOW_MAIN_WHEN_LOCKED", "0") == "1"
         self.screen_locked = is_screen_locked()
         self.target_display_name = self._effective_display_name()
         self.encoder_lock = asyncio.Lock()
+        self.encoder_control_lock = asyncio.Lock()
         self.unix_server = None
+        self.last_frame_id = 0
+        self.last_keyframe_request_ns = 0
+        self.last_frame_telemetry_ns = 0
+        self.control_owner_id: Optional[str] = None
 
     def _effective_display_name(self):
         if self.follow_main_when_locked and self.screen_locked:
             return ""
         return self.requested_display_name
 
+    def _enqueue_json(self, state: ClientState, msg: dict):
+        payload = json.dumps(msg, separators=(",", ":"))
+        state.queue.append(OutboundMessage("json", payload, time.monotonic_ns()))
+        state.queue_event.set()
+
     async def broadcast_json(self, msg: dict):
-        if not self.clients:
+        for state in list(self.clients.values()):
+            self._enqueue_json(state, msg)
+
+    def _drop_queued_video(self, state: ClientState):
+        kept = deque()
+        dropped = 0
+        bytes_kept = 0
+        for item in state.queue:
+            if item.kind == "video":
+                dropped += 1
+                continue
+            kept.append(item)
+            bytes_kept += item.size
+        state.queue = kept
+        state.queue_bytes = bytes_kept
+        state.dropped_frames += dropped
+        state.waiting_for_keyframe = True
+        return dropped
+
+    def _queue_video(self, state: ClientState, payload: bytes, metadata: dict):
+        now_ns = time.monotonic_ns()
+        oldest_video = next((item for item in state.queue if item.kind == "video"), None)
+        stale = oldest_video is not None and (now_ns - oldest_video.enqueued_ns) / 1_000_000 > STREAM_QUEUE_MAX_AGE_MS
+        over_bytes = state.queue_bytes + len(payload) > STREAM_QUEUE_MAX_BYTES
+        if stale or over_bytes:
+            self._drop_queued_video(state)
+            self.request_keyframe("client_queue_overload")
+        if state.waiting_for_keyframe and not metadata["is_key"]:
+            state.dropped_frames += 1
             return
-        payload = json.dumps(msg)
-        dead = set()
-        for client in list(self.clients):
+        if metadata["is_key"]:
+            state.waiting_for_keyframe = False
+        state.queue.append(OutboundMessage("video", payload, now_ns, len(payload), metadata["is_key"], metadata["frame_id"]))
+        state.queue_bytes += len(payload)
+        state.queue_event.set()
+
+    async def _send_transport_stats(self, state: ClientState):
+        now_ns = time.monotonic_ns()
+        elapsed = max(1, now_ns - state.window_started_ns)
+        if elapsed < 1_000_000_000:
+            return
+        bitrate_bps = int(state.window_bytes * 8 * 1_000_000_000 / elapsed)
+        avg_queue_ms = state.queue_delay_total_ms / state.queue_delay_samples if state.queue_delay_samples else 0.0
+        payload = json.dumps({
+            "type": "transport_stats",
+            "bitrateBps": bitrate_bps,
+            "queueBytes": state.queue_bytes,
+            "queueDelayMs": round(avg_queue_ms, 2),
+            "queueDelayMaxMs": round(state.queue_delay_max_ms, 2),
+            "droppedFrames": state.dropped_frames,
+            "sentFrames": state.sent_frames,
+        }, separators=(",", ":"))
+        try:
+            await asyncio.wait_for(state.websocket.send(payload), timeout=STREAM_SEND_TIMEOUT_SECONDS)
+        except Exception:
+            return
+        state.window_started_ns = now_ns
+        state.window_bytes = 0
+        state.queue_delay_total_ms = 0.0
+        state.queue_delay_samples = 0
+        state.queue_delay_max_ms = 0.0
+
+    async def _client_sender(self, state: ClientState):
+        websocket = state.websocket
+        try:
+            while self.running:
+                if not state.queue:
+                    state.queue_event.clear()
+                    await state.queue_event.wait()
+                    continue
+                item = state.queue.popleft()
+                if item.kind == "video":
+                    state.queue_bytes = max(0, state.queue_bytes - item.size)
+                    age_ms = (time.monotonic_ns() - item.enqueued_ns) / 1_000_000
+                    if age_ms > STREAM_QUEUE_MAX_AGE_MS:
+                        self._drop_queued_video(state)
+                        self.request_keyframe("stale_client_frame")
+                        continue
+                    state.queue_delay_total_ms += age_ms
+                    state.queue_delay_samples += 1
+                    state.queue_delay_max_ms = max(state.queue_delay_max_ms, age_ms)
+                transport = getattr(websocket, "transport", None)
+                if transport is not None and transport.get_write_buffer_size() > STREAM_TRANSPORT_BUFFER_MAX_BYTES:
+                    await websocket.close(code=4002, reason="stream transport buffer overloaded")
+                    return
+                try:
+                    await asyncio.wait_for(websocket.send(item.payload), timeout=STREAM_SEND_TIMEOUT_SECONDS)
+                except asyncio.TimeoutError:
+                    await websocket.close(code=4002, reason="stream send timeout")
+                    return
+                if item.kind == "video":
+                    state.sent_frames += 1
+                    state.window_bytes += item.size
+                    await self._send_transport_stats(state)
+        except (websockets.exceptions.ConnectionClosed, asyncio.CancelledError):
+            pass
+        except Exception as exc:
+            logger.warning("Client sender failed (%s): %s", state.client_id, exc)
             try:
-                await client.send(payload)
+                await websocket.close(code=1011, reason="stream sender failed")
             except Exception:
-                dead.add(client)
-        self.clients.difference_update(dead)
+                pass
+
+    async def _send_encoder_command(self, command: dict):
+        proc = self.encoder_proc
+        if not proc or proc.poll() is not None or not proc.stdin:
+            return False
+        data = (json.dumps(command, separators=(",", ":")) + "\n").encode("utf-8")
+        async with self.encoder_control_lock:
+            try:
+                await asyncio.to_thread(proc.stdin.write, data)
+                await asyncio.to_thread(proc.stdin.flush)
+                return True
+            except Exception as exc:
+                logger.warning("Encoder control command failed: %s", exc)
+                return False
+
+    def request_keyframe(self, reason: str = "client_request"):
+        now_ns = time.monotonic_ns()
+        if (now_ns - self.last_keyframe_request_ns) / 1_000_000 < KEYFRAME_REQUEST_COOLDOWN_MS:
+            return
+        self.last_keyframe_request_ns = now_ns
+        asyncio.create_task(self._send_encoder_command({"type": "keyframe", "reason": reason}))
+
+    async def set_bitrate(self, bitrate: int):
+        bitrate = max(MIN_BITRATE, min(MAX_BITRATE, int(bitrate)))
+        if bitrate == self.target_bitrate:
+            return True
+        self.target_bitrate = bitrate
+        if self.encoder_proc and self.encoder_proc.poll() is None:
+            return await self._send_encoder_command({"type": "bitrate", "value": bitrate})
+        return True
 
     async def start_encoder(self):
         if not self.clients:
@@ -346,6 +566,7 @@ class StreamServer:
             "FLY_STREAMER_WIDTH": str(self.target_width),
             "FLY_STREAMER_HEIGHT": str(self.target_height),
             "FLY_STREAMER_FPS": str(self.target_fps),
+            "FLY_STREAMER_BITRATE": str(self.target_bitrate),
             "FLY_STREAMER_DISPLAY_NAME": self.target_display_name,
             "FLY_STREAMER_SOCKET_PATH": SOCKET_PATH,
         })
@@ -355,9 +576,11 @@ class StreamServer:
         )
         encoder_proc = subprocess.Popen(
             [str(ENCODER_BIN)],
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=encoder_env,
+            bufsize=0,
         )
         self.encoder_proc = encoder_proc
 
@@ -388,9 +611,11 @@ class StreamServer:
                 encoder_proc.kill()
                 await asyncio.to_thread(encoder_proc.wait)
 
-    async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False, track_request: bool = True):
+    async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False, track_request: bool = True, bitrate: int = 0):
         if not valid_stream_dimensions(width, height) or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
             return False
+        if bitrate:
+            await self.set_bitrate(bitrate)
         if track_request:
             self.requested_display_name = display_name
         effective_display = self._effective_display_name()
@@ -420,6 +645,7 @@ class StreamServer:
                 "pixelWidth": TARGET_DISPLAY_PIXELS[0],
                 "pixelHeight": TARGET_DISPLAY_PIXELS[1],
                 "screenLocked": self.screen_locked,
+                "bitrate": self.target_bitrate,
             })
             return True
 
@@ -490,9 +716,27 @@ class StreamServer:
     async def _handle_raw_packet(self, payload: bytes):
         if not payload:
             return
-        flags = payload[0]
-        is_key = bool(flags & 1)
-        if is_key:
+        metadata = parse_frame_metadata(payload)
+        if metadata["frame_id"]:
+            self.last_frame_id = metadata["frame_id"]
+        else:
+            self.last_frame_id += 1
+            metadata["frame_id"] = self.last_frame_id
+        if metadata["encode_start_ns"] and metadata["encode_done_ns"] and metadata["capture_pts_us"]:
+            now_ns = time.monotonic_ns()
+            if now_ns - self.last_frame_telemetry_ns >= 250_000_000:
+                self.last_frame_telemetry_ns = now_ns
+                capture_to_encode_ms = metadata["encode_start_ns"] / 1_000_000 - metadata["capture_pts_us"] / 1000
+                encode_ms = (metadata["encode_done_ns"] - metadata["encode_start_ns"]) / 1_000_000
+                if 0 <= capture_to_encode_ms < 10_000 and 0 <= encode_ms < 10_000:
+                    await self.broadcast_json({
+                        "type": "frame_telemetry",
+                        "frameId": metadata["frame_id"],
+                        "captureToEncodeMs": round(capture_to_encode_ms, 3),
+                        "encodeMs": round(encode_ms, 3),
+                    })
+
+        if metadata["is_key"]:
             self.latest_keyframe = payload
             self.tcc_required = False
             detected_codec = detect_h264_codec(payload)
@@ -501,14 +745,8 @@ class StreamServer:
                 self.h264_codec = detected_codec
                 await self.broadcast_json({"type": "codec", "codec": detected_codec})
 
-        if self.clients:
-            dead_clients = set()
-            for client in list(self.clients):
-                try:
-                    await client.send(payload)
-                except Exception:
-                    dead_clients.add(client)
-            self.clients.difference_update(dead_clients)
+        for state in list(self.clients.values()):
+            self._queue_video(state, payload, metadata)
 
     async def _log_encoder_stderr(self, encoder_proc):
         loop = asyncio.get_running_loop()
@@ -575,39 +813,61 @@ class StreamServer:
                 logger.error("Error reading encoder frames: %s", e)
                 await asyncio.sleep(0.5)
 
+    def _is_control_owner(self, state: ClientState):
+        return state.client_id == self.control_owner_id
+
+    async def _announce_control_owner(self):
+        for state in self.clients.values():
+            self._enqueue_json(state, {
+                "type": "control",
+                "owner": self._is_control_owner(state),
+                "ownerId": self.control_owner_id,
+            })
+
+    def _release_client_input(self, state: ClientState):
+        for button in list(state.pressed_buttons):
+            inject_mouse("up", state.last_x, state.last_y, button)
+        state.pressed_buttons.clear()
+        for code, (key, modifiers) in list(state.pressed_keys.items()):
+            inject_key(code, key, False, modifiers)
+        state.pressed_keys.clear()
+        state.scroll_x = 0.0
+        state.scroll_y = 0.0
+
+    def _ack_input(self, state: ClientState, data: dict):
+        seq = data.get("seq")
+        if seq is None:
+            return
+        self._enqueue_json(state, {"type": "input_ack", "seq": seq, "afterFrameId": self.last_frame_id})
+
     async def handle_websocket(self, websocket):
         logger.info("Client connected to stream WebSocket: %s", websocket.remote_address)
-        self.clients.add(websocket)
+        state = ClientState(websocket=websocket)
+        self.clients[websocket] = state
+        if self.control_owner_id is None:
+            self.control_owner_id = state.client_id
+        state.sender_task = asyncio.create_task(self._client_sender(state))
         await self.ensure_encoder_started()
         screen_w, screen_h = get_screen_dimensions()
 
-        # Send Init metadata JSON
-        init_payload = {
+        self._enqueue_json(state, {
             "type": "init",
             "codec": self.h264_codec,
             "width": self.target_width,
             "height": self.target_height,
             "fps": self.target_fps,
+            "bitrate": self.target_bitrate,
             "screenWidth": screen_w,
             "screenHeight": screen_h,
             "pixelWidth": TARGET_DISPLAY_PIXELS[0],
             "pixelHeight": TARGET_DISPLAY_PIXELS[1],
             "screenLocked": self.screen_locked,
-        }
-        await websocket.send(json.dumps(init_payload))
-
-        if self.latest_keyframe:
-            try:
-                await websocket.send(self.latest_keyframe)
-            except Exception:
-                pass
-
-        # Immediately send latest keyframe so client can start decoding with 0ms delay
-        if self.latest_keyframe:
-            try:
-                await websocket.send(self.latest_keyframe)
-            except Exception:
-                pass
+            "clientId": state.client_id,
+            "canControl": self._is_control_owner(state),
+        })
+        # Старый keyframe намеренно не отправляется: новому клиенту нужна свежая точка входа.
+        self.request_keyframe("new_client")
+        await self._announce_control_owner()
 
         idle_guard = RemoteSessionIdleGuard(REMOTE_IDLE_TIMEOUT_SECONDS)
         try:
@@ -625,38 +885,118 @@ class StreamServer:
                     break
                 except websockets.exceptions.ConnectionClosed:
                     break
-                if isinstance(message, str):
-                    try:
-                        data = json.loads(message)
-                        msg_type = data.get("type")
-                        if is_user_activity_message(msg_type):
-                            idle_guard.mark_activity()
-                        if msg_type == "configure":
+                if not isinstance(message, str):
+                    continue
+                try:
+                    data = json.loads(message)
+                    msg_type = data.get("type")
+                    if is_user_activity_message(msg_type):
+                        idle_guard.mark_activity()
+                    if msg_type == "bridge_hello":
+                        state.media_bridge = True
+                        idle_guard.mark_activity()
+                        self._enqueue_json(state, {"type": "bridge_ready", "clientId": state.client_id})
+                        continue
+                    if msg_type == "bridge_keepalive" and state.media_bridge:
+                        idle_guard.mark_activity()
+                        continue
+                    if msg_type == "probe":
+                        self._enqueue_json(state, {"type": "probe_ack", "seq": data.get("seq"), "clientPerfMs": data.get("clientPerfMs")})
+                        continue
+                    if msg_type == "keyframe":
+                        self.request_keyframe("client_request")
+                        continue
+                    if msg_type == "claim_control":
+                        previous = next((item for item in self.clients.values() if item.client_id == self.control_owner_id), None)
+                        if previous and previous is not state:
+                            self._release_client_input(previous)
+                        self.control_owner_id = state.client_id
+                        await self._announce_control_owner()
+                        continue
+                    if msg_type == "reset_input":
+                        self._release_client_input(state)
+                        continue
+                    if msg_type == "configure":
+                        if self._is_control_owner(state):
                             await self.configure_encoder(
                                 int(data.get("width", 0)),
                                 int(data.get("height", 0)),
                                 int(data.get("fps", 0)),
                                 str(data.get("displayName", "")),
                                 bool(data.get("force", False)),
+                                bitrate=int(data.get("bitrate", 0) or 0),
                             )
-                        elif msg_type == "mousemove":
-                            inject_mouse("move", data.get("x", 0), data.get("y", 0))
-                        elif msg_type == "mousedown":
-                            inject_mouse("down", data.get("x", 0), data.get("y", 0), data.get("button", 0))
-                        elif msg_type == "mouseup":
-                            inject_mouse("up", data.get("x", 0), data.get("y", 0), data.get("button", 0))
-                        elif msg_type == "wheel":
-                            inject_scroll(data.get("dx", 0), data.get("dy", 0))
-                        elif msg_type == "keydown":
-                            inject_key(data.get("code", ""), data.get("key", ""), True, data.get("modifiers"))
-                        elif msg_type == "keyup":
-                            inject_key(data.get("code", ""), data.get("key", ""), False, data.get("modifiers"))
-                        elif msg_type == "clipboard":
-                            inject_clipboard(data.get("text", ""))
-                    except Exception as err:
-                        logger.warning("Error processing client input: %s", err)
+                        else:
+                            self._enqueue_json(state, {"type": "configure_ignored", "reason": "not_control_owner"})
+                        continue
+                    if msg_type == "bitrate":
+                        if self._is_control_owner(state):
+                            await self.set_bitrate(int(data.get("value", self.target_bitrate)))
+                        continue
+                    if not self._is_control_owner(state):
+                        continue
+
+                    seq = int(data.get("seq", 0) or 0)
+                    delivery = str(data.get("delivery", "reliable"))
+                    if delivery == "motion":
+                        if seq and seq < state.last_reliable_seq:
+                            continue
+                    elif seq:
+                        state.last_reliable_seq = max(state.last_reliable_seq, seq)
+
+                    state.last_x = float(data.get("x", state.last_x))
+                    state.last_y = float(data.get("y", state.last_y))
+                    if msg_type == "mousemove":
+                        drag_button = 0 if 0 in state.pressed_buttons else (2 if 2 in state.pressed_buttons else (next(iter(state.pressed_buttons)) if state.pressed_buttons else None))
+                        inject_mouse("move", state.last_x, state.last_y, drag_button=drag_button)
+                    elif msg_type == "mousedown":
+                        button = int(data.get("button", 0))
+                        state.pressed_buttons.add(button)
+                        inject_mouse("down", state.last_x, state.last_y, button)
+                        self._ack_input(state, data)
+                    elif msg_type == "mouseup":
+                        button = int(data.get("button", 0))
+                        inject_mouse("up", state.last_x, state.last_y, button)
+                        state.pressed_buttons.discard(button)
+                        self._ack_input(state, data)
+                    elif msg_type == "wheel":
+                        state.scroll_x += float(data.get("dx", 0))
+                        state.scroll_y += float(data.get("dy", 0))
+                        dx = math.trunc(state.scroll_x)
+                        dy = math.trunc(state.scroll_y)
+                        state.scroll_x -= dx
+                        state.scroll_y -= dy
+                        if dx or dy:
+                            inject_scroll(dx, dy)
+                        self._ack_input(state, data)
+                    elif msg_type == "keydown":
+                        code = data.get("code", "")
+                        key = data.get("key", "")
+                        modifiers = data.get("modifiers")
+                        state.pressed_keys[code] = (key, modifiers)
+                        inject_key(code, key, True, modifiers)
+                        self._ack_input(state, data)
+                    elif msg_type == "keyup":
+                        code = data.get("code", "")
+                        inject_key(code, data.get("key", ""), False, data.get("modifiers"))
+                        state.pressed_keys.pop(code, None)
+                        self._ack_input(state, data)
+                    elif msg_type == "text":
+                        inject_text(str(data.get("text", "")))
+                        self._ack_input(state, data)
+                    elif msg_type == "clipboard":
+                        await asyncio.to_thread(inject_clipboard, str(data.get("text", "")))
+                        self._ack_input(state, data)
+                except Exception as err:
+                    logger.warning("Error processing client input: %s", err)
         finally:
-            self.clients.discard(websocket)
+            self._release_client_input(state)
+            self.clients.pop(websocket, None)
+            if state.sender_task:
+                state.sender_task.cancel()
+            if self.control_owner_id == state.client_id:
+                self.control_owner_id = next((item.client_id for item in self.clients.values()), None)
+                await self._announce_control_owner()
             logger.info("Client disconnected from stream WebSocket")
             await self.stop_encoder_if_idle()
 

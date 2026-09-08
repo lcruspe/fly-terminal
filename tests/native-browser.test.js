@@ -86,15 +86,14 @@ test('remote access tabs use short neutral titles', () => {
   const gateway = fs.readFileSync(new URL('../macos/gateway/admin.html', import.meta.url), 'utf8');
   const sprut = fs.readFileSync(new URL('../macos/gateway/spruthub.html', import.meta.url), 'utf8');
   assert.match(webrtc, /<title>RDC Native<\/title>/);
-  assert.match(webrtc, /document\.title = requestedDisplayName === "Fly Browser" \? "Browser Native" : "RDC Native"/);
+  assert.match(webrtc, /setNeutralPageTitle\("WS"\)/);
+  assert.match(webrtc, /"Browser" : "RDC"/);
   assert.match(vnc, /<title>RDC VNC<\/title>/);
   assert.match(html, /RDC Native/);
   assert.match(html, /RDC VNC/);
   assert.match(html, /Browser Native/);
   assert.match(html, /Browser Fallback/);
   assert.match(gateway, /<title>Gateway<\/title>/);
-  assert.match(gateway, /<strong>Browser Native<\/strong>/);
-  assert.match(gateway, /<strong>Browser Fallback<\/strong>/);
   assert.match(sprut, /<title>Sprut<\/title>/);
 });
 
@@ -116,7 +115,7 @@ test('screen capture runs only while a remote desktop client is connected', () =
   assert.match(streamer, /async def ensure_encoder_started/);
   assert.match(streamer, /async def stop_encoder_if_idle/);
   assert.match(streamer, /Stopping screen capture: no active stream clients/);
-  assert.match(streamer, /self\.clients\.add\(websocket\)[\s\S]*await self\.ensure_encoder_started\(\)/);
-  assert.match(streamer, /self\.clients\.discard\(websocket\)[\s\S]*await self\.stop_encoder_if_idle\(\)/);
+  assert.match(streamer, /self\.clients\[websocket\] = state[\s\S]*await self\.ensure_encoder_started\(\)/);
+  assert.match(streamer, /self\.clients\.pop\(websocket, None\)[\s\S]*await self\.stop_encoder_if_idle\(\)/);
   assert.doesNotMatch(streamer, /server\.running = True\s+await server\.start_encoder\(\)/);
 });

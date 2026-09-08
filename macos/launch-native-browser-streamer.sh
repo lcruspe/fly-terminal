@@ -11,7 +11,9 @@ fi
 
 [ "${FLY_NATIVE_BROWSER_ENABLED:-1}" = "1" ] || exit 0
 
-"${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" >/dev/null
+# Восстановление Fly Browser не должно блокировать запуск транспорта: при lock state
+# streamer временно использует основной экран, а BetterDisplay восстанавливается параллельно.
+"${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" >/dev/null 2>&1 &
 
 export FLY_DESKTOP_ENABLED=1
 export FLY_STREAMER_PORT="${FLY_NATIVE_BROWSER_STREAMER_PORT:-5906}"

@@ -12,16 +12,20 @@ CADDY_LABEL="ai.kruspe.fly-terminal.caddy"
 BROWSER_LABEL="ai.kruspe.fly-terminal.browser"
 WEBSOCKIFY_LABEL="ai.kruspe.fly-terminal.websockify"
 STREAMER_LABEL="ai.kruspe.fly-terminal.streamer"
+WEBRTC_LABEL="ai.kruspe.fly-terminal.webrtc"
 NATIVE_BROWSER_LABEL="ai.kruspe.fly-terminal.native-browser"
 NATIVE_BROWSER_STREAMER_LABEL="ai.kruspe.fly-terminal.native-browser-streamer"
+NATIVE_BROWSER_WEBRTC_LABEL="ai.kruspe.fly-terminal.native-browser-webrtc"
 SPRUTHUB_LABEL="ai.kruspe.fly-terminal.spruthub"
 TTYD_PLIST="${LAUNCH_AGENTS_DIR}/${TTYD_LABEL}.plist"
 CADDY_PLIST="${LAUNCH_AGENTS_DIR}/${CADDY_LABEL}.plist"
 BROWSER_PLIST="${LAUNCH_AGENTS_DIR}/${BROWSER_LABEL}.plist"
 WEBSOCKIFY_PLIST="${LAUNCH_AGENTS_DIR}/${WEBSOCKIFY_LABEL}.plist"
 STREAMER_PLIST="${LAUNCH_AGENTS_DIR}/${STREAMER_LABEL}.plist"
+WEBRTC_PLIST="${LAUNCH_AGENTS_DIR}/${WEBRTC_LABEL}.plist"
 NATIVE_BROWSER_PLIST="${LAUNCH_AGENTS_DIR}/${NATIVE_BROWSER_LABEL}.plist"
 NATIVE_BROWSER_STREAMER_PLIST="${LAUNCH_AGENTS_DIR}/${NATIVE_BROWSER_STREAMER_LABEL}.plist"
+NATIVE_BROWSER_WEBRTC_PLIST="${LAUNCH_AGENTS_DIR}/${NATIVE_BROWSER_WEBRTC_LABEL}.plist"
 SPRUTHUB_PLIST="${LAUNCH_AGENTS_DIR}/${SPRUTHUB_LABEL}.plist"
 UID_VALUE="$(id -u)"
 
@@ -54,6 +58,7 @@ FLY_BROWSER_PROFILE_VOLUME=fly-terminal-browser-profile
 FLY_NATIVE_BROWSER_ENABLED=1
 FLY_NATIVE_BROWSER_PROFILE_DIR=$HOME/.local/share/fly-terminal/native-browser-profile
 FLY_NATIVE_BROWSER_STREAMER_PORT=5906
+FLY_NATIVE_BROWSER_WEBRTC_PORT=5908
 FLY_NATIVE_BROWSER_STREAMER_SOCKET_PATH=/tmp/fly-native-browser-stream.sock
 FLY_NATIVE_BROWSER_DISPLAY_NAME=Fly\ Browser
 FLY_NATIVE_BROWSER_FOLLOW_MAIN_WHEN_LOCKED=1
@@ -62,6 +67,11 @@ FLY_DESKTOP_URL=/desktop/
 FLY_DESKTOP_PORT=5901
 FLY_DESKTOP_TARGET=127.0.0.1:5900
 FLY_DESKTOP_PASSWORD=
+FLY_WEBRTC_PORT=5907
+FLY_WEBRTC_BUILD_ROOT=/Volumes/WD/fly-terminal-build
+FLY_WEBRTC_STUN_URLS=stun:stun.l.google.com:19302
+FLY_TURN_URLS=
+FLY_TURN_SECRET=
 FLY_SPRUTHUB_ENABLED=0
 FLY_SPRUTHUB_AUTH_USER=
 FLY_SPRUTHUB_AUTH_HASH_B64=
@@ -131,6 +141,7 @@ ensure_env_line "FLY_BROWSER_PROFILE_VOLUME" "fly-terminal-browser-profile"
 ensure_env_line "FLY_NATIVE_BROWSER_ENABLED" "1"
 ensure_env_line "FLY_NATIVE_BROWSER_PROFILE_DIR" "\$HOME/.local/share/fly-terminal/native-browser-profile"
 ensure_env_line "FLY_NATIVE_BROWSER_STREAMER_PORT" "5906"
+ensure_env_line "FLY_NATIVE_BROWSER_WEBRTC_PORT" "5908"
 ensure_env_line "FLY_NATIVE_BROWSER_STREAMER_SOCKET_PATH" "/tmp/fly-native-browser-stream.sock"
 ensure_env_line "FLY_NATIVE_BROWSER_DISPLAY_NAME" "Fly\ Browser"
 ensure_env_line "FLY_NATIVE_BROWSER_FOLLOW_MAIN_WHEN_LOCKED" "1"
@@ -141,6 +152,11 @@ ensure_env_line "FLY_DESKTOP_TARGET" "127.0.0.1:5900"
 ensure_env_line "FLY_DESKTOP_PASSWORD" ""
 ensure_env_line "FLY_STREAMER_PORT" "5905"
 ensure_env_line "FLY_STREAMER_FPS" "60"
+ensure_env_line "FLY_WEBRTC_PORT" "5907"
+ensure_env_line "FLY_WEBRTC_BUILD_ROOT" "/Volumes/WD/fly-terminal-build"
+ensure_env_line "FLY_WEBRTC_STUN_URLS" "stun:stun.l.google.com:19302"
+ensure_env_line "FLY_TURN_URLS" ""
+ensure_env_line "FLY_TURN_SECRET" ""
 ensure_env_line "FLY_SPRUTHUB_ENABLED" "0"
 ensure_env_line "FLY_SPRUTHUB_AUTH_USER" ""
 ensure_env_line "FLY_SPRUTHUB_AUTH_HASH_B64" ""
@@ -170,7 +186,11 @@ else
   printf 'FLY_BROWSER_BASIC_AUTH=%s\n' "${browser_basic_auth}" >>"${ENV_FILE}"
 fi
 
-chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-native-browser.sh" "${SCRIPT_DIR}/launch-native-browser-streamer.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/launch-spruthub-forwarder.sh" "${SCRIPT_DIR}/spruthub-forwarder.py" "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" "${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" "${SCRIPT_DIR}/set-password.sh"
+chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-native-browser.sh" "${SCRIPT_DIR}/launch-native-browser-streamer.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/build-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-native-browser-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-spruthub-forwarder.sh" "${SCRIPT_DIR}/spruthub-forwarder.py" "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" "${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" "${SCRIPT_DIR}/set-password.sh"
+
+# WebRTC bridge собирается на этапе установки/обновления. LaunchAgent только запускает
+# готовый бинарник с WD и никогда не блокируется на Cargo/lock во время старта сервиса.
+"${SCRIPT_DIR}/build-webrtc-bridge.sh" >/dev/null
 
 cat >"${TTYD_PLIST}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -332,6 +352,38 @@ cat >"${STREAMER_PLIST}" <<EOF
 </plist>
 EOF
 
+cat >"${WEBRTC_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${WEBRTC_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${SCRIPT_DIR}/launch-webrtc-bridge.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${REPO_ROOT}</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/webrtc.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/webrtc.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>${HOME}</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
 cat >"${NATIVE_BROWSER_PLIST}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -399,6 +451,38 @@ cat >"${NATIVE_BROWSER_STREAMER_PLIST}" <<EOF
 </plist>
 EOF
 
+cat >"${NATIVE_BROWSER_WEBRTC_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${NATIVE_BROWSER_WEBRTC_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${SCRIPT_DIR}/launch-native-browser-webrtc-bridge.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${REPO_ROOT}</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/native-browser-webrtc.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/native-browser-webrtc.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>${HOME}</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
 cat >"${SPRUTHUB_PLIST}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -439,8 +523,10 @@ launchctl bootout "gui/${UID_VALUE}/${CADDY_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${BROWSER_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${WEBSOCKIFY_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${STREAMER_LABEL}" 2>/dev/null || true
+launchctl bootout "gui/${UID_VALUE}/${WEBRTC_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_STREAMER_LABEL}" 2>/dev/null || true
+launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_WEBRTC_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${SPRUTHUB_LABEL}" 2>/dev/null || true
 
 bootstrap_agent "${TTYD_LABEL}" "${TTYD_PLIST}"
@@ -448,16 +534,20 @@ bootstrap_agent "${CADDY_LABEL}" "${CADDY_PLIST}"
 bootstrap_agent "${BROWSER_LABEL}" "${BROWSER_PLIST}"
 bootstrap_agent "${WEBSOCKIFY_LABEL}" "${WEBSOCKIFY_PLIST}"
 bootstrap_agent "${STREAMER_LABEL}" "${STREAMER_PLIST}"
+bootstrap_agent "${WEBRTC_LABEL}" "${WEBRTC_PLIST}"
 bootstrap_agent "${NATIVE_BROWSER_LABEL}" "${NATIVE_BROWSER_PLIST}"
 bootstrap_agent "${NATIVE_BROWSER_STREAMER_LABEL}" "${NATIVE_BROWSER_STREAMER_PLIST}"
+bootstrap_agent "${NATIVE_BROWSER_WEBRTC_LABEL}" "${NATIVE_BROWSER_WEBRTC_PLIST}"
 bootstrap_agent "${SPRUTHUB_LABEL}" "${SPRUTHUB_PLIST}"
 kickstart_agent "${TTYD_LABEL}" "${TTYD_PLIST}"
 kickstart_agent "${CADDY_LABEL}" "${CADDY_PLIST}"
 kickstart_agent "${BROWSER_LABEL}" "${BROWSER_PLIST}"
 kickstart_agent "${WEBSOCKIFY_LABEL}" "${WEBSOCKIFY_PLIST}"
 kickstart_agent "${STREAMER_LABEL}" "${STREAMER_PLIST}"
+kickstart_agent "${WEBRTC_LABEL}" "${WEBRTC_PLIST}"
 kickstart_agent "${NATIVE_BROWSER_LABEL}" "${NATIVE_BROWSER_PLIST}"
 kickstart_agent "${NATIVE_BROWSER_STREAMER_LABEL}" "${NATIVE_BROWSER_STREAMER_PLIST}"
+kickstart_agent "${NATIVE_BROWSER_WEBRTC_LABEL}" "${NATIVE_BROWSER_WEBRTC_PLIST}"
 kickstart_agent "${SPRUTHUB_LABEL}" "${SPRUTHUB_PLIST}"
 
 # Старый прямой порт Remote Browser больше не используется: Browser живёт внутри :8443.

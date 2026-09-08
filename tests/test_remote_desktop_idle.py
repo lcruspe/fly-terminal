@@ -15,7 +15,7 @@ class RemoteDesktopIdleTests(unittest.TestCase):
     def test_only_user_input_refreshes_idle_deadline(self):
         self.assertFalse(module.is_user_activity_message("configure"))
         self.assertFalse(module.is_user_activity_message("keyframe"))
-        for message_type in ("mousemove", "mousedown", "mouseup", "wheel", "keydown", "keyup", "clipboard"):
+        for message_type in ("mousemove", "mousedown", "mouseup", "wheel", "keydown", "keyup", "text", "clipboard"):
             with self.subTest(message_type=message_type):
                 self.assertTrue(module.is_user_activity_message(message_type))
 

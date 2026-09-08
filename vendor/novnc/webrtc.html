@@ -48,14 +48,27 @@
       cursor: default;
     }
 
+    #screenVideo,
     #screenCanvas {
+      position: absolute;
+      inset: 0;
       max-width: 100%;
       max-height: 100%;
       width: 100%;
       height: 100%;
       object-fit: contain;
-      outline: none;
       display: block;
+    }
+
+    #screenVideo { display: none; background: #000; }
+
+    #inputLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      outline: none;
+      touch-action: none;
+      cursor: default;
     }
 
     #hudDock {
@@ -312,11 +325,42 @@
       justify-content: flex-end;
       gap: 8px;
     }
+
+    #qualityMode {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: var(--fg);
+      padding: 4px 6px;
+      font: inherit;
+      font-size: 11px;
+    }
+
+    #diagnosticsPanel {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      z-index: 180;
+      width: min(360px, calc(100vw - 24px));
+      padding: 12px;
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      background: rgba(18, 20, 23, 0.94);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      font-size: 11px;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    #diagnosticsPanel.hidden { display: none; }
+    #diagnosticsText { white-space: pre-wrap; line-height: 1.45; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div id="viewport">
-    <canvas id="screenCanvas" tabindex="0"></canvas>
+    <video id="screenVideo" autoplay playsinline muted></video>
+    <canvas id="screenCanvas"></canvas>
+    <div id="inputLayer" tabindex="0" aria-label="Удалённый экран"></div>
 
     <div id="hudDock">
       <button type="button" id="hudChip" title="Показать управление Remote Desktop" aria-label="Показать управление Remote Desktop">
@@ -336,6 +380,13 @@
         <button type="button" class="hud-btn" id="appSwitcherBtn" title="Переключение окон (Cmd+Tab)">⌘ Tab</button>
         <button type="button" class="hud-btn" id="pasteBtn" title="Вставить текст в Mac">Вставка</button>
         <div class="hud-divider"></div>
+        <select id="qualityMode" title="Приоритет качества">
+          <option value="auto">Авто</option>
+          <option value="text">Чёткий текст</option>
+          <option value="smooth">Плавность</option>
+          <option value="data">Экономия трафика</option>
+        </select>
+        <button type="button" class="hud-btn" id="diagnosticsBtn" title="Диагностика задержек и потока">Диагностика</button>
         <button type="button" class="hud-btn" id="scaleModeBtn" title="Режим масштабирования">Fit</button>
         <button type="button" class="hud-btn hud-icon-btn" id="fullscreenBtn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
         <button type="button" class="hud-btn hud-icon-btn" id="hudPinBtn" title="Закрепить панель" aria-label="Закрепить панель" aria-pressed="false">📌</button>
@@ -348,6 +399,14 @@
       <h3 id="overlayTitle">Подключение к macOS...</h3>
       <p id="overlaySubtext" style="font-size: 13px; color: #94a3b8;">Инициализация H.264 видеопотока...</p>
       <button type="button" class="hud-btn" id="reconnectBtn" style="margin-top: 8px; display: none;">Повторить попытку</button>
+    </div>
+
+    <div id="diagnosticsPanel" class="hidden" aria-live="polite">
+      <div id="diagnosticsText">Диагностика ещё не собрана.</div>
+      <div class="modal-actions">
+        <button type="button" class="hud-btn" id="diagnosticsExportBtn">Выгрузить JSON</button>
+        <button type="button" class="hud-btn" id="diagnosticsCloseBtn">Закрыть</button>
+      </div>
     </div>
 
     <div id="clipboardModal" class="hidden">
@@ -370,7 +429,6 @@
       const requestedFps = [15, 30, 45, 60].includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
       const displayParam = urlParams.get("display") || "";
       const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
-      document.title = requestedDisplayName === "Fly Browser" ? "Browser Native" : "RDC Native";
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
         ? urlParams.get("scale") : "contain";
       
@@ -381,7 +439,9 @@
         wsUrl = `${protocol}//${window.location.hostname}:${urlParams.get("port")}/`;
       }
 
+      const screenVideo = document.getElementById("screenVideo");
       const canvas = document.getElementById("screenCanvas");
+      const inputLayer = document.getElementById("inputLayer");
       const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
       const statusBadge = document.getElementById("statusBadge");
       const fpsBadge = document.getElementById("fpsBadge");
@@ -402,6 +462,12 @@
       const hudDragHandle = document.getElementById("hudDragHandle");
       const hudPinBtn = document.getElementById("hudPinBtn");
       const hudCollapseBtn = document.getElementById("hudCollapseBtn");
+      const qualityModeSelect = document.getElementById("qualityMode");
+      const diagnosticsBtn = document.getElementById("diagnosticsBtn");
+      const diagnosticsPanel = document.getElementById("diagnosticsPanel");
+      const diagnosticsText = document.getElementById("diagnosticsText");
+      const diagnosticsExportBtn = document.getElementById("diagnosticsExportBtn");
+      const diagnosticsCloseBtn = document.getElementById("diagnosticsCloseBtn");
       const HUD_AUTOHIDE_MS = 3000;
       const HUD_PIN_KEY = "flyRemoteHudPinned";
       const HUD_POSITION_KEY = "flyRemoteHudPosition";
@@ -560,7 +626,11 @@
         hudDragHandle.addEventListener("pointercancel", finish);
       });
 
-      window.addEventListener("resize", () => requestAnimationFrame(clampHudPosition));
+      window.addEventListener("resize", () => {
+        requestAnimationFrame(clampHudPosition);
+        clearTimeout(syncConfigureTimer);
+        syncConfigureTimer = setTimeout(() => configureStream(), 250);
+      });
       hudPinned = safeStorageGet(HUD_PIN_KEY) === "1";
       restoreHudPosition();
       setHudPinned(hudPinned);
@@ -574,6 +644,24 @@
       };
 
       let socket = null;
+      let peerConnection = null;
+      let reliableChannel = null;
+      let motionChannel = null;
+      let webRtcSessionId = null;
+      let webRtcStatsTimer = null;
+      let usingWebRtc = false;
+      let iceRestartInFlight = false;
+      let previousInboundStats = null;
+      let webRtcRoute = "—";
+      const forceWebSocket = urlParams.get("transport") === "websocket";
+      const webrtcApiBase = wsPath.includes("native-browser")
+        ? "/native-browser-webrtc-api"
+        : "/desktop-webrtc-api";
+      function setNeutralPageTitle(mode) {
+        const prefix = requestedDisplayName === "Fly Browser" ? "Browser" : "RDC";
+        document.title = `${prefix} ${mode}`;
+      }
+      setNeutralPageTitle(forceWebSocket ? "WS" : "Native");
       let decoder = null;
       let isDecoderReady = false;
       let frameCount = 0;
@@ -592,6 +680,78 @@
       let decoderFallbackTriggered = false;
       let activeCodec = "";
       let pendingVideoPackets = [];
+      let waitingForFreshKeyframe = true;
+      let inputSequence = 0;
+      let probeSequence = 0;
+      let currentBitrate = 4_500_000;
+      let currentQualityMode = ["auto", "text", "smooth", "data"].includes(urlParams.get("quality") || "")
+        ? urlParams.get("quality") : (safeStorageGet("flyRemoteQualityMode") || "auto");
+      if (!["auto", "text", "smooth", "data"].includes(currentQualityMode)) currentQualityMode = "auto";
+      let adaptiveScaleState = { value: 1 };
+      let stableNetworkTicks = 0;
+      let poorNetworkTicks = 0;
+      let lastRttMs = null;
+      let lastRttDeltaMs = 0;
+      let latestServerStats = {};
+      let latestDecodeQueueSize = 0;
+      let latestFrameMeta = null;
+      let lastRenderedFrameId = 0;
+      const pendingFrameMeta = new Map();
+      const pendingActions = new Map();
+      const pendingProbes = new Map();
+      const diagnostics = {
+        startedAt: new Date().toISOString(),
+        transport: "pending",
+        userAgent: navigator.userAgent,
+        route: wsPath,
+        qualityMode: currentQualityMode,
+        samples: [],
+        actionLatencyMs: [],
+        decodeDisplayMs: [],
+        captureEncodeMs: [],
+        encodeMs: [],
+        rttMs: [],
+        jitterMs: [],
+        decoderResets: 0,
+      };
+      qualityModeSelect.value = currentQualityMode;
+      qualityModeSelect.addEventListener("change", () => {
+        currentQualityMode = qualityModeSelect.value;
+        diagnostics.qualityMode = currentQualityMode;
+        adaptiveScaleState.value = 1;
+        stableNetworkTicks = 0;
+        poorNetworkTicks = 0;
+        safeStorageSet("flyRemoteQualityMode", currentQualityMode);
+        const profile = qualityProfile();
+        setTargetBitrate(Math.min(currentBitrate, profile.maxBitrate));
+        configureStream(true);
+      });
+      diagnosticsBtn.addEventListener("click", () => {
+        refreshDiagnostics();
+        diagnosticsPanel.classList.toggle("hidden");
+      });
+      diagnosticsCloseBtn.addEventListener("click", () => diagnosticsPanel.classList.add("hidden"));
+      diagnosticsExportBtn.addEventListener("click", () => {
+        const payload = {
+          ...diagnostics,
+          endedAt: new Date().toISOString(),
+          current: {
+            bitrateBps: currentBitrate,
+            server: latestServerStats,
+            decodeQueueSize: latestDecodeQueueSize,
+            renderedFrameId: lastRenderedFrameId,
+          },
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = `fly-remote-diagnostics-${Date.now()}.json`;
+        link.click();
+        URL.revokeObjectURL(href);
+      });
+      setInterval(sendProbe, 2000);
+      setInterval(refreshDiagnostics, 1000);
       const NO_VNC_URL = "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
 
       function updateOverlay(show, title, subtext, showButton = false) {
@@ -653,25 +813,276 @@
         window.location.replace(NO_VNC_URL);
       }
 
+      function keepRecent(list, value, limit = 240) {
+        if (!Number.isFinite(value)) return;
+        list.push(value);
+        if (list.length > limit) list.splice(0, list.length - limit);
+      }
+
+      function percentile(values, fraction) {
+        if (!values.length) return null;
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * fraction) - 1))];
+      }
+
+      function average(values) {
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+      }
+
+      function formatMetric(value, suffix = " ms") {
+        return Number.isFinite(value) ? `${value.toFixed(1)}${suffix}` : "—";
+      }
+
+      function refreshDiagnostics() {
+        const report = {
+          rtt: average(diagnostics.rttMs),
+          jitter: average(diagnostics.jitterMs),
+          actionP50: percentile(diagnostics.actionLatencyMs, 0.5),
+          actionP95: percentile(diagnostics.actionLatencyMs, 0.95),
+          decodeDisplayP95: percentile(diagnostics.decodeDisplayMs, 0.95),
+          captureEncodeP95: percentile(diagnostics.captureEncodeMs, 0.95),
+          encodeP95: percentile(diagnostics.encodeMs, 0.95),
+        };
+        diagnosticsText.textContent = [
+          `Транспорт: ${diagnostics.transport}`,
+          `RTT: ${formatMetric(report.rtt)} · джиттер: ${formatMetric(report.jitter)}`,
+          `Очередь отправки: ${formatMetric(Number(latestServerStats.queueDelayMs))} · ${Number(latestServerStats.queueBytes || 0)} Б`,
+          `Битрейт: ${((Number(latestServerStats.bitrateBps) || currentBitrate) / 1_000_000).toFixed(2)} Мбит/с`,
+          `Capture→encode p95: ${formatMetric(report.captureEncodeP95)} · encode p95: ${formatMetric(report.encodeP95)}`,
+          `Decode→show p95: ${formatMetric(report.decodeDisplayP95)} · decodeQueue: ${latestDecodeQueueSize}`,
+          `Действие→следующий кадр p50/p95: ${formatMetric(report.actionP50)} / ${formatMetric(report.actionP95)}`,
+          `Сбросы декодера: ${diagnostics.decoderResets} · dropped server: ${Number(latestServerStats.droppedFrames || 0)}`,
+          `Режим: ${currentQualityMode} · target ${(currentBitrate / 1_000_000).toFixed(2)} Мбит/с`,
+        ].join("\n");
+      }
+
+      function dataChannelOpen(channel) {
+        return Boolean(channel && channel.readyState === "open");
+      }
+
+      function sendTransportMessage(message, preferMotion = false) {
+        const text = JSON.stringify(message);
+        if (usingWebRtc) {
+          const channel = preferMotion && dataChannelOpen(motionChannel) ? motionChannel : reliableChannel;
+          if (!dataChannelOpen(channel)) return false;
+          const limit = preferMotion ? 64 * 1024 : 1024 * 1024;
+          if (channel.bufferedAmount > limit) return false;
+          try {
+            channel.send(text);
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(text);
+          return true;
+        }
+        return false;
+      }
+
+      function setVideoTransportActive(active) {
+        usingWebRtc = Boolean(active);
+        screenVideo.style.display = active ? "block" : "none";
+        canvas.style.display = active ? "none" : "block";
+        diagnostics.transport = active ? "webrtc-h264" : "websocket-h264";
+        diagnostics.route = active ? webRtcRoute : wsPath;
+      }
+
+      function resolveWebRtcVisibleActions(now = performance.now()) {
+        for (const [seq, action] of pendingActions) {
+          if (action.ackedAt == null) continue;
+          keepRecent(diagnostics.actionLatencyMs, now - action.sentAt);
+          pendingActions.delete(seq);
+        }
+      }
+
+      let lastPresentedAt = 0;
+      let lastSourceFrameAt = 0;
+      let lastFreezeRecoveryAt = 0;
+      let frozenSince = 0;
+      function startVideoFrameObserver() {
+        if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return;
+        const tick = (_now, metadata) => {
+          if (!usingWebRtc) return;
+          decodedFrameSeen = true;
+          resolveWebRtcVisibleActions(performance.now());
+          frameCount++;
+          const now = performance.now();
+          lastPresentedAt = now;
+          frozenSince = 0;
+          if (now - lastFpsTime >= 1000) {
+            const fps = Math.round((frameCount * 1000) / (now - lastFpsTime));
+            fpsBadge.textContent = `${fps} fps`;
+            frameCount = 0;
+            lastFpsTime = now;
+            diagnostics.samples.push({
+              at: new Date().toISOString(),
+              fps,
+              bitrateBps: Number(latestServerStats.bitrateBps || currentBitrate),
+              rttMs: lastRttMs,
+              jitterMs: lastRttDeltaMs,
+              packetsLost: Number(latestServerStats.packetsLost || 0),
+              framesDropped: Number(latestServerStats.framesDropped || 0),
+              freezeCount: Number(latestServerStats.freezeCount || 0),
+              presentedFrames: Number(metadata?.presentedFrames || 0),
+            });
+            if (diagnostics.samples.length > 600) diagnostics.samples.shift();
+            refreshDiagnostics();
+          }
+          screenVideo.requestVideoFrameCallback(tick);
+        };
+        screenVideo.requestVideoFrameCallback(tick);
+      }
+
+      function requestFreshKeyframe(reason = "client") {
+        waitingForFreshKeyframe = true;
+        sendTransportMessage({ type: "keyframe", reason });
+      }
+
+      function resetDecoderForLatency(reason) {
+        if (!decoder || !isDecoderReady || !activeCodec) return;
+        try {
+          decoder.reset();
+          decoder.configure({ codec: activeCodec, optimizeForLatency: true });
+          diagnostics.decoderResets++;
+          pendingFrameMeta.clear();
+          requestFreshKeyframe(reason);
+        } catch (error) {
+          console.warn("Decoder latency reset failed:", error);
+        }
+      }
+
+      function registerInput(message, measure = true) {
+        let seq = null;
+        if (measure) {
+          seq = ++inputSequence;
+          message.seq = seq;
+          pendingActions.set(seq, { sentAt: performance.now(), afterFrameId: null, ackedAt: null, type: message.type });
+          while (pendingActions.size > 200) pendingActions.delete(pendingActions.keys().next().value);
+        }
+        const sent = sendTransportMessage(message, message.type === "mousemove");
+        if (!sent && seq != null) pendingActions.delete(seq);
+        return sent;
+      }
+
+      function resolveVisibleActions(frameID) {
+        if (!frameID) return;
+        const now = performance.now();
+        for (const [seq, action] of pendingActions) {
+          if (action.afterFrameId == null || frameID <= action.afterFrameId) continue;
+          keepRecent(diagnostics.actionLatencyMs, now - action.sentAt);
+          pendingActions.delete(seq);
+        }
+      }
+
+      function sendProbe() {
+        const seq = ++probeSequence;
+        const sentAt = performance.now();
+        if (!sendTransportMessage({ type: "probe", seq, clientPerfMs: sentAt })) return;
+        pendingProbes.set(seq, sentAt);
+        while (pendingProbes.size > 10) pendingProbes.delete(pendingProbes.keys().next().value);
+      }
+
+      function qualityProfile() {
+        if (currentQualityMode === "text") return { minBitrate: 1_500_000, maxBitrate: 7_000_000, fps: Math.min(30, requestedFps), baseScale: 1 };
+        if (currentQualityMode === "smooth") return { minBitrate: 1_000_000, maxBitrate: 6_000_000, fps: requestedFps, baseScale: 0.9 };
+        if (currentQualityMode === "data") return { minBitrate: 450_000, maxBitrate: 1_600_000, fps: Math.min(30, requestedFps), baseScale: 0.65 };
+        return { minBitrate: 700_000, maxBitrate: 6_500_000, fps: requestedFps, baseScale: 1 };
+      }
+
+      function setTargetBitrate(nextBitrate) {
+        const profile = qualityProfile();
+        const clamped = Math.round(Math.max(profile.minBitrate, Math.min(profile.maxBitrate, nextBitrate)) / 50_000) * 50_000;
+        if (Math.abs(clamped - currentBitrate) < 50_000) return;
+        currentBitrate = clamped;
+        sendTransportMessage({ type: "bitrate", value: currentBitrate });
+      }
+
+      let networkEvaluationAt = -Infinity;
+      let baselineRttMs = null;
+      function evaluateNetworkQuality() {
+        const now = performance.now();
+        if (now - networkEvaluationAt < 1900) return;
+        networkEvaluationAt = now;
+        if (lastRttMs != null) baselineRttMs = baselineRttMs == null ? lastRttMs : Math.min(baselineRttMs, lastRttMs);
+        const queueMs = Number(latestServerStats.queueDelayMs || 0);
+        const poor = (lastRttMs != null && baselineRttMs != null && lastRttMs - baselineRttMs > 80)
+          || lastRttDeltaMs > 45
+          || queueMs > 90
+          || latestDecodeQueueSize >= 3;
+        if (poor) {
+          poorNetworkTicks++;
+          stableNetworkTicks = 0;
+          setTargetBitrate(currentBitrate * 0.7);
+          // Resolution changes restart ScreenCaptureKit. Adapt bitrate only during
+          // a session; geometry/FPS changes are explicit user actions.
+        } else {
+          poorNetworkTicks = 0;
+          stableNetworkTicks++;
+          if (stableNetworkTicks >= 5) {
+            setTargetBitrate(currentBitrate * 1.1);
+            stableNetworkTicks = 0;
+          }
+        }
+      }
+
       function decodeVideoPacket(buffer) {
         if (!(buffer instanceof ArrayBuffer) || !isDecoderReady || !decoder) return false;
         const view = new DataView(buffer);
         if (view.byteLength < 10) return false;
         const flags = view.getUint8(0);
         const isKey = (flags & 0x01) !== 0;
-        const tsMs = Number(view.getBigInt64(1));
-        const naluData = new Uint8Array(buffer, 9);
+        const isExtended = (flags & 0x80) !== 0 && view.byteLength >= 35 && view.getUint8(1) === 1;
+        let dataOffset = 9;
+        let frameID = 0;
+        let capturePTSUs = 0;
+        let encodeStartNs = 0;
+        let encodeDoneNs = 0;
+        let timestamp = 0;
+        if (isExtended) {
+          dataOffset = 34;
+          frameID = Number(view.getBigUint64(2));
+          capturePTSUs = Number(view.getBigUint64(10));
+          encodeStartNs = Number(view.getBigUint64(18));
+          encodeDoneNs = Number(view.getBigUint64(26));
+          timestamp = frameID * 1000;
+          const captureEncodeMs = encodeStartNs / 1_000_000 - capturePTSUs / 1000;
+          const encodeMs = (encodeDoneNs - encodeStartNs) / 1_000_000;
+          if (captureEncodeMs >= 0 && captureEncodeMs < 10_000) keepRecent(diagnostics.captureEncodeMs, captureEncodeMs);
+          if (encodeMs >= 0 && encodeMs < 10_000) keepRecent(diagnostics.encodeMs, encodeMs);
+        } else {
+          const legacyMs = Number(view.getBigInt64(1));
+          timestamp = Math.max(0, legacyMs * 1000);
+        }
+
+        latestDecodeQueueSize = decoder.decodeQueueSize;
+        if (latestDecodeQueueSize >= 4) {
+          resetDecoderForLatency("decode_queue_budget");
+        }
+        if (waitingForFreshKeyframe && !isKey) return false;
+        if (isKey) waitingForFreshKeyframe = false;
+
+        const naluData = new Uint8Array(buffer, dataOffset);
         try {
+          pendingFrameMeta.set(timestamp, {
+            frameID,
+            capturePTSUs,
+            encodeStartNs,
+            encodeDoneNs,
+            decodeSubmittedAt: performance.now(),
+          });
+          while (pendingFrameMeta.size > 60) pendingFrameMeta.delete(pendingFrameMeta.keys().next().value);
           decoder.decode(new EncodedVideoChunk({
             type: isKey ? "key" : "delta",
-            timestamp: tsMs * 1000,
+            timestamp,
             data: naluData
           }));
+          latestDecodeQueueSize = decoder.decodeQueueSize;
           return true;
         } catch (decErr) {
-          if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "keyframe" }));
-          }
+          pendingFrameMeta.delete(timestamp);
+          requestFreshKeyframe("decoder_exception");
           return false;
         }
       }
@@ -698,13 +1109,18 @@
           try { decoder?.close(); } catch (_) {}
           decoder = new VideoDecoder({
             output: (frame) => {
+              const firstFrame = !decodedFrameSeen;
               decodedFrameSeen = true;
               clearTimeout(decoderWatchdog);
+              const timestamp = Number(frame.timestamp || 0);
+              const meta = pendingFrameMeta.get(timestamp) || null;
+              if (meta) pendingFrameMeta.delete(timestamp);
               if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
                 canvas.width = frame.displayWidth;
                 canvas.height = frame.displayHeight;
                 resBadge.textContent = `${frame.displayWidth}×${frame.displayHeight}`;
               }
+              const drawStartedAt = performance.now();
               try {
                 ctx.drawImage(frame, 0, 0);
               } catch (drawErr) {
@@ -713,6 +1129,20 @@
                 return;
               }
               frame.close();
+              const shownAt = performance.now();
+              latestDecodeQueueSize = decoder.decodeQueueSize;
+              if (meta) {
+                latestFrameMeta = meta;
+                lastRenderedFrameId = meta.frameID || lastRenderedFrameId;
+                keepRecent(diagnostics.decodeDisplayMs, shownAt - meta.decodeSubmittedAt);
+                resolveVisibleActions(meta.frameID);
+              }
+              if (firstFrame) {
+                updateOverlay(false);
+                statusBadge.textContent = "H.264 готов";
+                statusBadge.className = "hud-badge badge-status";
+                inputLayer.focus({ preventScroll: true });
+              }
 
               frameCount++;
               const now = performance.now();
@@ -721,6 +1151,19 @@
                 fpsBadge.textContent = `${fps} fps`;
                 frameCount = 0;
                 lastFpsTime = now;
+                diagnostics.samples.push({
+                  at: new Date().toISOString(),
+                  fps,
+                  bitrateBps: Number(latestServerStats.bitrateBps || currentBitrate),
+                  rttMs: lastRttMs,
+                  jitterMs: lastRttDeltaMs,
+                  sendQueueMs: Number(latestServerStats.queueDelayMs || 0),
+                  decodeQueueSize: latestDecodeQueueSize,
+                  frameID: lastRenderedFrameId,
+                  drawMs: shownAt - drawStartedAt,
+                });
+                if (diagnostics.samples.length > 600) diagnostics.samples.shift();
+                refreshDiagnostics();
               }
             },
             error: (err) => {
@@ -744,7 +1187,331 @@
         }
       }
 
+      async function handleServerText(text) {
+        let msg;
+        try { msg = JSON.parse(text); } catch (_) { return; }
+        if (msg.type === "init") {
+          if (!usingWebRtc && !await initVideoDecoder(msg.codec || activeCodec)) return;
+          streamWidth = msg.width || streamWidth;
+          streamHeight = msg.height || streamHeight;
+          macScreenWidth = msg.screenWidth || macScreenWidth;
+          macScreenHeight = msg.screenHeight || macScreenHeight;
+          serverPixelWidth = msg.pixelWidth || serverPixelWidth;
+          serverPixelHeight = msg.pixelHeight || serverPixelHeight;
+          currentBitrate = Number(msg.bitrate || currentBitrate);
+          resBadge.textContent = `${streamWidth}×${streamHeight}`;
+          if (msg.screenLocked) {
+            statusBadge.textContent = "Mac заблокирован";
+            statusBadge.className = "hud-badge badge-status warn";
+          }
+          scheduleSyncConfigure();
+        } else if (msg.type === "codec") {
+          if (!usingWebRtc) await initVideoDecoder(msg.codec || activeCodec);
+        } else if (msg.type === "display") {
+          macScreenWidth = msg.screenWidth || macScreenWidth;
+          macScreenHeight = msg.screenHeight || macScreenHeight;
+          serverPixelWidth = msg.pixelWidth || serverPixelWidth;
+          serverPixelHeight = msg.pixelHeight || serverPixelHeight;
+          scheduleSyncConfigure();
+        } else if (msg.type === "probe_ack") {
+          const sentAt = pendingProbes.get(Number(msg.seq));
+          if (sentAt != null) {
+            const rtt = performance.now() - sentAt;
+            pendingProbes.delete(Number(msg.seq));
+            if (!usingWebRtc) {
+              lastRttDeltaMs = lastRttMs == null ? 0 : Math.abs(rtt - lastRttMs);
+              lastRttMs = rtt;
+            }
+            keepRecent(diagnostics.rttMs, rtt);
+            keepRecent(diagnostics.jitterMs, lastRttDeltaMs);
+            if (!usingWebRtc) evaluateNetworkQuality();
+          }
+        } else if (msg.type === "frame_telemetry") {
+          lastSourceFrameAt = performance.now();
+          latestServerStats.captureToEncodeMs = Number(msg.captureToEncodeMs || 0);
+          latestServerStats.encodeMs = Number(msg.encodeMs || 0);
+        } else if (msg.type === "transport_stats") {
+          latestServerStats = { ...latestServerStats, ...msg };
+        } else if (msg.type === "input_ack") {
+          const action = pendingActions.get(Number(msg.seq));
+          if (action) {
+            action.afterFrameId = Number(msg.afterFrameId || 0);
+            action.ackedAt = performance.now();
+          }
+        } else if (msg.type === "control") {
+          if (!msg.owner && decodedFrameSeen) {
+            statusBadge.textContent = "Только просмотр";
+            statusBadge.className = "hud-badge badge-status warn";
+          } else if (msg.owner && decodedFrameSeen) {
+            statusBadge.textContent = usingWebRtc ? "WebRTC готов" : "H.264 готов";
+            statusBadge.className = "hud-badge badge-status";
+          }
+        } else if (msg.type === "status") {
+          if (msg.state === "tcc_required") {
+            statusBadge.textContent = "Требуется разрешение";
+            statusBadge.className = "hud-badge badge-status warn";
+            showPermissionPrompt(msg.message);
+            if (requestedDisplayName === "Fly Browser" && window.parent !== window) {
+              window.parent.postMessage({ type: "fly-native-browser-unavailable", reason: "tcc_required" }, window.location.origin);
+            }
+          } else if (msg.state === "host_locked") {
+            if (decodedFrameSeen) updateOverlay(false);
+            statusBadge.textContent = "Mac заблокирован";
+            statusBadge.className = "hud-badge badge-status warn";
+          } else if (msg.state === "host_unlocked" || msg.state === "capturing") {
+            if (decodedFrameSeen) updateOverlay(false);
+            statusBadge.textContent = decodedFrameSeen
+              ? (usingWebRtc ? "WebRTC готов" : "H.264 готов")
+              : "Захват активен...";
+            statusBadge.className = decodedFrameSeen ? "hud-badge badge-status" : "hud-badge badge-status warn";
+          }
+        }
+      }
+
+      function waitForIceGatheringComplete(pc, timeoutMs = 5000) {
+        if (pc.iceGatheringState === "complete") return Promise.resolve();
+        return new Promise((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            pc.removeEventListener("icegatheringstatechange", onChange);
+            clearTimeout(timer);
+            resolve();
+          };
+          const onChange = () => { if (pc.iceGatheringState === "complete") finish(); };
+          const timer = setTimeout(finish, timeoutMs);
+          pc.addEventListener("icegatheringstatechange", onChange);
+        });
+      }
+
+      function waitForDataChannel(channel, timeoutMs = 6000) {
+        if (dataChannelOpen(channel)) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error(`DataChannel ${channel.label} timeout`)), timeoutMs);
+          channel.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
+          channel.addEventListener("error", () => { clearTimeout(timer); reject(new Error(`DataChannel ${channel.label} failed`)); }, { once: true });
+        });
+      }
+
+      async function postWebRtcOffer(path, offer) {
+        const response = await fetch(`${webrtcApiBase}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sdp: offer }),
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`WebRTC signaling ${response.status}`);
+        return response.json();
+      }
+
+      async function collectWebRtcStats() {
+        if (!peerConnection || !usingWebRtc) return;
+        try {
+          const report = await peerConnection.getStats();
+          let inbound = null;
+          let pair = null;
+          report.forEach((stat) => {
+            if (stat.type === "inbound-rtp" && stat.kind === "video") inbound = stat;
+            if (stat.type === "candidate-pair" && stat.state === "succeeded" && (stat.nominated || stat.selected)) pair = stat;
+          });
+          if (inbound) {
+            if (previousInboundStats && inbound.timestamp > previousInboundStats.timestamp) {
+              const dt = (inbound.timestamp - previousInboundStats.timestamp) / 1000;
+              const bytes = Number(inbound.bytesReceived || 0) - Number(previousInboundStats.bytesReceived || 0);
+              if (dt > 0 && bytes >= 0) latestServerStats.bitrateBps = Math.round(bytes * 8 / dt);
+              const emitted = Number(inbound.jitterBufferEmittedCount || 0) - previousInboundStats.emitted;
+              latestServerStats.playoutBufferMs = emitted > 0
+                ? 1000 * (Number(inbound.jitterBufferDelay || 0) - previousInboundStats.jitterDelay) / emitted : 0;
+            }
+            previousInboundStats = {
+              timestamp: inbound.timestamp, bytesReceived: Number(inbound.bytesReceived || 0),
+              emitted: Number(inbound.jitterBufferEmittedCount || 0),
+              jitterDelay: Number(inbound.jitterBufferDelay || 0),
+            };
+            latestServerStats.packetsLost = Number(inbound.packetsLost || 0);
+            latestServerStats.framesDropped = Number(inbound.framesDropped || 0);
+            latestServerStats.freezeCount = Number(inbound.freezeCount || 0);
+            latestServerStats.framesDecoded = Number(inbound.framesDecoded || 0);
+            if (Number.isFinite(Number(inbound.jitter))) {
+              const jitterMs = Number(inbound.jitter) * 1000;
+              lastRttDeltaMs = jitterMs;
+              keepRecent(diagnostics.jitterMs, jitterMs);
+            }
+          }
+          if (pair) {
+            if (Number.isFinite(Number(pair.currentRoundTripTime))) {
+              const rtt = Number(pair.currentRoundTripTime) * 1000;
+              lastRttMs = rtt;
+              keepRecent(diagnostics.rttMs, rtt);
+            }
+            const local = report.get(pair.localCandidateId);
+            const remote = report.get(pair.remoteCandidateId);
+            if (local || remote) {
+              webRtcRoute = `${local?.candidateType || "?"}/${local?.protocol || "?"} → ${remote?.candidateType || "?"}/${remote?.protocol || "?"}`;
+              diagnostics.route = webRtcRoute;
+            }
+          }
+          evaluateNetworkQuality();
+          const now = performance.now();
+          // A static page is healthy. Recover only when the source is producing
+          // frames but the browser has stopped presenting them.
+          if (!document.hidden && lastSourceFrameAt > lastPresentedAt
+              && now - lastSourceFrameAt < 1500 && now - lastPresentedAt > 2500) {
+            if (!frozenSince) frozenSince = now;
+            if (now - lastFreezeRecoveryAt > 2000) {
+              lastFreezeRecoveryAt = now;
+              requestFreshKeyframe("video_stalled");
+              sendTransportMessage({ type: "client_diagnostic", event: "video_stalled",
+                framesDecoded: latestServerStats.framesDecoded,
+                freezeCount: latestServerStats.freezeCount,
+                playoutBufferMs: latestServerStats.playoutBufferMs,
+                rttMs: lastRttMs, route: webRtcRoute });
+            }
+            if (now - frozenSince > 6000) {
+              await closeWebRtc(true);
+              connectWebSocketFallback();
+              return;
+            }
+          }
+          refreshDiagnostics();
+        } catch (_) {}
+      }
+
+      function startWebRtcStats() {
+        clearInterval(webRtcStatsTimer);
+        webRtcStatsTimer = setInterval(collectWebRtcStats, 1000);
+      }
+
+      async function restartWebRtcIce() {
+        if (!peerConnection || !webRtcSessionId || iceRestartInFlight || !usingWebRtc) return;
+        iceRestartInFlight = true;
+        try {
+          const offer = await peerConnection.createOffer({ iceRestart: true });
+          await peerConnection.setLocalDescription(offer);
+          await waitForIceGatheringComplete(peerConnection);
+          const answer = await postWebRtcOffer(`/session/${encodeURIComponent(webRtcSessionId)}/renegotiate`, peerConnection.localDescription);
+          await peerConnection.setRemoteDescription(answer.sdp);
+          requestFreshKeyframe("ice_restart_complete");
+        } catch (error) {
+          console.warn("WebRTC ICE restart failed:", error);
+          await closeWebRtc(false);
+          connectWebSocketFallback();
+        } finally {
+          iceRestartInFlight = false;
+        }
+      }
+
+      async function closeWebRtc(notifyServer = true) {
+        clearInterval(webRtcStatsTimer);
+        webRtcStatsTimer = null;
+        const sessionId = webRtcSessionId;
+        webRtcSessionId = null;
+        const pc = peerConnection;
+        peerConnection = null;
+        reliableChannel = null;
+        motionChannel = null;
+        setVideoTransportActive(false);
+        previousInboundStats = null;
+        lastPresentedAt = lastSourceFrameAt = lastFreezeRecoveryAt = frozenSince = 0;
+        baselineRttMs = null;
+        networkEvaluationAt = -Infinity;
+        try { screenVideo.pause(); } catch (_) {}
+        screenVideo.srcObject = null;
+        if (pc) { try { pc.close(); } catch (_) {} }
+        if (notifyServer && sessionId) {
+          fetch(`${webrtcApiBase}/session/${encodeURIComponent(sessionId)}/close`, { method: "POST", keepalive: true }).catch(() => {});
+        }
+      }
+
+      async function connectWebRtc() {
+        if (forceWebSocket || !("RTCPeerConnection" in window)) return false;
+        setNeutralPageTitle("Native");
+        updateOverlay(true, "Подключение к macOS...", "Установка WebRTC H.264 соединения...");
+        statusBadge.textContent = "WebRTC...";
+        statusBadge.className = "hud-badge badge-status warn";
+        const configResponse = await fetch(`${webrtcApiBase}/config`, { cache: "no-store" });
+        if (!configResponse.ok) throw new Error(`WebRTC config ${configResponse.status}`);
+        const config = await configResponse.json();
+        const pc = new RTCPeerConnection({ iceServers: config.ice_servers || [] });
+        peerConnection = pc;
+        reliableChannel = pc.createDataChannel("input-reliable", { ordered: true });
+        motionChannel = pc.createDataChannel("input-motion", { ordered: false, maxRetransmits: 0 });
+        pc.addTransceiver("video", { direction: "recvonly" });
+
+        reliableChannel.onmessage = (event) => handleServerText(event.data);
+        reliableChannel.onopen = () => {
+          configureStream();
+          requestFreshKeyframe("webrtc_datachannel_ready");
+          sendProbe();
+        };
+        motionChannel.bufferedAmountLowThreshold = 16 * 1024;
+
+        let firstFrameResolve;
+        const firstFrame = new Promise((resolve) => { firstFrameResolve = resolve; });
+        pc.ontrack = (event) => {
+          if (event.track.kind !== "video") return;
+          screenVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
+          screenVideo.onloadedmetadata = () => {
+            streamWidth = screenVideo.videoWidth || streamWidth;
+            streamHeight = screenVideo.videoHeight || streamHeight;
+            resBadge.textContent = `${streamWidth}×${streamHeight}`;
+          };
+          screenVideo.play().catch(() => {});
+          if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+            screenVideo.requestVideoFrameCallback(() => firstFrameResolve());
+          } else {
+            screenVideo.addEventListener("playing", () => firstFrameResolve(), { once: true });
+          }
+        };
+        pc.onconnectionstatechange = () => {
+          if (pc !== peerConnection) return;
+          if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+            setTimeout(() => {
+              if (pc === peerConnection && (pc.connectionState === "failed" || pc.connectionState === "disconnected")) restartWebRtcIce();
+            }, 700);
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await waitForIceGatheringComplete(pc);
+        const answer = await postWebRtcOffer("/offer", pc.localDescription);
+        webRtcSessionId = answer.session_id;
+        await pc.setRemoteDescription(answer.sdp);
+        setVideoTransportActive(true);
+        await waitForDataChannel(reliableChannel);
+        await Promise.race([
+          firstFrame,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("WebRTC first frame timeout")), 7000)),
+        ]);
+        decodedFrameSeen = true;
+        lastPresentedAt = performance.now();
+        updateOverlay(false);
+        statusBadge.textContent = "WebRTC готов";
+        statusBadge.className = "hud-badge badge-status";
+        inputLayer.focus({ preventScroll: true });
+        startVideoFrameObserver();
+        startWebRtcStats();
+        sendProbe();
+        return true;
+      }
+
       async function connect() {
+        decoderFallbackTriggered = false;
+        if (!forceWebSocket) {
+          try {
+            if (await connectWebRtc()) return;
+          } catch (error) {
+            console.warn("WebRTC unavailable, using WebSocket fallback:", error);
+            await closeWebRtc(true);
+          }
+        }
+        connectWebSocketFallback();
+      }
+
+      async function connectWebSocketFallback() {
+        setNeutralPageTitle("WS");
         updateOverlay(true, "Подключение к macOS...", "Установка WebSocket H.264 соединения...");
         statusBadge.textContent = "Подключение...";
         statusBadge.className = "hud-badge badge-status warn";
@@ -756,10 +1523,15 @@
           socket.onopen = () => {
             reconnectAttempts = 0;
             decodedFrameSeen = false;
-            updateOverlay(false);
-            statusBadge.textContent = "60 FPS H.264";
-            statusBadge.className = "hud-badge badge-status";
+            waitingForFreshKeyframe = true;
+            pendingFrameMeta.clear();
+            pendingActions.clear();
+            updateOverlay(true, "Подключение к macOS...", "Соединение установлено, ожидаю первый актуальный кадр...");
+            statusBadge.textContent = "Ожидание кадра...";
+            statusBadge.className = "hud-badge badge-status warn";
             configureStream();
+            requestFreshKeyframe("connection_ready");
+            sendProbe();
             clearTimeout(decoderWatchdog);
             decoderWatchdog = setTimeout(() => {
               if (!decodedFrameSeen) fallbackFromH264("no_decoded_frames");
@@ -768,49 +1540,7 @@
 
           socket.onmessage = async (event) => {
             if (typeof event.data === "string") {
-              try {
-                const msg = JSON.parse(event.data);
-                if (msg.type === "init") {
-                  if (!await initVideoDecoder(msg.codec || activeCodec)) return;
-                  streamWidth = msg.width || streamWidth;
-                  streamHeight = msg.height || streamHeight;
-                  macScreenWidth = msg.screenWidth || macScreenWidth;
-                  macScreenHeight = msg.screenHeight || macScreenHeight;
-                  serverPixelWidth = msg.pixelWidth || serverPixelWidth;
-                  serverPixelHeight = msg.pixelHeight || serverPixelHeight;
-                  resBadge.textContent = `${streamWidth}×${streamHeight}`;
-                  if (msg.screenLocked) {
-                    statusBadge.textContent = "Mac заблокирован";
-                    statusBadge.className = "hud-badge badge-status warn";
-                  }
-                  scheduleSyncConfigure();
-                } else if (msg.type === "codec") {
-                  await initVideoDecoder(msg.codec || activeCodec);
-                } else if (msg.type === "display") {
-                  macScreenWidth = msg.screenWidth || macScreenWidth;
-                  macScreenHeight = msg.screenHeight || macScreenHeight;
-                  serverPixelWidth = msg.pixelWidth || serverPixelWidth;
-                  serverPixelHeight = msg.pixelHeight || serverPixelHeight;
-                  scheduleSyncConfigure();
-                } else if (msg.type === "status") {
-                  if (msg.state === "tcc_required") {
-                    statusBadge.textContent = "Требуется разрешение";
-                    statusBadge.className = "hud-badge badge-status warn";
-                    showPermissionPrompt(msg.message);
-                    if (requestedDisplayName === "Fly Browser" && window.parent !== window) {
-                      window.parent.postMessage({ type: "fly-native-browser-unavailable", reason: "tcc_required" }, window.location.origin);
-                    }
-                  } else if (msg.state === "host_locked") {
-                    updateOverlay(false);
-                    statusBadge.textContent = "Mac заблокирован";
-                    statusBadge.className = "hud-badge badge-status warn";
-                  } else if (msg.state === "host_unlocked" || msg.state === "capturing") {
-                    updateOverlay(false);
-                    statusBadge.textContent = "60 FPS H.264";
-                    statusBadge.className = "hud-badge badge-status";
-                  }
-                }
-              } catch (e) {}
+              await handleServerText(event.data);
               return;
             }
 
@@ -853,19 +1583,38 @@
         }
       }
 
-      function configureStream(force = false) {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          const syncWidth = Math.max(640, Math.min(7680, Math.floor(serverPixelWidth / 2) * 2));
-          const syncHeight = Math.max(360, Math.min(4320, Math.floor(serverPixelHeight / 2) * 2));
-          socket.send(JSON.stringify({
-            type: "configure",
-            width: fitMode === "sync" ? syncWidth : requestedWidth,
-            height: fitMode === "sync" ? syncHeight : requestedHeight,
-            fps: requestedFps,
-            displayName: requestedDisplayName,
-            force
-          }));
+      function calculateCaptureSize() {
+        const profile = qualityProfile();
+        const baseWidth = fitMode === "sync" ? serverPixelWidth : requestedWidth;
+        const baseHeight = fitMode === "sync" ? serverPixelHeight : requestedHeight;
+        let scale = profile.baseScale * adaptiveScaleState.value;
+        if (currentQualityMode === "auto") {
+          const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+          const viewportScale = Math.min(
+            1,
+            Math.max(640, viewport.clientWidth * dpr) / baseWidth,
+            Math.max(360, viewport.clientHeight * dpr) / baseHeight
+          );
+          scale *= Math.max(0.55, viewportScale);
         }
+        const minimumScale = Math.min(1, Math.max(640 / baseWidth, 360 / baseHeight));
+        scale = Math.max(minimumScale, Math.min(1, scale));
+        const width = Math.max(640, Math.min(7680, Math.floor((baseWidth * scale) / 2) * 2));
+        const height = Math.max(360, Math.min(4320, Math.floor((baseHeight * scale) / 2) * 2));
+        return { width, height, fps: profile.fps };
+      }
+
+      function configureStream(force = false) {
+        const settings = calculateCaptureSize();
+        sendTransportMessage({
+          type: "configure",
+          width: settings.width,
+          height: settings.height,
+          fps: settings.fps,
+          bitrate: currentBitrate,
+          displayName: requestedDisplayName,
+          force
+        });
       }
 
       function scheduleSyncConfigure() {
@@ -877,7 +1626,9 @@
       function applyFitMode() {
         const button = document.getElementById("scaleModeBtn");
         const sync = fitMode === "sync";
-        canvas.style.objectFit = fitMode === "fill" ? "fill" : "contain";
+        const objectFit = fitMode === "fill" ? "fill" : "contain";
+        canvas.style.objectFit = objectFit;
+        screenVideo.style.objectFit = objectFit;
         button.textContent = sync ? "Sync" : (fitMode === "fill" ? "Fill" : "Fit");
         button.title = sync
           ? `Sync: поток ${serverPixelWidth}×${serverPixelHeight}, пропорции без растяжения`
@@ -889,9 +1640,11 @@
 
       let mouseMoveRaf = null;
       let lastPendingMousePos = null;
+      const activePointerButtons = new Map();
 
       function getRenderedScreenRect() {
-        const rect = canvas.getBoundingClientRect();
+        const mediaSurface = usingWebRtc ? screenVideo : canvas;
+        const rect = mediaSurface.getBoundingClientRect();
         if (fitMode === "fill" || !streamWidth || !streamHeight) return rect;
 
         const scale = Math.min(rect.width / streamWidth, rect.height / streamHeight);
@@ -912,129 +1665,103 @@
         return { x: normX, y: normY };
       }
 
-      canvas.addEventListener("mousemove", (e) => {
+      inputLayer.addEventListener("pointermove", (e) => {
         const coords = getNormalizedCoords(e);
         lastPendingMousePos = coords;
         if (!mouseMoveRaf) {
           mouseMoveRaf = requestAnimationFrame(() => {
-            if (socket && socket.readyState === WebSocket.OPEN && lastPendingMousePos) {
-              socket.send(JSON.stringify({
+            if (lastPendingMousePos) {
+              registerInput({
                 type: "mousemove",
                 x: lastPendingMousePos.x,
                 y: lastPendingMousePos.y
-              }));
+              }, false);
             }
             mouseMoveRaf = null;
           });
         }
       });
 
-      canvas.addEventListener("mousedown", (e) => {
-        canvas.focus();
+      inputLayer.addEventListener("pointerdown", (e) => {
+        inputLayer.focus({ preventScroll: true });
         e.preventDefault();
+        const button = e.pointerType === "touch" ? 0 : e.button;
+        activePointerButtons.set(e.pointerId, button);
+        try { inputLayer.setPointerCapture(e.pointerId); } catch (_) {}
         const coords = getNormalizedCoords(e);
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: "mousedown",
-            button: e.button,
-            x: coords.x,
-            y: coords.y
-          }));
-        }
+        registerInput({ type: "mousedown", button, x: coords.x, y: coords.y });
       });
 
-      canvas.addEventListener("mouseup", (e) => {
+      function finishPointer(e, cancelled = false) {
         e.preventDefault();
+        const button = activePointerButtons.get(e.pointerId);
+        if (button == null) return;
         const coords = getNormalizedCoords(e);
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: "mouseup",
-            button: e.button,
-            x: coords.x,
-            y: coords.y
-          }));
-        }
-      });
+        registerInput({ type: "mouseup", button, x: coords.x, y: coords.y });
+        activePointerButtons.delete(e.pointerId);
+        try { inputLayer.releasePointerCapture(e.pointerId); } catch (_) {}
+        if (cancelled) sendTransportMessage({ type: "reset_input" });
+      }
 
-      canvas.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-      });
+      inputLayer.addEventListener("pointerup", (e) => finishPointer(e));
+      inputLayer.addEventListener("pointercancel", (e) => finishPointer(e, true));
+      inputLayer.addEventListener("contextmenu", (e) => e.preventDefault());
 
-      canvas.addEventListener("wheel", (e) => {
+      inputLayer.addEventListener("wheel", (e) => {
         e.preventDefault();
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: "wheel",
-            dx: -e.deltaX,
-            dy: -e.deltaY
-          }));
-        }
+        const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : (e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? Math.max(360, viewport.clientHeight) : 1);
+        registerInput({ type: "wheel", dx: -e.deltaX * unit, dy: -e.deltaY * unit });
       }, { passive: false });
 
-      // Keyboard
-      canvas.addEventListener("keydown", (e) => {
-        // Allow F12 / DevTools
+      function keyModifiers(e) {
+        return { meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+      }
+
+      inputLayer.addEventListener("keydown", (e) => {
         if (e.key === "F12") return;
         e.preventDefault();
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: "keydown",
-            code: e.code,
-            key: e.key,
-            modifiers: {
-              meta: e.metaKey,
-              ctrl: e.ctrlKey,
-              alt: e.altKey,
-              shift: e.shiftKey
-            }
-          }));
+        if (e.isComposing || e.key === "Process") return;
+        if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          registerInput({ type: "text", text: e.key });
+          return;
         }
+        registerInput({ type: "keydown", code: e.code, key: e.key, modifiers: keyModifiers(e) });
       });
 
-      canvas.addEventListener("keyup", (e) => {
+      inputLayer.addEventListener("keyup", (e) => {
+        if (e.isComposing || e.key === "Process") return;
         e.preventDefault();
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: "keyup",
-            code: e.code,
-            key: e.key,
-            modifiers: {
-              meta: e.metaKey,
-              ctrl: e.ctrlKey,
-              alt: e.altKey,
-              shift: e.shiftKey
-            }
-          }));
-        }
+        if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+        registerInput({ type: "keyup", code: e.code, key: e.key, modifiers: keyModifiers(e) });
+      });
+
+      function resetRemoteInput() {
+        activePointerButtons.clear();
+        sendTransportMessage({ type: "reset_input" });
+      }
+      window.addEventListener("blur", resetRemoteInput);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") resetRemoteInput();
       });
 
       // Quick Toolbar actions
       document.getElementById("spotlightBtn").onclick = () => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "keydown", code: "Space", key: " ", modifiers: { meta: true } }));
-          setTimeout(() => {
-            socket.send(JSON.stringify({ type: "keyup", code: "Space", key: " ", modifiers: { meta: true } }));
-          }, 50);
-        }
+        registerInput({ type: "keydown", code: "Space", key: " ", modifiers: { meta: true } });
+        setTimeout(() => registerInput({ type: "keyup", code: "Space", key: " ", modifiers: { meta: true } }), 50);
       };
 
       document.getElementById("appSwitcherBtn").onclick = () => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "keydown", code: "Tab", key: "Tab", modifiers: { meta: true } }));
-          setTimeout(() => {
-            socket.send(JSON.stringify({ type: "keyup", code: "Tab", key: "Tab", modifiers: { meta: true } }));
-          }, 50);
-        }
+        registerInput({ type: "keydown", code: "Tab", key: "Tab", modifiers: { meta: true } });
+        setTimeout(() => registerInput({ type: "keyup", code: "Tab", key: "Tab", modifiers: { meta: true } }), 50);
       };
 
       document.getElementById("pasteBtn").onclick = async () => {
         try {
           if (navigator.clipboard && navigator.clipboard.readText) {
             const text = await navigator.clipboard.readText();
-            if (text && socket && socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: "clipboard", text }));
-              return;
-            }
+            if (text && registerInput({ type: "clipboard", text })) return;
           }
         } catch (e) {}
         window.flyOpenKeyboard();
@@ -1047,11 +1774,10 @@
 
       document.getElementById("clipboardSendBtn").onclick = () => {
         const text = clipboardText.value;
-        if (text && socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "clipboard", text }));
-        }
+        if (text) registerInput({ type: "clipboard", text });
         clipboardText.value = "";
         clipboardModal.classList.add("hidden");
+        inputLayer.focus({ preventScroll: true });
       };
 
       document.getElementById("scaleModeBtn").onclick = (e) => {

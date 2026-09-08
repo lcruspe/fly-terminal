@@ -76,6 +76,8 @@
 	@desktopWs path /desktop-ws /desktop-ws/*
 	@desktopStreamWs path /desktop-stream-ws /desktop-stream-ws/*
 	@nativeBrowserStreamWs path /native-browser-stream-ws /native-browser-stream-ws/*
+	@desktopWebRtcApi path /desktop-webrtc-api /desktop-webrtc-api/*
+	@nativeBrowserWebRtcApi path /native-browser-webrtc-api /native-browser-webrtc-api/*
 	@desktopStreamApi path /api/desktop/stream/*
 	@selkiesWs path /ws /data /health /metrics /signaling /webrtc /audio /video
 
@@ -93,6 +95,14 @@
 		handle @nativeBrowserStreamWs {
 			uri strip_prefix /native-browser-stream-ws
 			reverse_proxy 127.0.0.1:{$FLY_NATIVE_BROWSER_STREAMER_PORT:5906}
+		}
+		handle @desktopWebRtcApi {
+			uri strip_prefix /desktop-webrtc-api
+			reverse_proxy 127.0.0.1:{$FLY_WEBRTC_PORT:5907}
+		}
+		handle @nativeBrowserWebRtcApi {
+			uri strip_prefix /native-browser-webrtc-api
+			reverse_proxy 127.0.0.1:{$FLY_NATIVE_BROWSER_WEBRTC_PORT:5908}
 		}
 		handle @desktopStreamApi {
 			uri strip_prefix /api/desktop/stream

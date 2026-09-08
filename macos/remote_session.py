@@ -2,7 +2,7 @@ import time
 
 DEFAULT_IDLE_TIMEOUT_SECONDS = 300
 USER_ACTIVITY_MESSAGE_TYPES = frozenset({
-    "mousemove", "mousedown", "mouseup", "wheel", "keydown", "keyup", "clipboard"
+    "mousemove", "mousedown", "mouseup", "wheel", "keydown", "keyup", "text", "clipboard"
 })
 
 
