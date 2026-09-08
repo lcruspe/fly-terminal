@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>macOS Remote Desktop (H.264 / WebRTC)</title>
+  <title>RDC Native</title>
   <style>
     :root {
       --bg: #121417;
@@ -370,6 +370,7 @@
       const requestedFps = [15, 30, 45, 60].includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
       const displayParam = urlParams.get("display") || "";
       const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
+      document.title = requestedDisplayName === "Fly Browser" ? "Browser Native" : "RDC Native";
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
         ? urlParams.get("scale") : "contain";
       

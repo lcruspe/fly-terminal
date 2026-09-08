@@ -12,7 +12,8 @@ test('native Chrome is the primary browser backend and Chromium remains fallback
   assert.match(html, /fallbackUrl:/);
   assert.match(html, /function browserBackendState/);
   assert.match(html, /browser-backend-toggle/);
-  assert.match(html, /Chromium · fallback/);
+  assert.match(html, /Browser Native/);
+  assert.match(html, /Browser Fallback/);
 });
 
 test('native browser uses a dedicated H.264 stream route', () => {
@@ -79,6 +80,23 @@ test('encoder restarts reuse one Unix socket server', () => {
   assert.match(streamer, /self\.unix_server = await asyncio\.start_unix_server/);
 });
 
+
+test('remote access tabs use short neutral titles', () => {
+  const vnc = fs.readFileSync(new URL('../vendor/novnc/vnc.html', import.meta.url), 'utf8');
+  const gateway = fs.readFileSync(new URL('../macos/gateway/admin.html', import.meta.url), 'utf8');
+  const sprut = fs.readFileSync(new URL('../macos/gateway/spruthub.html', import.meta.url), 'utf8');
+  assert.match(webrtc, /<title>RDC Native<\/title>/);
+  assert.match(webrtc, /document\.title = requestedDisplayName === "Fly Browser" \? "Browser Native" : "RDC Native"/);
+  assert.match(vnc, /<title>RDC VNC<\/title>/);
+  assert.match(html, /RDC Native/);
+  assert.match(html, /RDC VNC/);
+  assert.match(html, /Browser Native/);
+  assert.match(html, /Browser Fallback/);
+  assert.match(gateway, /<title>Gateway<\/title>/);
+  assert.match(gateway, /<strong>Browser Native<\/strong>/);
+  assert.match(gateway, /<strong>Browser Fallback<\/strong>/);
+  assert.match(sprut, /<title>Sprut<\/title>/);
+});
 
 test('remote desktop HUD stays compact until explicitly opened', () => {
   assert.match(webrtc, /id="hudChip"/);

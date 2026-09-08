@@ -3611,7 +3611,7 @@
 
     function addMacAppTab(appName) {
       focusMacApp(appName);
-      const tab = addDesktopTab(`App: ${appName}`, `App: ${appName}`, `macOS · ${appName}`, "Fly Remote");
+      const tab = addDesktopTab(`App: ${appName}`, `App: ${appName}`, appName, "Fly Remote");
       tab.type = "mac-app";
       tab.appName = appName;
       setStatusText(`Открыто приложение ${appName}`, 2500);
@@ -5397,7 +5397,8 @@
       return {
         backend: normalized,
         url: buildBrowserUrl(normalized),
-        subtext: normalized === "native" ? "нативный Chrome · H.264" : "Chromium · fallback"
+        label: normalized === "native" ? "Browser Native" : "Browser Fallback",
+        subtext: normalized === "native" ? "WebRTC" : "Chromium"
       };
     }
 
@@ -5405,11 +5406,14 @@
       if (!tab || tab.type !== "browser") return;
       const state = browserBackendState(backend);
       tab.browserBackend = state.backend;
+      if (tab.autoBackendLabel) tab.label = state.label;
       const iframe = tab.wrapper?.querySelector("iframe");
       const directLink = tab.wrapper?.querySelector("a.frame-control[target='_blank']");
+      const labelText = tab.wrapper?.querySelector(".tab-label-text");
       const subtext = tab.wrapper?.querySelector(".tab-subtext");
       const toggle = tab.wrapper?.querySelector(".browser-backend-toggle");
       if (directLink) directLink.href = state.url;
+      if (labelText) labelText.textContent = tab.customLabel || tab.label;
       if (subtext) subtext.textContent = state.subtext;
       if (toggle) {
         const target = state.backend === "native" ? "Chromium fallback" : "нативный Chrome";
@@ -5419,12 +5423,15 @@
       if (reload && iframe && iframe.src !== new URL(state.url, window.location.href).href) {
         iframe.src = state.url;
       }
+      if (tab.autoBackendLabel) renderTabs();
     }
 
     function addBrowserTab(label = "Browser", customLabel = null, subtext = null, backend = browserConfig.backend || "native") {
       const id = createId();
       const state = browserBackendState(backend);
       const browserUrl = state.url;
+      const autoBackendLabel = !customLabel && label === "Browser";
+      const displayLabel = autoBackendLabel ? state.label : (customLabel || label);
       const displaySubtext = subtext || state.subtext;
       const canSwitchBackend = Boolean(browserConfig.nativeUrl && browserConfig.fallbackUrl);
       const wrapper = document.createElement("div");
@@ -5433,7 +5440,7 @@
       wrapper.innerHTML = `
         <div class="terminal-topbar">
           <div class="terminal-heading">
-            <strong class="tab-label-text">${customLabel || label}</strong>
+            <strong class="tab-label-text">${displayLabel}</strong>
             <span class="tab-subtext">${displaySubtext}</span>
           </div>
           <div class="terminal-actions">
@@ -5454,7 +5461,7 @@
         </div>
       `;
 
-      const tab = { id, type: "browser", sessionId: null, label, customLabel, wrapper, browserBackend: state.backend };
+      const tab = { id, type: "browser", sessionId: null, label: displayLabel, customLabel, wrapper, browserBackend: state.backend, autoBackendLabel };
       tabs.push(tab);
       terminalContainer.appendChild(wrapper);
 
@@ -5509,17 +5516,20 @@
       return tab;
     }
 
-    function addDesktopTab(label = "Mac Desktop", customLabel = null, subtext = "macOS Screen Sharing", targetDisplay = "") {
+    function addDesktopTab(label = null, customLabel = null, subtext = null, targetDisplay = "") {
       const id = createId();
       const desktopUrl = buildDesktopUrl(targetDisplay);
+      const defaultLabel = preferences.desktopMode === "vnc" ? "RDC VNC" : "RDC Native";
+      const displayLabel = customLabel || label || defaultLabel;
+      const displaySubtext = subtext || (preferences.desktopMode === "vnc" ? "VNC" : "WebRTC");
       const wrapper = document.createElement("div");
       wrapper.className = "terminal-frame-wrapper";
       wrapper.id = `wrapper-${id}`;
       wrapper.innerHTML = `
         <div class="terminal-topbar">
           <div class="terminal-heading">
-            <strong class="tab-label-text">${customLabel || label}</strong>
-            <span class="tab-subtext">${subtext}</span>
+            <strong class="tab-label-text">${displayLabel}</strong>
+            <span class="tab-subtext">${displaySubtext}</span>
           </div>
           <div class="terminal-actions">
             <a class="frame-control" href="${desktopUrl}" target="_blank" rel="noreferrer noopener" title="Открыть в отдельной вкладке" aria-label="Открыть в отдельной вкладке" style="text-decoration:none;">
@@ -5536,7 +5546,7 @@
         </div>
       `;
 
-      const tab = { id, type: "desktop", sessionId: null, label, customLabel, targetDisplay, wrapper };
+      const tab = { id, type: "desktop", sessionId: null, label: displayLabel, customLabel, targetDisplay, wrapper, autoDesktopLabel: !customLabel && !label };
       tabs.push(tab);
       terminalContainer.appendChild(wrapper);
 
@@ -6054,8 +6064,16 @@
           if (iframe) iframe.src = newUrl;
           const link = tab.wrapper?.querySelector(".frame-control[target='_blank']");
           if (link) link.href = newUrl;
+          if (tab.type === "desktop" && tab.autoDesktopLabel) {
+            tab.label = preferences.desktopMode === "vnc" ? "RDC VNC" : "RDC Native";
+            const labelText = tab.wrapper?.querySelector(".tab-label-text");
+            const subtext = tab.wrapper?.querySelector(".tab-subtext");
+            if (labelText) labelText.textContent = tab.label;
+            if (subtext) subtext.textContent = preferences.desktopMode === "vnc" ? "VNC" : "WebRTC";
+          }
         }
       });
+      renderTabs();
       const openDesktopTabBtn = document.getElementById("openDesktopTab");
       if (openDesktopTabBtn && desktopConfig.enabled) openDesktopTabBtn.href = buildDesktopUrl();
     }
