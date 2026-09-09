@@ -17,6 +17,7 @@ NATIVE_BROWSER_LABEL="ai.kruspe.fly-terminal.native-browser"
 NATIVE_BROWSER_STREAMER_LABEL="ai.kruspe.fly-terminal.native-browser-streamer"
 NATIVE_BROWSER_WEBRTC_LABEL="ai.kruspe.fly-terminal.native-browser-webrtc"
 SPRUTHUB_LABEL="ai.kruspe.fly-terminal.spruthub"
+ORACLE_RELAY_LABEL="ai.kruspe.fly-terminal.oracle-relay"
 TTYD_PLIST="${LAUNCH_AGENTS_DIR}/${TTYD_LABEL}.plist"
 CADDY_PLIST="${LAUNCH_AGENTS_DIR}/${CADDY_LABEL}.plist"
 BROWSER_PLIST="${LAUNCH_AGENTS_DIR}/${BROWSER_LABEL}.plist"
@@ -27,6 +28,7 @@ NATIVE_BROWSER_PLIST="${LAUNCH_AGENTS_DIR}/${NATIVE_BROWSER_LABEL}.plist"
 NATIVE_BROWSER_STREAMER_PLIST="${LAUNCH_AGENTS_DIR}/${NATIVE_BROWSER_STREAMER_LABEL}.plist"
 NATIVE_BROWSER_WEBRTC_PLIST="${LAUNCH_AGENTS_DIR}/${NATIVE_BROWSER_WEBRTC_LABEL}.plist"
 SPRUTHUB_PLIST="${LAUNCH_AGENTS_DIR}/${SPRUTHUB_LABEL}.plist"
+ORACLE_RELAY_PLIST="${LAUNCH_AGENTS_DIR}/${ORACLE_RELAY_LABEL}.plist"
 UID_VALUE="$(id -u)"
 
 mkdir -p "${CONFIG_DIR}" "${LOG_DIR}" "${LAUNCH_AGENTS_DIR}" "${HOME}/.local/share/fly-terminal/bash_history" "${HOME}/.local/share/fly-terminal/browser-profile" "${HOME}/.local/share/fly-terminal/native-browser-profile" "${HOME}/.local/share/caddy"
@@ -79,6 +81,13 @@ FLY_SPRUTHUB_FORWARD_HOST=127.0.0.1
 FLY_SPRUTHUB_FORWARD_PORT=7693
 FLY_SPRUTHUB_TARGET_HOST=192.168.1.100
 FLY_SPRUTHUB_TARGET_PORT=80
+FLY_ORACLE_RELAY_ENABLED=0
+FLY_ORACLE_RELAY_HOST=129.158.49.130
+FLY_ORACLE_RELAY_USER=opc
+FLY_ORACLE_RELAY_KEY=$HOME/.ssh/fly-terminal-oracle-relay
+FLY_ORACLE_RELAY_GATEWAY_PORT=18080
+FLY_ORACLE_RELAY_TERMINAL_PORT=18081
+FLY_ORACLE_RELAY_SPRUTHUB_PORT=18082
 EOF
   chmod 600 "${ENV_FILE}"
 fi
@@ -164,6 +173,13 @@ ensure_env_line "FLY_SPRUTHUB_FORWARD_HOST" "127.0.0.1"
 ensure_env_line "FLY_SPRUTHUB_FORWARD_PORT" "7693"
 ensure_env_line "FLY_SPRUTHUB_TARGET_HOST" "192.168.1.100"
 ensure_env_line "FLY_SPRUTHUB_TARGET_PORT" "80"
+ensure_env_line "FLY_ORACLE_RELAY_ENABLED" "0"
+ensure_env_line "FLY_ORACLE_RELAY_HOST" "129.158.49.130"
+ensure_env_line "FLY_ORACLE_RELAY_USER" "opc"
+ensure_env_line "FLY_ORACLE_RELAY_KEY" "\$HOME/.ssh/fly-terminal-oracle-relay"
+ensure_env_line "FLY_ORACLE_RELAY_GATEWAY_PORT" "18080"
+ensure_env_line "FLY_ORACLE_RELAY_TERMINAL_PORT" "18081"
+ensure_env_line "FLY_ORACLE_RELAY_SPRUTHUB_PORT" "18082"
 
 set -a
 . "${ENV_FILE}"
@@ -186,7 +202,7 @@ else
   printf 'FLY_BROWSER_BASIC_AUTH=%s\n' "${browser_basic_auth}" >>"${ENV_FILE}"
 fi
 
-chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-native-browser.sh" "${SCRIPT_DIR}/launch-native-browser-streamer.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/build-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-native-browser-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-spruthub-forwarder.sh" "${SCRIPT_DIR}/spruthub-forwarder.py" "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" "${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" "${SCRIPT_DIR}/set-password.sh"
+chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-native-browser.sh" "${SCRIPT_DIR}/launch-native-browser-streamer.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/build-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-native-browser-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-spruthub-forwarder.sh" "${SCRIPT_DIR}/launch-oracle-relay.sh" "${SCRIPT_DIR}/spruthub-forwarder.py" "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" "${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" "${SCRIPT_DIR}/set-password.sh"
 
 # WebRTC bridge собирается на этапе установки/обновления. LaunchAgent только запускает
 # готовый бинарник с WD и никогда не блокируется на Cargo/lock во время старта сервиса.
@@ -518,6 +534,38 @@ cat >"${SPRUTHUB_PLIST}" <<EOF
 </plist>
 EOF
 
+cat >"${ORACLE_RELAY_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${ORACLE_RELAY_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${SCRIPT_DIR}/launch-oracle-relay.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>${REPO_ROOT}</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/oracle-relay.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/oracle-relay.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>HOME</key>
+      <string>${HOME}</string>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
 launchctl bootout "gui/${UID_VALUE}/${TTYD_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${CADDY_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${BROWSER_LABEL}" 2>/dev/null || true
@@ -528,6 +576,7 @@ launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_STREAMER_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_WEBRTC_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${SPRUTHUB_LABEL}" 2>/dev/null || true
+launchctl bootout "gui/${UID_VALUE}/${ORACLE_RELAY_LABEL}" 2>/dev/null || true
 
 bootstrap_agent "${TTYD_LABEL}" "${TTYD_PLIST}"
 bootstrap_agent "${CADDY_LABEL}" "${CADDY_PLIST}"
@@ -549,6 +598,10 @@ kickstart_agent "${NATIVE_BROWSER_LABEL}" "${NATIVE_BROWSER_PLIST}"
 kickstart_agent "${NATIVE_BROWSER_STREAMER_LABEL}" "${NATIVE_BROWSER_STREAMER_PLIST}"
 kickstart_agent "${NATIVE_BROWSER_WEBRTC_LABEL}" "${NATIVE_BROWSER_WEBRTC_PLIST}"
 kickstart_agent "${SPRUTHUB_LABEL}" "${SPRUTHUB_PLIST}"
+if [ "${FLY_ORACLE_RELAY_ENABLED:-0}" = "1" ]; then
+  bootstrap_agent "${ORACLE_RELAY_LABEL}" "${ORACLE_RELAY_PLIST}"
+  kickstart_agent "${ORACLE_RELAY_LABEL}" "${ORACLE_RELAY_PLIST}"
+fi
 
 # Старый прямой порт Remote Browser больше не используется: Browser живёт внутри :8443.
 tailscale funnel --https=9443 off >/dev/null 2>&1 || true

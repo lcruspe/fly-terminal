@@ -1,0 +1,33 @@
+{
+	auto_https disable_redirects
+}
+
+(relay_common) {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	encode zstd gzip
+}
+
+https://{$FLY_ORACLE_PUBLIC_HOST:129-158-49-130.sslip.io} {
+	import relay_common
+	reverse_proxy 127.0.0.1:18080 {
+		flush_interval -1
+	}
+}
+
+https://{$FLY_ORACLE_PUBLIC_HOST:129-158-49-130.sslip.io}:8443 {
+	import relay_common
+	reverse_proxy 127.0.0.1:18081 {
+		flush_interval -1
+	}
+}
+
+https://{$FLY_ORACLE_PUBLIC_HOST:129-158-49-130.sslip.io}:10000 {
+	import relay_common
+	reverse_proxy 127.0.0.1:18082 {
+		flush_interval -1
+	}
+}

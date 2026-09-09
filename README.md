@@ -188,6 +188,13 @@ cd /Users/kruspe/CodexProjects/fly-terminal-live
 | `FLY_SPRUTHUB_FORWARD_PORT` | `7693` | Локальный порт TCP-forwarder. |
 | `FLY_SPRUTHUB_TARGET_HOST` | `192.168.1.100` | LAN-адрес Sprut.Hub. |
 | `FLY_SPRUTHUB_TARGET_PORT` | `80` | LAN-порт Sprut.Hub. |
+| `FLY_ORACLE_RELAY_ENABLED` | `0` | Включает постоянный reverse SSH-туннель через Oracle relay. На основном Mac mini установлен `1`. |
+| `FLY_ORACLE_RELAY_HOST` | `129.158.49.130` | Публичный IP Oracle relay. |
+| `FLY_ORACLE_RELAY_USER` | `opc` | SSH-пользователь relay-сервера. |
+| `FLY_ORACLE_RELAY_KEY` | `$HOME/.ssh/fly-terminal-oracle-relay` | Отдельный restricted SSH-ключ без shell-доступа. |
+| `FLY_ORACLE_RELAY_GATEWAY_PORT` | `18080` | Loopback reverse-forward Oracle для Caddy `8080`. |
+| `FLY_ORACLE_RELAY_TERMINAL_PORT` | `18081` | Loopback reverse-forward Oracle для Caddy `8081`. |
+| `FLY_ORACLE_RELAY_SPRUTHUB_PORT` | `18082` | Loopback reverse-forward Oracle для Caddy `8082`. |
 | `FLY_BROWSER_URL` | `/browser/` | URL remote browser внутри shell UI. Для iframe используется same-origin proxy через Caddy. |
 | `FLY_BROWSER_IMAGE` | `lscr.io/linuxserver/chromium:latest` | Docker image для remote Chromium. На Apple Silicon используется arm64 image без qemu. |
 | `FLY_BROWSER_HOST_PORT` | `7690` | Локальный порт Mac mini, на который проброшен web UI контейнера browser. |
@@ -257,6 +264,8 @@ HUD H.264-клиента по умолчанию свёрнут до небол�
 | `https://<host>:10000/` | Sprut.Hub напрямую | `TERMINAL_USER` или `FLY_SPRUTHUB_AUTH_USER` |
 
 Basic Auth включён отдельно на каждом публичном порту. Caddy не использует cookie для обхода авторизации: если браузер не хранит Basic Auth для конкретного origin, он получает `401` и показывает стандартный запрос логина и пароля. Кэширование самих Basic Auth credentials выполняет браузер и привязано к origin, поэтому при первом переходе на другой порт запрос может появиться повторно.
+
+Для доступа через Oracle используется та же схема портов: `https://129-158-49-130.sslip.io/`, `:8443` и `:10000`. Oracle не запускает копию Fly Terminal: Caddy на VM проксирует три loopback-порта reverse SSH обратно на Mac mini. Полная схема, ограничения SSH-ключа и диагностика описаны в [ORACLE_RELAY.md](ORACLE_RELAY.md).
 
 ---
 
