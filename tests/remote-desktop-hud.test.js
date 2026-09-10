@@ -20,10 +20,16 @@ test('expanded HUD exposes live FPS, resolution and idle timeout controls', () =
   assert.match(client, /function disconnectForIdle\(/);
 });
 
-test('server lowers FPS after 30 seconds and ignores bridge keepalive as activity', () => {
-  assert.match(streamer, /IDLE_FPS_AFTER_SECONDS = .*DEFAULT_IDLE_FPS_AFTER_SECONDS/);
-  assert.match(streamer, /MIN_STREAM_FPS = min\(VALID_STREAM_FPS\)/);
-  assert.match(streamer, /idle_guard\.should_reduce_fps\(IDLE_FPS_AFTER_SECONDS\)/);
+test('server enables a deep idle profile after 30 seconds and ignores bridge keepalive as activity', () => {
+  assert.match(streamer, /IDLE_PROFILE_AFTER_SECONDS = .*DEFAULT_IDLE_FPS_AFTER_SECONDS/);
+  assert.match(streamer, /IDLE_PROFILE_WIDTH = 640/);
+  assert.match(streamer, /IDLE_PROFILE_HEIGHT = 360/);
+  assert.match(streamer, /IDLE_PROFILE_FPS = 5/);
+  assert.match(streamer, /IDLE_PROFILE_BITRATE = 300_000/);
+  assert.match(streamer, /requestedBitrate.*self\.requested_bitrate/);
+  assert.match(client, /msg\.requestedBitrate \|\| msg\.bitrate/);
+  assert.match(streamer, /idle_guard\.should_reduce_fps\(IDLE_PROFILE_AFTER_SECONDS\)/);
+  assert.match(streamer, /await self\.set_idle_profile\(False\)/);
   const keepalive = streamer.match(/if msg_type == "bridge_keepalive"[\s\S]{0,120}?continue/)?.[0] || '';
   assert.ok(keepalive);
   assert.doesNotMatch(keepalive, /mark_activity/);

@@ -47,8 +47,11 @@ REMOTE_IDLE_TIMEOUT_SECONDS = int(os.environ.get("FLY_DESKTOP_IDLE_TIMEOUT_SECON
 H264_CODEC = os.environ.get("FLY_STREAMER_H264_CODEC", "avc1.4D002A")
 SOCKET_PATH = os.environ.get("FLY_STREAMER_SOCKET_PATH", "/tmp/fly-mac-stream.sock")
 VALID_STREAM_FPS = {15, 30, 45, 60}
-MIN_STREAM_FPS = min(VALID_STREAM_FPS)
-IDLE_FPS_AFTER_SECONDS = max(1, int(os.environ.get("FLY_DESKTOP_IDLE_FPS_AFTER_SECONDS", DEFAULT_IDLE_FPS_AFTER_SECONDS)))
+IDLE_PROFILE_WIDTH = 640
+IDLE_PROFILE_HEIGHT = 360
+IDLE_PROFILE_FPS = 5
+IDLE_PROFILE_BITRATE = 300_000
+IDLE_PROFILE_AFTER_SECONDS = max(1, int(os.environ.get("FLY_DESKTOP_IDLE_FPS_AFTER_SECONDS", DEFAULT_IDLE_FPS_AFTER_SECONDS)))
 VALID_DISPLAY_NAMES = {"", "Fly Remote", "Fly Browser"}
 TARGET_DISPLAY_BOUNDS = [0.0, 0.0, 2560.0, 1440.0]
 TARGET_DISPLAY_PIXELS = [2560, 1440]
@@ -392,7 +395,8 @@ class StreamServer:
         self.requested_width = TARGET_WIDTH
         self.requested_height = TARGET_HEIGHT
         self.requested_fps = TARGET_FPS
-        self.idle_fps_reduced = False
+        self.requested_bitrate = TARGET_BITRATE
+        self.idle_profile_active = False
         self.target_bitrate = TARGET_BITRATE
         self.requested_display_name = os.environ.get("FLY_STREAMER_DISPLAY_NAME", "")
         self.follow_main_when_locked = os.environ.get("FLY_STREAMER_FOLLOW_MAIN_WHEN_LOCKED", "0") == "1"
@@ -541,8 +545,12 @@ class StreamServer:
         self.last_keyframe_request_ns = now_ns
         asyncio.create_task(self._send_encoder_command({"type": "keyframe", "reason": reason}))
 
-    async def set_bitrate(self, bitrate: int):
+    async def set_bitrate(self, bitrate: int, track_request: bool = True):
         bitrate = max(MIN_BITRATE, min(MAX_BITRATE, int(bitrate)))
+        if track_request:
+            self.requested_bitrate = bitrate
+            if self.idle_profile_active:
+                bitrate = IDLE_PROFILE_BITRATE
         if bitrate == self.target_bitrate:
             return True
         self.target_bitrate = bitrate
@@ -624,17 +632,18 @@ class StreamServer:
                 await asyncio.to_thread(encoder_proc.wait)
 
     async def configure_encoder(self, width: int, height: int, fps: int, display_name: str = "", force: bool = False, track_request: bool = True, bitrate: int = 0):
-        if not valid_stream_dimensions(width, height) or fps not in VALID_STREAM_FPS or display_name not in VALID_DISPLAY_NAMES:
+        allowed_fps = VALID_STREAM_FPS if track_request else (VALID_STREAM_FPS | {IDLE_PROFILE_FPS})
+        if not valid_stream_dimensions(width, height) or fps not in allowed_fps or display_name not in VALID_DISPLAY_NAMES:
             return False
-        if bitrate:
-            await self.set_bitrate(bitrate)
         if track_request:
             self.requested_width = width
             self.requested_height = height
             self.requested_fps = fps
             self.requested_display_name = display_name
-            if self.idle_fps_reduced:
-                fps = MIN_STREAM_FPS
+            if self.idle_profile_active:
+                width, height, fps = IDLE_PROFILE_WIDTH, IDLE_PROFILE_HEIGHT, IDLE_PROFILE_FPS
+        if bitrate:
+            await self.set_bitrate(bitrate, track_request=track_request)
         effective_display = self._effective_display_name()
         async with self.encoder_lock:
             if not force and (width, height, fps, effective_display) == (self.target_width, self.target_height, self.target_fps, self.target_display_name):
@@ -658,35 +667,45 @@ class StreamServer:
                 "height": height,
                 "fps": fps,
                 "fpsCap": self.requested_fps,
-                "idleFpsReduced": self.idle_fps_reduced,
+                "idleProfileActive": self.idle_profile_active,
                 "screenWidth": get_screen_dimensions()[0],
                 "screenHeight": get_screen_dimensions()[1],
                 "pixelWidth": TARGET_DISPLAY_PIXELS[0],
                 "pixelHeight": TARGET_DISPLAY_PIXELS[1],
                 "screenLocked": self.screen_locked,
                 "bitrate": self.target_bitrate,
+                "requestedBitrate": self.requested_bitrate,
             })
             return True
 
-    async def set_idle_fps_reduced(self, reduced: bool):
-        reduced = bool(reduced)
-        if reduced == self.idle_fps_reduced:
+    async def set_idle_profile(self, active: bool):
+        active = bool(active)
+        if active == self.idle_profile_active:
             return
-        self.idle_fps_reduced = reduced
+        self.idle_profile_active = active
+        width = IDLE_PROFILE_WIDTH if active else self.requested_width
+        height = IDLE_PROFILE_HEIGHT if active else self.requested_height
+        fps = IDLE_PROFILE_FPS if active else self.requested_fps
+        bitrate = IDLE_PROFILE_BITRATE if active else self.requested_bitrate
         if self.clients:
             await self.configure_encoder(
-                self.requested_width,
-                self.requested_height,
-                MIN_STREAM_FPS if reduced else self.requested_fps,
-                self.requested_display_name,
-                track_request=False,
+                width, height, fps, self.requested_display_name,
+                track_request=False, bitrate=bitrate,
             )
+        else:
+            self.target_width, self.target_height, self.target_fps = width, height, fps
+            self.target_bitrate = bitrate
+            self.target_display_name = self._effective_display_name()
         await self.broadcast_json({
             "type": "stream_policy",
-            "idleFpsReduced": reduced,
+            "idleProfileActive": active,
             "fpsCap": self.requested_fps,
-            "effectiveFps": MIN_STREAM_FPS if reduced else self.requested_fps,
-            "idleFpsAfterSeconds": IDLE_FPS_AFTER_SECONDS,
+            "requestedBitrate": self.requested_bitrate,
+            "effectiveWidth": width,
+            "effectiveHeight": height,
+            "effectiveFps": fps,
+            "effectiveBitrate": bitrate,
+            "idleProfileAfterSeconds": IDLE_PROFILE_AFTER_SECONDS,
         })
 
     async def monitor_lock_state(self):
@@ -897,13 +916,14 @@ class StreamServer:
             "height": self.target_height,
             "fps": self.target_fps,
             "fpsCap": self.requested_fps,
-            "idleFpsReduced": self.idle_fps_reduced,
+            "idleProfileActive": self.idle_profile_active,
             "bitrate": self.target_bitrate,
             "screenWidth": screen_w,
             "screenHeight": screen_h,
             "pixelWidth": TARGET_DISPLAY_PIXELS[0],
             "pixelHeight": TARGET_DISPLAY_PIXELS[1],
             "screenLocked": self.screen_locked,
+            "requestedBitrate": self.requested_bitrate,
             "clientId": state.client_id,
             "canControl": self._is_control_owner(state),
         })
@@ -915,8 +935,11 @@ class StreamServer:
         self._enqueue_json(state, {
             "type": "session_policy",
             "idleTimeoutSeconds": idle_guard.timeout_seconds,
-            "idleFpsAfterSeconds": IDLE_FPS_AFTER_SECONDS,
-            "minimumFps": MIN_STREAM_FPS,
+            "idleFpsAfterSeconds": IDLE_PROFILE_AFTER_SECONDS,
+            "idleFps": IDLE_PROFILE_FPS,
+            "idleWidth": IDLE_PROFILE_WIDTH,
+            "idleHeight": IDLE_PROFILE_HEIGHT,
+            "idleBitrate": IDLE_PROFILE_BITRATE,
         })
         try:
             while True:
@@ -926,10 +949,10 @@ class StreamServer:
                     logger.info("Remote desktop session closed after %ds of inactivity", idle_guard.timeout_seconds)
                     break
                 wait_timeout = remaining
-                if self._is_control_owner(state) and not self.idle_fps_reduced:
-                    until_low_fps = max(0.0, IDLE_FPS_AFTER_SECONDS - idle_guard.idle_for())
+                if self._is_control_owner(state) and not self.idle_profile_active:
+                    until_low_fps = max(0.0, IDLE_PROFILE_AFTER_SECONDS - idle_guard.idle_for())
                     if until_low_fps <= 0:
-                        await self.set_idle_fps_reduced(True)
+                        await self.set_idle_profile(True)
                         continue
                     wait_timeout = min(wait_timeout, until_low_fps)
                 try:
@@ -939,8 +962,8 @@ class StreamServer:
                         await websocket.close(code=4000, reason="remote desktop idle timeout")
                         logger.info("Remote desktop session closed after %ds of inactivity", idle_guard.timeout_seconds)
                         break
-                    if self._is_control_owner(state) and idle_guard.should_reduce_fps(IDLE_FPS_AFTER_SECONDS):
-                        await self.set_idle_fps_reduced(True)
+                    if self._is_control_owner(state) and idle_guard.should_reduce_fps(IDLE_PROFILE_AFTER_SECONDS):
+                        await self.set_idle_profile(True)
                     continue
                 except websockets.exceptions.ConnectionClosed:
                     break
@@ -952,7 +975,7 @@ class StreamServer:
                     if is_user_activity_message(msg_type):
                         idle_guard.mark_activity()
                         if self._is_control_owner(state):
-                            await self.set_idle_fps_reduced(False)
+                            await self.set_idle_profile(False)
                     if msg_type == "bridge_hello":
                         state.media_bridge = True
                         self._enqueue_json(state, {"type": "bridge_ready", "clientId": state.client_id})
@@ -964,18 +987,21 @@ class StreamServer:
                         if bool(data.get("resetIdle", False)):
                             idle_guard.mark_activity()
                             if self._is_control_owner(state):
-                                await self.set_idle_fps_reduced(False)
+                                await self.set_idle_profile(False)
                         self._enqueue_json(state, {
                             "type": "session_policy",
                             "idleTimeoutSeconds": idle_guard.timeout_seconds,
-                            "idleFpsAfterSeconds": IDLE_FPS_AFTER_SECONDS,
-                            "minimumFps": MIN_STREAM_FPS,
+                            "idleFpsAfterSeconds": IDLE_PROFILE_AFTER_SECONDS,
+                            "idleFps": IDLE_PROFILE_FPS,
+                            "idleWidth": IDLE_PROFILE_WIDTH,
+                            "idleHeight": IDLE_PROFILE_HEIGHT,
+                            "idleBitrate": IDLE_PROFILE_BITRATE,
                         })
                         continue
                     if msg_type == "session_activity":
                         idle_guard.mark_activity()
                         if self._is_control_owner(state):
-                            await self.set_idle_fps_reduced(False)
+                            await self.set_idle_profile(False)
                         continue
                     if msg_type == "probe":
                         self._enqueue_json(state, {"type": "probe_ack", "seq": data.get("seq"), "clientPerfMs": data.get("clientPerfMs")})
@@ -1076,6 +1102,8 @@ class StreamServer:
                 await self._announce_control_owner()
             logger.info("Client disconnected from stream WebSocket")
             await self.stop_encoder_if_idle()
+            if not self.clients:
+                await self.set_idle_profile(False)
 
 
 async def main():

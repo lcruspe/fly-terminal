@@ -1226,7 +1226,7 @@
           macScreenHeight = msg.screenHeight || macScreenHeight;
           serverPixelWidth = msg.pixelWidth || serverPixelWidth;
           serverPixelHeight = msg.pixelHeight || serverPixelHeight;
-          currentBitrate = Number(msg.bitrate || currentBitrate);
+          currentBitrate = Number(msg.requestedBitrate || msg.bitrate || currentBitrate);
           if (VALID_FPS_LIMITS.includes(Number(msg.fpsCap))) {
             requestedFps = Number(msg.fpsCap);
             fpsLimitSelect.value = String(requestedFps);
