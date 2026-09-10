@@ -108,23 +108,6 @@
       outline: none;
     }
 
-    .hud-chip-status {
-      color: var(--badge-ok-fg);
-      font-weight: 700;
-    }
-
-    .hud-chip-status.warn {
-      color: var(--badge-warn-fg);
-    }
-
-    .hud-chip-status.error {
-      color: var(--badge-err-fg);
-    }
-
-    .hud-chip-separator {
-      opacity: 0.35;
-    }
-
     #hudBar {
       display: none;
       align-items: center;
@@ -326,7 +309,10 @@
       gap: 8px;
     }
 
-    #qualityMode {
+    #qualityMode,
+    #fpsLimit,
+    #streamResolution,
+    #idleTimeout {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 6px;
@@ -364,17 +350,22 @@
 
     <div id="hudDock">
       <button type="button" id="hudChip" title="Показать управление Remote Desktop" aria-label="Показать управление Remote Desktop">
-        <span class="hud-chip-status" id="hudChipStatus">H.264</span>
-        <span class="hud-chip-separator">·</span>
         <span id="hudChipFps">60 fps</span>
-        <span class="hud-chip-separator">·</span>
-        <span id="hudChipRes">1920×1080</span>
       </button>
       <div id="hudBar" role="toolbar" aria-label="Управление Remote Desktop">
         <button type="button" class="hud-btn hud-icon-btn" id="hudDragHandle" title="Перетащить панель" aria-label="Перетащить панель">⠿</button>
         <span class="hud-badge badge-status" id="statusBadge">60 FPS H.264</span>
         <span class="hud-badge badge-fps" id="fpsBadge">60 fps</span>
         <span class="hud-badge badge-res" id="resBadge">1920×1080</span>
+        <select id="fpsLimit" title="Ограничение FPS" aria-label="Ограничение FPS">
+          <option value="15">≤15 FPS</option><option value="30">≤30 FPS</option><option value="45">≤45 FPS</option><option value="60">≤60 FPS</option>
+        </select>
+        <select id="streamResolution" title="Разрешение потока" aria-label="Разрешение потока">
+          <option value="1280x720">1280×720</option><option value="1600x900">1600×900</option><option value="1920x1080">1920×1080</option><option value="2560x1440">2560×1440</option>
+        </select>
+        <select id="idleTimeout" title="Отключение при бездействии" aria-label="Отключение при бездействии">
+          <option value="60">Откл. 1 мин</option><option value="180">Откл. 3 мин</option><option value="300">Откл. 5 мин</option><option value="600">Откл. 10 мин</option><option value="900">Откл. 15 мин</option><option value="1800">Откл. 30 мин</option><option value="3600">Откл. 60 мин</option>
+        </select>
         <div class="hud-divider"></div>
         <button type="button" class="hud-btn" id="spotlightBtn" title="Spotlight (Cmd+Пробел)">⌘ Space</button>
         <button type="button" class="hud-btn" id="appSwitcherBtn" title="Переключение окон (Cmd+Tab)">⌘ Tab</button>
@@ -423,10 +414,13 @@
     (function () {
       const urlParams = new URLSearchParams(window.location.search);
       const wsPath = urlParams.get("path") || "desktop-stream-ws";
-      const requestedResolution = /^(1280x720|1600x900|1920x1080|2560x1440)$/.test(urlParams.get("resolution") || "")
+      const VALID_RESOLUTIONS = ["1280x720", "1600x900", "1920x1080", "2560x1440"];
+      const VALID_FPS_LIMITS = [15, 30, 45, 60];
+      const IDLE_TIMEOUT_OPTIONS = [60, 180, 300, 600, 900, 1800, 3600];
+      let requestedResolution = VALID_RESOLUTIONS.includes(urlParams.get("resolution") || "")
         ? urlParams.get("resolution") : "1920x1080";
-      const [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
-      const requestedFps = [15, 30, 45, 60].includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
+      let [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
+      let requestedFps = VALID_FPS_LIMITS.includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
       const displayParam = urlParams.get("display") || "";
       const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
@@ -456,13 +450,14 @@
       const hudDock = document.getElementById("hudDock");
       const hudBar = document.getElementById("hudBar");
       const hudChip = document.getElementById("hudChip");
-      const hudChipStatus = document.getElementById("hudChipStatus");
       const hudChipFps = document.getElementById("hudChipFps");
-      const hudChipRes = document.getElementById("hudChipRes");
       const hudDragHandle = document.getElementById("hudDragHandle");
       const hudPinBtn = document.getElementById("hudPinBtn");
       const hudCollapseBtn = document.getElementById("hudCollapseBtn");
       const qualityModeSelect = document.getElementById("qualityMode");
+      const fpsLimitSelect = document.getElementById("fpsLimit");
+      const streamResolutionSelect = document.getElementById("streamResolution");
+      const idleTimeoutSelect = document.getElementById("idleTimeout");
       const diagnosticsBtn = document.getElementById("diagnosticsBtn");
       const diagnosticsPanel = document.getElementById("diagnosticsPanel");
       const diagnosticsText = document.getElementById("diagnosticsText");
@@ -471,6 +466,11 @@
       const HUD_AUTOHIDE_MS = 3000;
       const HUD_PIN_KEY = "flyRemoteHudPinned";
       const HUD_POSITION_KEY = "flyRemoteHudPosition";
+      const IDLE_TIMEOUT_KEY = "flyRemoteIdleTimeoutSeconds";
+      let sessionIdleTimeoutSeconds = IDLE_TIMEOUT_OPTIONS.includes(Number(safeStorageGet(IDLE_TIMEOUT_KEY)))
+        ? Number(safeStorageGet(IDLE_TIMEOUT_KEY)) : 300;
+      let lastSessionActivityAt = performance.now();
+      let sessionTimedOut = false;
       let hudCollapseTimer = null;
       let hudPinned = false;
       let hudDragging = false;
@@ -548,30 +548,21 @@
       }
 
       function syncHudChip() {
-        const statusText = statusBadge.textContent.trim();
-        let compactStatus = "H.264";
-        if (statusBadge.classList.contains("error")) compactStatus = "Ошибка";
-        else if (statusText.includes("заблокирован")) compactStatus = "Блокировка";
-        else if (statusText.includes("Подключение")) compactStatus = "Подключение";
-        else if (statusText.includes("Отключено")) compactStatus = "Отключено";
-        else if (statusText.includes("разрешен") || statusText.includes("Разрешен")) compactStatus = "Разрешение";
-        hudChipStatus.textContent = compactStatus;
-        hudChipStatus.classList.toggle("warn", statusBadge.classList.contains("warn"));
-        hudChipStatus.classList.toggle("error", statusBadge.classList.contains("error"));
         hudChipFps.textContent = fpsBadge.textContent.trim();
-        hudChipRes.textContent = resBadge.textContent.trim();
       }
 
       const hudStatusObserver = new MutationObserver(syncHudChip);
-      [statusBadge, fpsBadge, resBadge].forEach((element) => hudStatusObserver.observe(element, {
-        subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class"]
-      }));
+      hudStatusObserver.observe(fpsBadge, { subtree: true, childList: true, characterData: true });
 
       hudChip.addEventListener("mouseenter", revealHud);
       hudChip.addEventListener("click", revealHud);
       hudBar.addEventListener("pointermove", scheduleHudCollapse);
       hudBar.addEventListener("mouseleave", scheduleHudCollapse);
-      hudBar.addEventListener("pointerdown", clearHudCollapseTimer);
+      hudBar.addEventListener("pointerdown", () => {
+        clearHudCollapseTimer();
+        resetClientIdleClock();
+        sendTransportMessage({ type: "session_activity" });
+      });
       hudBar.addEventListener("click", scheduleHudCollapse);
       hudBar.addEventListener("focusin", clearHudCollapseTimer);
       hudBar.addEventListener("focusout", scheduleHudCollapse);
@@ -654,6 +645,42 @@
       let previousInboundStats = null;
       let webRtcRoute = "—";
       const forceWebSocket = urlParams.get("transport") === "websocket";
+
+      function formatIdleTimeout(seconds = sessionIdleTimeoutSeconds) {
+        const minutes = Math.max(1, Math.round(Number(seconds) / 60));
+        return `${minutes} мин`;
+      }
+
+      function resetClientIdleClock() {
+        if (!sessionTimedOut) lastSessionActivityAt = performance.now();
+      }
+
+      function sendSessionSettings(resetIdle = false) {
+        return sendTransportMessage({
+          type: "session_settings",
+          idleTimeoutSeconds: sessionIdleTimeoutSeconds,
+          resetIdle,
+        });
+      }
+
+      async function disconnectForIdle() {
+        if (sessionTimedOut) return;
+        sessionTimedOut = true;
+        resetRemoteInput();
+        try {
+          if (socket && socket.readyState === WebSocket.OPEN) socket.close(4000, "remote desktop idle timeout");
+        } catch (_) {}
+        await closeWebRtc(true);
+        statusBadge.textContent = "Отключено";
+        statusBadge.className = "hud-badge badge-status warn";
+        updateOverlay(true, "Сеанс отключён", `${formatIdleTimeout()} бездействия. Нажмите «Повторить попытку», чтобы подключиться снова.`, true);
+      }
+
+      setInterval(() => {
+        const connected = usingWebRtc || (socket && socket.readyState === WebSocket.OPEN);
+        if (!connected || sessionTimedOut) return;
+        if (performance.now() - lastSessionActivityAt >= sessionIdleTimeoutSeconds * 1000) disconnectForIdle();
+      }, 1000);
       const webrtcApiBase = wsPath.includes("native-browser")
         ? "/native-browser-webrtc-api"
         : "/desktop-webrtc-api";
@@ -954,6 +981,7 @@
       }
 
       function registerInput(message, measure = true) {
+        resetClientIdleClock();
         let seq = null;
         if (measure) {
           seq = ++inputSequence;
@@ -1199,12 +1227,28 @@
           serverPixelWidth = msg.pixelWidth || serverPixelWidth;
           serverPixelHeight = msg.pixelHeight || serverPixelHeight;
           currentBitrate = Number(msg.bitrate || currentBitrate);
+          if (VALID_FPS_LIMITS.includes(Number(msg.fpsCap))) {
+            requestedFps = Number(msg.fpsCap);
+            fpsLimitSelect.value = String(requestedFps);
+          }
           resBadge.textContent = `${streamWidth}×${streamHeight}`;
           if (msg.screenLocked) {
             statusBadge.textContent = "Mac заблокирован";
             statusBadge.className = "hud-badge badge-status warn";
           }
           scheduleSyncConfigure();
+        } else if (msg.type === "session_policy") {
+          const timeout = Number(msg.idleTimeoutSeconds);
+          if (IDLE_TIMEOUT_OPTIONS.includes(timeout)) {
+            sessionIdleTimeoutSeconds = timeout;
+            idleTimeoutSelect.value = String(timeout);
+            safeStorageSet(IDLE_TIMEOUT_KEY, String(timeout));
+          }
+        } else if (msg.type === "stream_policy") {
+          if (VALID_FPS_LIMITS.includes(Number(msg.fpsCap))) {
+            requestedFps = Number(msg.fpsCap);
+            fpsLimitSelect.value = String(requestedFps);
+          }
         } else if (msg.type === "codec") {
           if (!usingWebRtc) await initVideoDecoder(msg.codec || activeCodec);
         } else if (msg.type === "display") {
@@ -1442,6 +1486,7 @@
         reliableChannel.onmessage = (event) => handleServerText(event.data);
         reliableChannel.onopen = () => {
           configureStream();
+          sendSessionSettings(false);
           requestFreshKeyframe("webrtc_datachannel_ready");
           sendProbe();
         };
@@ -1499,6 +1544,7 @@
 
       async function connect() {
         decoderFallbackTriggered = false;
+        if (!sessionTimedOut) lastSessionActivityAt = performance.now();
         if (!forceWebSocket) {
           try {
             if (await connectWebRtc()) return;
@@ -1530,6 +1576,7 @@
             statusBadge.textContent = "Ожидание кадра...";
             statusBadge.className = "hud-badge badge-status warn";
             configureStream();
+            sendSessionSettings(false);
             requestFreshKeyframe("connection_ready");
             sendProbe();
             clearTimeout(decoderWatchdog);
@@ -1561,7 +1608,7 @@
             statusBadge.className = "hud-badge badge-status warn";
             if (event.code === 4000) {
               reconnectAttempts = 0;
-              updateOverlay(true, "Сеанс отключён", "5 минут бездействия. Нажмите «Повторить попытку», чтобы подключиться снова.", true);
+              updateOverlay(true, "Сеанс отключён", `${formatIdleTimeout()} бездействия. Нажмите «Повторить попытку», чтобы подключиться снова.`, true);
               return;
             }
             reconnectAttempts++;
@@ -1616,6 +1663,56 @@
           force
         });
       }
+
+      function applyFpsLimit(value, notifyParent = true) {
+        const fps = Number(value);
+        if (!VALID_FPS_LIMITS.includes(fps)) return false;
+        requestedFps = fps;
+        fpsLimitSelect.value = String(fps);
+        resetClientIdleClock();
+        sendTransportMessage({ type: "session_activity" });
+        configureStream(true);
+        if (notifyParent && window.parent !== window) {
+          window.parent.postMessage({ type: "fly-desktop-fps", fps }, window.location.origin);
+        }
+        return true;
+      }
+
+      function applyStreamResolution(value, notifyParent = true) {
+        const resolution = String(value || "");
+        if (!VALID_RESOLUTIONS.includes(resolution)) return false;
+        requestedResolution = resolution;
+        [requestedWidth, requestedHeight] = resolution.split("x").map(Number);
+        streamResolutionSelect.value = resolution;
+        adaptiveScaleState.value = 1;
+        resetClientIdleClock();
+        sendTransportMessage({ type: "session_activity" });
+        configureStream(true);
+        if (notifyParent && window.parent !== window) {
+          window.parent.postMessage({ type: "fly-desktop-resolution", resolution }, window.location.origin);
+        }
+        return true;
+      }
+
+      fpsLimitSelect.value = String(requestedFps);
+      streamResolutionSelect.value = requestedResolution;
+      idleTimeoutSelect.value = String(sessionIdleTimeoutSeconds);
+      fpsLimitSelect.addEventListener("change", () => applyFpsLimit(fpsLimitSelect.value));
+      streamResolutionSelect.addEventListener("change", () => applyStreamResolution(streamResolutionSelect.value));
+      idleTimeoutSelect.addEventListener("change", () => {
+        const timeout = Number(idleTimeoutSelect.value);
+        if (!IDLE_TIMEOUT_OPTIONS.includes(timeout)) return;
+        sessionIdleTimeoutSeconds = timeout;
+        safeStorageSet(IDLE_TIMEOUT_KEY, String(timeout));
+        lastSessionActivityAt = performance.now();
+        sendSessionSettings(true);
+      });
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === "fly-desktop-set-fps") applyFpsLimit(event.data.fps, false);
+        if (event.data?.type === "fly-desktop-set-resolution") applyStreamResolution(event.data.resolution, false);
+      });
 
       function scheduleSyncConfigure() {
         if (fitMode !== "sync" || streamWidth === serverPixelWidth && streamHeight === serverPixelHeight) return;
@@ -1804,6 +1901,8 @@
       };
 
       reconnectBtn.onclick = () => {
+        sessionTimedOut = false;
+        lastSessionActivityAt = performance.now();
         connect();
       };
 

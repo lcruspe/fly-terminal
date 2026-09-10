@@ -6077,6 +6077,13 @@
       const openDesktopTabBtn = document.getElementById("openDesktopTab");
       if (openDesktopTabBtn && desktopConfig.enabled) openDesktopTabBtn.href = buildDesktopUrl();
     }
+    function postToDesktopFrames(message) {
+      tabs.forEach(tab => {
+        if (tab.type !== "desktop" && tab.type !== "mac-app") return;
+        try { tab.wrapper?.querySelector("iframe")?.contentWindow?.postMessage(message, window.location.origin); } catch (_) {}
+      });
+    }
+
     if (desktopModeSelect) {
       desktopModeSelect.value = preferences.desktopMode || "webrtc";
       desktopModeSelect.onchange = () => {
@@ -6092,7 +6099,7 @@
       desktopResolutionSelect.onchange = () => {
         preferences.desktopResolution = desktopResolutionSelect.value;
         savePreferences();
-        reloadDesktopTabs();
+        postToDesktopFrames({ type: "fly-desktop-set-resolution", resolution: preferences.desktopResolution });
         setStatusText(`Разрешение RDC: ${preferences.desktopResolution.replace("x", "×")}`, 2400);
       };
     }
@@ -6106,13 +6113,23 @@
       };
     }
     window.addEventListener("message", event => {
-      if (event.origin !== window.location.origin || event.data?.type !== "fly-desktop-scale-mode") return;
+      if (event.origin !== window.location.origin) return;
       const ownsSource = tabs.some(tab => (tab.type === "desktop" || tab.type === "mac-app")
         && tab.wrapper?.querySelector("iframe")?.contentWindow === event.source);
-      if (!ownsSource || !["contain", "fill", "sync"].includes(event.data.mode)) return;
-      preferences.desktopScaleMode = event.data.mode;
-      if (desktopScaleModeSelect) desktopScaleModeSelect.value = event.data.mode;
-      savePreferences();
+      if (!ownsSource) return;
+      if (event.data?.type === "fly-desktop-scale-mode" && ["contain", "fill", "sync"].includes(event.data.mode)) {
+        preferences.desktopScaleMode = event.data.mode;
+        if (desktopScaleModeSelect) desktopScaleModeSelect.value = event.data.mode;
+        savePreferences();
+      } else if (event.data?.type === "fly-desktop-fps" && [15, 30, 45, 60].includes(Number(event.data.fps))) {
+        preferences.desktopFps = Number(event.data.fps);
+        if (desktopFpsSelect) desktopFpsSelect.value = String(preferences.desktopFps);
+        savePreferences();
+      } else if (event.data?.type === "fly-desktop-resolution" && ["1280x720", "1600x900", "1920x1080", "2560x1440"].includes(event.data.resolution)) {
+        preferences.desktopResolution = event.data.resolution;
+        if (desktopResolutionSelect) desktopResolutionSelect.value = preferences.desktopResolution;
+        savePreferences();
+      }
     });
     window.addEventListener("message", event => {
       if (event.origin !== window.location.origin || event.data?.type !== "fly-native-browser-unavailable") return;
@@ -6128,7 +6145,7 @@
       desktopFpsSelect.onchange = () => {
         preferences.desktopFps = Number(desktopFpsSelect.value);
         savePreferences();
-        reloadDesktopTabs();
+        postToDesktopFrames({ type: "fly-desktop-set-fps", fps: preferences.desktopFps });
         setStatusText(`Частота RDC: ${preferences.desktopFps} FPS`, 2400);
       };
     }
