@@ -303,6 +303,16 @@
       border-color: var(--accent);
     }
 
+    #clipboardSink {
+      position: fixed;
+      left: -10000px;
+      top: -10000px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -347,6 +357,7 @@
     <video id="screenVideo" autoplay playsinline muted></video>
     <canvas id="screenCanvas"></canvas>
     <div id="inputLayer" tabindex="0" aria-label="Удалённый экран"></div>
+    <textarea id="clipboardSink" aria-hidden="true" tabindex="-1"></textarea>
 
     <div id="hudDock">
       <button type="button" id="hudChip" title="Показать управление Remote Desktop" aria-label="Показать управление Remote Desktop">
@@ -436,6 +447,7 @@
       const screenVideo = document.getElementById("screenVideo");
       const canvas = document.getElementById("screenCanvas");
       const inputLayer = document.getElementById("inputLayer");
+      const clipboardSink = document.getElementById("clipboardSink");
       const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
       const statusBadge = document.getElementById("statusBadge");
       const fpsBadge = document.getElementById("fpsBadge");
@@ -467,6 +479,11 @@
       const HUD_PIN_KEY = "flyRemoteHudPinned";
       const HUD_POSITION_KEY = "flyRemoteHudPosition";
       const IDLE_TIMEOUT_KEY = "flyRemoteIdleTimeoutSeconds";
+      const CLIPBOARD_CHUNK_BYTES = 48 * 1024;
+      const CLIENT_IS_APPLE = /Mac|iPhone|iPad|iPod/i.test(navigator.userAgentData?.platform || navigator.platform || "");
+      let pendingNativePaste = false;
+      let swallowedClipboardCode = "";
+      let clipboardPasteFallbackTimer = null;
       let sessionIdleTimeoutSeconds = IDLE_TIMEOUT_OPTIONS.includes(Number(safeStorageGet(IDLE_TIMEOUT_KEY)))
         ? Number(safeStorageGet(IDLE_TIMEOUT_KEY)) : 300;
       let lastSessionActivityAt = performance.now();
@@ -908,6 +925,115 @@
         return false;
       }
 
+
+      function isPrimaryShortcut(e, key) {
+        const modifier = CLIENT_IS_APPLE ? e.metaKey : e.ctrlKey;
+        return modifier && !e.altKey && String(e.key || "").toLowerCase() === key;
+      }
+
+      function bytesToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+        }
+        return btoa(binary);
+      }
+
+      async function sendClipboardReliable(message, timeoutMs = 30000) {
+        const deadline = performance.now() + timeoutMs;
+        while (performance.now() < deadline) {
+          if (usingWebRtc && dataChannelOpen(reliableChannel) && reliableChannel.bufferedAmount > 512 * 1024) {
+            await new Promise((resolve) => setTimeout(resolve, 12));
+            continue;
+          }
+          if (sendTransportMessage(message)) return;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        throw new Error("clipboard transport timeout");
+      }
+
+      async function sendClipboardFiles(files) {
+        const list = Array.from(files || []).filter((file) => file instanceof File);
+        if (!list.length) return false;
+        const transferId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+        resetClientIdleClock();
+        await sendClipboardReliable({
+          type: "clipboard_files_begin",
+          transferId,
+          files: list.map((file) => ({ name: file.name || "clipboard-file", size: file.size, mime: file.type || "" }))
+        });
+        for (let fileIndex = 0; fileIndex < list.length; fileIndex++) {
+          const file = list[fileIndex];
+          for (let offset = 0; offset < file.size; offset += CLIPBOARD_CHUNK_BYTES) {
+            const end = Math.min(file.size, offset + CLIPBOARD_CHUNK_BYTES);
+            const chunk = await file.slice(offset, end).arrayBuffer();
+            await sendClipboardReliable({
+              type: "clipboard_files_chunk",
+              transferId,
+              fileIndex,
+              offset,
+              data: bytesToBase64(chunk)
+            });
+          }
+        }
+        await sendClipboardReliable({ type: "clipboard_files_end", transferId });
+        return true;
+      }
+
+      async function writeLocalClipboardText(text) {
+        const value = String(text ?? "");
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(value);
+            return true;
+          }
+        } catch (_) {}
+        const previous = document.activeElement;
+        clipboardSink.value = value;
+        clipboardSink.focus({ preventScroll: true });
+        clipboardSink.select();
+        let copied = false;
+        try { copied = document.execCommand("copy"); } catch (_) {}
+        clipboardSink.value = "";
+        if (previous && typeof previous.focus === "function") previous.focus({ preventScroll: true });
+        return copied;
+      }
+
+      async function fallbackPasteFromAsyncClipboard() {
+        if (!pendingNativePaste) return;
+        pendingNativePaste = false;
+        try {
+          const text = await navigator.clipboard?.readText?.();
+          if (text != null && text !== "") registerInput({ type: "clipboard", text });
+        } catch (_) {}
+        inputLayer.focus({ preventScroll: true });
+      }
+
+      async function handleNativePaste(event) {
+        if (!pendingNativePaste) return;
+        event.preventDefault();
+        clearTimeout(clipboardPasteFallbackTimer);
+        pendingNativePaste = false;
+        const files = Array.from(event.clipboardData?.files || []);
+        const text = event.clipboardData?.getData("text/plain") || "";
+        try {
+          if (files.length) {
+            await sendClipboardFiles(files);
+          } else if (text !== "") {
+            registerInput({ type: "clipboard", text });
+          } else {
+            const fallback = await navigator.clipboard?.readText?.();
+            if (fallback) registerInput({ type: "clipboard", text: fallback });
+          }
+        } catch (error) {
+          console.warn("Clipboard paste failed:", error);
+        } finally {
+          clipboardSink.value = "";
+          inputLayer.focus({ preventScroll: true });
+        }
+      }
+
       function setVideoTransportActive(active) {
         usingWebRtc = Boolean(active);
         screenVideo.style.display = active ? "block" : "none";
@@ -1218,7 +1344,12 @@
       async function handleServerText(text) {
         let msg;
         try { msg = JSON.parse(text); } catch (_) { return; }
-        if (msg.type === "init") {
+        if (msg.type === "clipboard_snapshot") {
+          if (msg.kind === "text") await writeLocalClipboardText(msg.text || "");
+        } else if (msg.type === "clipboard_files_applied") {
+          statusBadge.textContent = "Буфер: " + Number(msg.count || 0) + " файл(а)";
+          statusBadge.className = "hud-badge badge-status";
+        } else if (msg.type === "init") {
           if (!usingWebRtc && !await initVideoDecoder(msg.codec || activeCodec)) return;
           streamWidth = msg.width || streamWidth;
           streamHeight = msg.height || streamHeight;
@@ -1818,8 +1949,26 @@
 
       inputLayer.addEventListener("keydown", (e) => {
         if (e.key === "F12") return;
+        if (e.isComposing || e.key === "Process") {
+          e.preventDefault();
+          return;
+        }
+        if (isPrimaryShortcut(e, "c")) {
+          e.preventDefault();
+          swallowedClipboardCode = e.code;
+          registerInput({ type: "clipboard_pull" });
+          return;
+        }
+        if (isPrimaryShortcut(e, "v")) {
+          swallowedClipboardCode = e.code;
+          pendingNativePaste = true;
+          clipboardSink.value = "";
+          clipboardSink.focus({ preventScroll: true });
+          clearTimeout(clipboardPasteFallbackTimer);
+          clipboardPasteFallbackTimer = setTimeout(fallbackPasteFromAsyncClipboard, 140);
+          return;
+        }
         e.preventDefault();
-        if (e.isComposing || e.key === "Process") return;
         if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
           registerInput({ type: "text", text: e.key });
           return;
@@ -1829,10 +1978,23 @@
 
       inputLayer.addEventListener("keyup", (e) => {
         if (e.isComposing || e.key === "Process") return;
+        if (swallowedClipboardCode && e.code === swallowedClipboardCode) {
+          e.preventDefault();
+          swallowedClipboardCode = "";
+          return;
+        }
         e.preventDefault();
         if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) return;
         registerInput({ type: "keyup", code: e.code, key: e.key, modifiers: keyModifiers(e) });
       });
+
+      clipboardSink.addEventListener("paste", handleNativePaste);
+      document.addEventListener("keyup", (e) => {
+        if (!swallowedClipboardCode || e.code !== swallowedClipboardCode) return;
+        e.preventDefault();
+        swallowedClipboardCode = "";
+        inputLayer.focus({ preventScroll: true });
+      }, true);
 
       function resetRemoteInput() {
         activePointerButtons.clear();

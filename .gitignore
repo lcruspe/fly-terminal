@@ -7,3 +7,5 @@ __pycache__/
 .playwright-cli/
 output/
 macos/bin/
+._*
+**/._*

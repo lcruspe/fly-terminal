@@ -5,7 +5,8 @@ DEFAULT_IDLE_FPS_AFTER_SECONDS = 30
 MIN_IDLE_TIMEOUT_SECONDS = 60
 MAX_IDLE_TIMEOUT_SECONDS = 3600
 USER_ACTIVITY_MESSAGE_TYPES = frozenset({
-    "mousemove", "mousedown", "mouseup", "wheel", "keydown", "keyup", "text", "clipboard"
+    "mousemove", "mousedown", "mouseup", "wheel", "keydown", "keyup", "text", "clipboard",
+    "clipboard_pull", "clipboard_files_begin", "clipboard_files_chunk", "clipboard_files_end"
 })
 
 

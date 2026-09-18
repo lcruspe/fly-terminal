@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import base64
 import ctypes
 import ctypes.util
 import json
@@ -7,6 +8,7 @@ import logging
 import math
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -63,6 +65,11 @@ STREAM_QUEUE_MAX_AGE_MS = int(os.environ.get("FLY_STREAM_QUEUE_MAX_AGE_MS", 250)
 STREAM_SEND_TIMEOUT_SECONDS = float(os.environ.get("FLY_STREAM_SEND_TIMEOUT_SECONDS", 0.35))
 STREAM_TRANSPORT_BUFFER_MAX_BYTES = int(os.environ.get("FLY_STREAM_TRANSPORT_BUFFER_MAX_BYTES", 1024 * 1024))
 KEYFRAME_REQUEST_COOLDOWN_MS = int(os.environ.get("FLY_KEYFRAME_REQUEST_COOLDOWN_MS", 250))
+CLIPBOARD_MAX_FILES = int(os.environ.get("FLY_CLIPBOARD_MAX_FILES", 64))
+CLIPBOARD_MAX_FILE_BYTES = int(os.environ.get("FLY_CLIPBOARD_MAX_FILE_BYTES", 512 * 1024 * 1024))
+CLIPBOARD_MAX_TOTAL_BYTES = int(os.environ.get("FLY_CLIPBOARD_MAX_TOTAL_BYTES", 1024 * 1024 * 1024))
+CLIPBOARD_MAX_CHUNK_BYTES = int(os.environ.get("FLY_CLIPBOARD_MAX_CHUNK_BYTES", 96 * 1024))
+CLIPBOARD_TEMP_ROOT = Path(os.environ.get("FLY_CLIPBOARD_TEMP_ROOT", str(Path.home() / ".cache/fly-terminal/clipboard")))
 EXTENDED_FRAME_HEADER_SIZE = 34
 EXTENDED_FRAME_FLAG = 0x80
 EXTENDED_FRAME_VERSION = 1
@@ -337,6 +344,60 @@ def inject_clipboard(text: str):
         logger.warning("Clipboard injection error: %s", e)
 
 
+
+def copy_remote_clipboard_text() -> str:
+    """Issue macOS Copy and return the resulting textual pasteboard payload."""
+    inject_key("KeyC", "c", True, {"meta": True})
+    time.sleep(0.025)
+    inject_key("KeyC", "c", False, {"meta": True})
+    time.sleep(0.12)
+    result = subprocess.run(["pbpaste"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+    return result.stdout.decode("utf-8", errors="replace")
+
+
+def _safe_clipboard_filename(name: str, index: int) -> str:
+    raw = Path(str(name or "")).name.strip()
+    cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", raw).strip(" .")
+    return cleaned or f"clipboard-file-{index + 1}"
+
+
+def _cleanup_clipboard_temp(max_age_seconds: int = 3600) -> None:
+    if not CLIPBOARD_TEMP_ROOT.exists():
+        return
+    cutoff = time.time() - max_age_seconds
+    for child in CLIPBOARD_TEMP_ROOT.iterdir():
+        try:
+            if child.is_dir() and child.stat().st_mtime < cutoff:
+                shutil.rmtree(child, ignore_errors=True)
+        except OSError:
+            continue
+
+
+def set_file_clipboard(paths) -> None:
+    """Place real file URLs on the macOS pasteboard and paste them into the focused app."""
+    if not paths:
+        raise ValueError("clipboard file list is empty")
+    script = r"""
+function run(argv) {
+  ObjC.import('AppKit');
+  const pb = $.NSPasteboard.generalPasteboard;
+  pb.clearContents;
+  const urls = argv.map(function (path) { return $.NSURL.fileURLWithPath(path); });
+  if (!pb.writeObjects(urls)) throw new Error('NSPasteboard.writeObjects failed');
+}
+"""
+    subprocess.run(
+        ["osascript", "-l", "JavaScript", "-e", script, *[str(path) for path in paths]],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=True,
+        text=True,
+    )
+    inject_key("KeyV", "v", True, {"meta": True})
+    time.sleep(0.025)
+    inject_key("KeyV", "v", False, {"meta": True})
+
+
 def inject_text(text: str):
     for char in text:
         inject_key("", char, True)
@@ -376,6 +437,7 @@ class ClientState:
     queue_delay_max_ms: float = 0.0
     media_bridge: bool = False
     last_reliable_seq: int = 0
+    clipboard_transfer: Optional[dict] = None
 
 
 # MARK: - Server & Encoder Orchestration
@@ -899,6 +961,82 @@ class StreamServer:
             return
         self._enqueue_json(state, {"type": "input_ack", "seq": seq, "afterFrameId": self.last_frame_id})
 
+
+    def _begin_clipboard_files(self, state: ClientState, data: dict):
+        files = data.get("files")
+        if not isinstance(files, list) or not files or len(files) > CLIPBOARD_MAX_FILES:
+            raise ValueError("invalid clipboard file list")
+        total = 0
+        normalized = []
+        used_names = set()
+        for index, item in enumerate(files):
+            if not isinstance(item, dict):
+                raise ValueError("invalid clipboard file metadata")
+            size = int(item.get("size", -1))
+            if size < 0 or size > CLIPBOARD_MAX_FILE_BYTES:
+                raise ValueError("clipboard file is too large")
+            total += size
+            if total > CLIPBOARD_MAX_TOTAL_BYTES:
+                raise ValueError("clipboard transfer is too large")
+            name = _safe_clipboard_filename(item.get("name", ""), index)
+            stem, suffix = Path(name).stem, Path(name).suffix
+            candidate = name
+            serial = 2
+            while candidate.casefold() in used_names:
+                candidate = f"{stem} ({serial}){suffix}"
+                serial += 1
+            used_names.add(candidate.casefold())
+            normalized.append({"name": candidate, "size": size, "received": 0})
+
+        _cleanup_clipboard_temp()
+        CLIPBOARD_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+        root = CLIPBOARD_TEMP_ROOT / f"{state.client_id}-{uuid.uuid4().hex}"
+        root.mkdir(mode=0o700)
+        for item in normalized:
+            item["path"] = root / item["name"]
+        state.clipboard_transfer = {
+            "id": str(data.get("transferId", "")),
+            "root": root,
+            "files": normalized,
+            "total": total,
+        }
+
+    def _append_clipboard_file_chunk(self, state: ClientState, data: dict):
+        transfer = state.clipboard_transfer
+        if not transfer or str(data.get("transferId", "")) != transfer["id"]:
+            raise ValueError("clipboard transfer is not active")
+        index = int(data.get("fileIndex", -1))
+        if index < 0 or index >= len(transfer["files"]):
+            raise ValueError("invalid clipboard file index")
+        item = transfer["files"][index]
+        offset = int(data.get("offset", -1))
+        if offset != item["received"]:
+            raise ValueError("clipboard chunk offset mismatch")
+        chunk = base64.b64decode(str(data.get("data", "")), validate=True)
+        if not chunk or len(chunk) > CLIPBOARD_MAX_CHUNK_BYTES:
+            raise ValueError("invalid clipboard chunk size")
+        if item["received"] + len(chunk) > item["size"]:
+            raise ValueError("clipboard chunk exceeds declared file size")
+        with item["path"].open("ab") as handle:
+            handle.write(chunk)
+        item["received"] += len(chunk)
+
+    async def _finish_clipboard_files(self, state: ClientState, data: dict):
+        transfer = state.clipboard_transfer
+        if not transfer or str(data.get("transferId", "")) != transfer["id"]:
+            raise ValueError("clipboard transfer is not active")
+        incomplete = [item["name"] for item in transfer["files"] if item["received"] != item["size"]]
+        if incomplete:
+            raise ValueError(f"incomplete clipboard files: {', '.join(incomplete)}")
+        paths = [item["path"] for item in transfer["files"]]
+        await asyncio.to_thread(set_file_clipboard, paths)
+        state.clipboard_transfer = None
+        self._enqueue_json(state, {
+            "type": "clipboard_files_applied",
+            "transferId": transfer["id"],
+            "count": len(paths),
+        })
+
     async def handle_websocket(self, websocket):
         logger.info("Client connected to stream WebSocket: %s", websocket.remote_address)
         state = ClientState(websocket=websocket)
@@ -1090,6 +1228,16 @@ class StreamServer:
                     elif msg_type == "clipboard":
                         await asyncio.to_thread(inject_clipboard, str(data.get("text", "")))
                         self._ack_input(state, data)
+                    elif msg_type == "clipboard_pull":
+                        text = await asyncio.to_thread(copy_remote_clipboard_text)
+                        self._enqueue_json(state, {"type": "clipboard_snapshot", "kind": "text", "text": text})
+                        self._ack_input(state, data)
+                    elif msg_type == "clipboard_files_begin":
+                        self._begin_clipboard_files(state, data)
+                    elif msg_type == "clipboard_files_chunk":
+                        self._append_clipboard_file_chunk(state, data)
+                    elif msg_type == "clipboard_files_end":
+                        await self._finish_clipboard_files(state, data)
                 except Exception as err:
                     logger.warning("Error processing client input: %s", err)
         finally:
