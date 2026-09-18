@@ -97,6 +97,12 @@ test('remote access tabs use short neutral titles', () => {
   assert.match(sprut, /<title>Sprut<\/title>/);
 });
 
+test('native RDC falls back to VNC instead of showing black frames while macOS is locked', () => {
+  assert.match(webrtc, /if \(msg\.screenLocked\)[\s\S]*fallbackFromH264\("host_locked"\)/);
+  assert.match(webrtc, /msg\.state === "host_locked"[\s\S]*fallbackFromH264\("host_locked"\)/);
+  assert.match(webrtc, /reason === "host_locked"[\s\S]*RDC VNC/);
+});
+
 test('remote desktop HUD stays compact until explicitly opened', () => {
   assert.match(webrtc, /id="hudChip"/);
   assert.match(webrtc, /HUD_AUTOHIDE_MS = 3000/);

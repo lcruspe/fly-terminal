@@ -853,7 +853,11 @@
           return;
         }
 
-        updateOverlay(true, "Совместимый режим", "H.264 недоступен в этом браузере. Переключение на noVNC...");
+        if (reason === "host_locked") {
+          updateOverlay(true, "Mac заблокирован", "Экран блокировки недоступен через ScreenCaptureKit. Переключение на RDC VNC...");
+        } else {
+          updateOverlay(true, "Совместимый режим", "H.264 недоступен в этом браузере. Переключение на noVNC...");
+        }
         window.location.replace(NO_VNC_URL);
       }
 
@@ -1366,6 +1370,8 @@
           if (msg.screenLocked) {
             statusBadge.textContent = "Mac заблокирован";
             statusBadge.className = "hud-badge badge-status warn";
+            fallbackFromH264("host_locked");
+            return;
           }
           scheduleSyncConfigure();
         } else if (msg.type === "session_policy") {
@@ -1430,9 +1436,10 @@
               window.parent.postMessage({ type: "fly-native-browser-unavailable", reason: "tcc_required" }, window.location.origin);
             }
           } else if (msg.state === "host_locked") {
-            if (decodedFrameSeen) updateOverlay(false);
             statusBadge.textContent = "Mac заблокирован";
             statusBadge.className = "hud-badge badge-status warn";
+            fallbackFromH264("host_locked");
+            return;
           } else if (msg.state === "host_unlocked" || msg.state === "capturing") {
             if (decodedFrameSeen) updateOverlay(false);
             statusBadge.textContent = decodedFrameSeen
