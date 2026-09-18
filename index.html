@@ -3180,10 +3180,24 @@
       return `/terminal/?${params.toString()}`;
     }
 
+    function withClientRole(url, role) {
+      if (!url || url === "about:blank") return url;
+      try {
+        const parsed = new URL(url, window.location.href);
+        parsed.searchParams.set("client", role);
+        return parsed.origin === window.location.origin
+          ? parsed.pathname + parsed.search + parsed.hash
+          : parsed.href;
+      } catch (_) {
+        return url;
+      }
+    }
+
     function buildBrowserUrl(backend = browserConfig.backend || "native") {
       if (backend === "chromium" && browserConfig.fallbackUrl) return browserConfig.fallbackUrl;
-      if (backend === "native" && browserConfig.nativeUrl) return browserConfig.nativeUrl;
-      return browserConfig.url || browserConfig.nativeUrl || browserConfig.fallbackUrl || "about:blank";
+      if (backend === "native" && browserConfig.nativeUrl) return withClientRole(browserConfig.nativeUrl, "browser");
+      const url = browserConfig.url || browserConfig.nativeUrl || browserConfig.fallbackUrl || "about:blank";
+      return backend === "native" ? withClientRole(url, "browser") : url;
     }
 
     function buildDesktopUrl(targetDisplay = "") {
@@ -3193,7 +3207,7 @@
       }
       const streamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
       const displayParam = targetDisplay === "Fly Remote" ? "&display=Fly%20Remote" : "";
-      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}&scale=${encodeURIComponent(preferences.desktopScaleMode || "contain")}${displayParam}`;
+      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&client=desktop&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}&scale=${encodeURIComponent(preferences.desktopScaleMode || "contain")}${displayParam}`;
     }
 
     function viewModeSwitchMarkup() {

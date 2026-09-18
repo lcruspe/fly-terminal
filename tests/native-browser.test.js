@@ -97,6 +97,15 @@ test('remote access tabs use short neutral titles', () => {
   assert.match(sprut, /<title>Sprut<\/title>/);
 });
 
+test('RDC and Browser use an explicit client role instead of inferring fallback from display name', () => {
+  assert.match(html, /client=desktop/);
+  assert.match(html, /withClientRole\(browserConfig\.nativeUrl, "browser"\)/);
+  assert.match(webrtc, /const explicitClientRole = urlParams\.get\("client"\)/);
+  assert.match(webrtc, /const isBrowserClient = clientRole === "browser"/);
+  assert.match(webrtc, /if \(isBrowserClient\) \{/);
+  assert.doesNotMatch(webrtc, /if \(requestedDisplayName === "Fly Browser"\) \{/);
+});
+
 test('native RDC falls back to VNC instead of showing black frames while macOS is locked', () => {
   assert.match(webrtc, /if \(msg\.screenLocked\)[\s\S]*fallbackFromH264\("host_locked"\)/);
   assert.match(webrtc, /msg\.state === "host_locked"[\s\S]*fallbackFromH264\("host_locked"\)/);

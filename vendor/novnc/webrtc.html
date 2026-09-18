@@ -434,6 +434,11 @@
       let requestedFps = VALID_FPS_LIMITS.includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
       const displayParam = urlParams.get("display") || "";
       const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
+      const explicitClientRole = urlParams.get("client");
+      const clientRole = ["desktop", "browser"].includes(explicitClientRole)
+        ? explicitClientRole
+        : (requestedDisplayName === "Fly Browser" ? "browser" : "desktop");
+      const isBrowserClient = clientRole === "browser";
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
         ? urlParams.get("scale") : "contain";
       
@@ -702,7 +707,7 @@
         ? "/native-browser-webrtc-api"
         : "/desktop-webrtc-api";
       function setNeutralPageTitle(mode) {
-        const prefix = requestedDisplayName === "Fly Browser" ? "Browser" : "RDC";
+        const prefix = isBrowserClient ? "Browser" : "RDC";
         document.title = `${prefix} ${mode}`;
       }
       setNeutralPageTitle(forceWebSocket ? "WS" : "Native");
@@ -843,7 +848,7 @@
         console.warn("H.264 stream fallback:", reason);
         try { socket?.close(); } catch (_) {}
 
-        if (requestedDisplayName === "Fly Browser") {
+        if (isBrowserClient) {
           if (window.parent !== window) {
             updateOverlay(true, "Нативный Browser недоступен", "Переключение на Chromium fallback...");
             window.parent.postMessage({ type: "fly-native-browser-unavailable", reason }, window.location.origin);
@@ -1432,7 +1437,7 @@
             statusBadge.textContent = "Требуется разрешение";
             statusBadge.className = "hud-badge badge-status warn";
             showPermissionPrompt(msg.message);
-            if (requestedDisplayName === "Fly Browser" && window.parent !== window) {
+            if (isBrowserClient && window.parent !== window) {
               window.parent.postMessage({ type: "fly-native-browser-unavailable", reason: "tcc_required" }, window.location.origin);
             }
           } else if (msg.state === "host_locked") {
