@@ -3205,7 +3205,8 @@
       if (mode === "vnc") {
         return desktopConfig.vncUrl || desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true";
       }
-      const streamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
+      const configuredStreamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
+      const streamPath = configuredStreamPath === "native-browser-stream-ws" ? "desktop-stream-ws" : configuredStreamPath;
       const displayParam = targetDisplay === "Fly Remote" ? "&display=Fly%20Remote" : "";
       return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&client=desktop&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}&scale=${encodeURIComponent(preferences.desktopScaleMode || "contain")}${displayParam}`;
     }

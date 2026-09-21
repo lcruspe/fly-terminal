@@ -18,6 +18,12 @@
 	}
 
 	@assets path /gateway.css /gateway.js
+	@gatewayUi path / /admin.html /gateway.js /gateway.css
+	header @gatewayUi {
+		Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+		Pragma "no-cache"
+		Expires "0"
+	}
 	@spruthubUser expression `{http.auth.user.id} == "{$CADDY_SPRUTHUB_AUTH_USER}"`
 
 	handle @ytIcon {
@@ -80,6 +86,12 @@
 	@nativeBrowserWebRtcApi path /native-browser-webrtc-api /native-browser-webrtc-api/*
 	@desktopStreamApi path /api/desktop/stream/*
 	@selkiesWs path /ws /data /health /metrics /signaling /webrtc /audio /video
+	@volatileUi path / /index.html /desktop/webrtc.html /desktop/vnc.html
+	header @volatileUi {
+		Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+		Pragma "no-cache"
+		Expires "0"
+	}
 
 	route {
 		redir @terminalRoot /terminal/ 302

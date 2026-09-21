@@ -1988,7 +1988,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             native_url = (
                 "/desktop/webrtc.html?"
                 f"path={quote(native_stream_path.lstrip('/'))}"
-                "&autoconnect=true&resolution=1920x1080&fps=60&scale=contain"
+                "&autoconnect=true&client=browser&resolution=1920x1080&fps=60&scale=contain"
                 "&display=Fly%20Browser"
             ) if native_enabled else ""
             primary_url = native_url or (fallback_url if fallback_enabled else "")

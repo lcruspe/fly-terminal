@@ -6,6 +6,7 @@ const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const caddy = fs.readFileSync(new URL('../macos/Caddyfile', import.meta.url), 'utf8');
 const installer = fs.readFileSync(new URL('../macos/install-direct-mac.sh', import.meta.url), 'utf8');
 const webrtc = fs.readFileSync(new URL('../vendor/novnc/webrtc.html', import.meta.url), 'utf8');
+const sessionControl = fs.readFileSync(new URL('../session-control.py', import.meta.url), 'utf8');
 
 test('native Chrome is the primary browser backend and Chromium remains fallback', () => {
   assert.match(html, /nativeUrl:/);
@@ -100,10 +101,19 @@ test('remote access tabs use short neutral titles', () => {
 test('RDC and Browser use an explicit client role instead of inferring fallback from display name', () => {
   assert.match(html, /client=desktop/);
   assert.match(html, /withClientRole\(browserConfig\.nativeUrl, "browser"\)/);
+  assert.match(sessionControl, /autoconnect=true&client=browser/);
   assert.match(webrtc, /const explicitClientRole = urlParams\.get\("client"\)/);
+  assert.match(webrtc, /const clientRole = explicitClientRole === "browser" \? "browser" : "desktop"/);
   assert.match(webrtc, /const isBrowserClient = clientRole === "browser"/);
   assert.match(webrtc, /if \(isBrowserClient\) \{/);
-  assert.doesNotMatch(webrtc, /if \(requestedDisplayName === "Fly Browser"\) \{/);
+  assert.doesNotMatch(webrtc, /requestedDisplayName === "Fly Browser" \? "browser"/);
+});
+
+test('stale or misrouted RDC URLs cannot enter the native-browser backend', () => {
+  assert.match(webrtc, /rawWsPath === "native-browser-stream-ws" \? "desktop-stream-ws" : rawWsPath/);
+  assert.match(html, /configuredStreamPath === "native-browser-stream-ws" \? "desktop-stream-ws" : configuredStreamPath/);
+  assert.match(caddy, /@volatileUi path \/ \/index\.html \/desktop\/webrtc\.html \/desktop\/vnc\.html/);
+  assert.match(caddy, /Cache-Control "no-store, no-cache, must-revalidate, max-age=0"/);
 });
 
 test('native RDC falls back to VNC instead of showing black frames while macOS is locked', () => {

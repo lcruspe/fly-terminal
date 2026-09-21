@@ -424,7 +424,7 @@
   <script>
     (function () {
       const urlParams = new URLSearchParams(window.location.search);
-      const wsPath = urlParams.get("path") || "desktop-stream-ws";
+      const rawWsPath = urlParams.get("path") || "desktop-stream-ws";
       const VALID_RESOLUTIONS = ["1280x720", "1600x900", "1920x1080", "2560x1440"];
       const VALID_FPS_LIMITS = [15, 30, 45, 60];
       const IDLE_TIMEOUT_OPTIONS = [60, 180, 300, 600, 900, 1800, 3600];
@@ -435,10 +435,11 @@
       const displayParam = urlParams.get("display") || "";
       const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
       const explicitClientRole = urlParams.get("client");
-      const clientRole = ["desktop", "browser"].includes(explicitClientRole)
-        ? explicitClientRole
-        : (requestedDisplayName === "Fly Browser" ? "browser" : "desktop");
+      const clientRole = explicitClientRole === "browser" ? "browser" : "desktop";
       const isBrowserClient = clientRole === "browser";
+      const wsPath = isBrowserClient
+        ? (rawWsPath === "desktop-stream-ws" ? "native-browser-stream-ws" : rawWsPath)
+        : (rawWsPath === "native-browser-stream-ws" ? "desktop-stream-ws" : rawWsPath);
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
         ? urlParams.get("scale") : "contain";
       
