@@ -3436,7 +3436,7 @@
       if (openBrowserTabBtn) {
         openBrowserTabBtn.hidden = !browserConfig.enabled;
         if (browserConfig.enabled && browserConfig.url) {
-          openBrowserTabBtn.href = browserConfig.url;
+          openBrowserTabBtn.href = buildBrowserUrl(browserConfig.backend);
         }
       }
       refreshAppsSubmenuDivider("vmAppsList");

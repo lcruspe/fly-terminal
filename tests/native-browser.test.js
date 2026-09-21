@@ -101,6 +101,7 @@ test('remote access tabs use short neutral titles', () => {
 test('RDC and Browser use an explicit client role instead of inferring fallback from display name', () => {
   assert.match(html, /client=desktop/);
   assert.match(html, /withClientRole\(browserConfig\.nativeUrl, "browser"\)/);
+  assert.match(html, /openBrowserTabBtn\.href = buildBrowserUrl\(browserConfig\.backend\)/);
   assert.match(sessionControl, /autoconnect=true&client=browser/);
   assert.match(webrtc, /const explicitClientRole = urlParams\.get\("client"\)/);
   assert.match(webrtc, /const clientRole = explicitClientRole === "browser" \? "browser" : "desktop"/);
