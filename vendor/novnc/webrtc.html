@@ -664,6 +664,7 @@
       let webRtcSessionId = null;
       let webRtcStatsTimer = null;
       let usingWebRtc = false;
+      let browserHostLocked = false;
       let iceRestartInFlight = false;
       let previousInboundStats = null;
       let webRtcRoute = "—";
@@ -842,7 +843,22 @@
         }
       }
 
+      function showBrowserLocked() {
+        browserHostLocked = true;
+        decodedFrameSeen = false;
+        clearTimeout(decoderWatchdog);
+        updateOverlay(true, "Mac заблокирован", "Разблокируйте Mac через RDC VNC. Native Browser продолжит работу после разблокировки.");
+        overlaySubtext.innerHTML += `<br><br><a href="${NO_VNC_URL}" target="_blank" rel="noopener" style="color:var(--accent)">Открыть RDC VNC для разблокировки</a>`;
+        document.getElementById("overlaySpinner").style.display = "none";
+        statusBadge.textContent = "Mac заблокирован";
+        statusBadge.className = "hud-badge badge-status warn";
+      }
+
       function fallbackFromH264(reason) {
+        if (isBrowserClient && reason === "host_locked") {
+          showBrowserLocked();
+          return;
+        }
         if (decoderFallbackTriggered) return;
         decoderFallbackTriggered = true;
         clearTimeout(decoderWatchdog);
@@ -1068,7 +1084,9 @@
         if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return;
         const tick = (_now, metadata) => {
           if (!usingWebRtc) return;
+          const firstFrame = !decodedFrameSeen;
           decodedFrameSeen = true;
+          if (firstFrame && !browserHostLocked) updateOverlay(false);
           resolveWebRtcVisibleActions(performance.now());
           frameCount++;
           const now = performance.now();
@@ -1301,7 +1319,7 @@
                 keepRecent(diagnostics.decodeDisplayMs, shownAt - meta.decodeSubmittedAt);
                 resolveVisibleActions(meta.frameID);
               }
-              if (firstFrame) {
+              if (firstFrame && !browserHostLocked) {
                 updateOverlay(false);
                 statusBadge.textContent = "H.264 готов";
                 statusBadge.className = "hud-badge badge-status";
@@ -1447,7 +1465,20 @@
             fallbackFromH264("host_locked");
             return;
           } else if (msg.state === "host_unlocked" || msg.state === "capturing") {
-            if (decodedFrameSeen) updateOverlay(false);
+            if (browserHostLocked && msg.state === "host_unlocked") {
+              browserHostLocked = false;
+              decodedFrameSeen = false;
+              updateOverlay(true, "Подключение к macOS...", "Mac разблокирован, ожидаю изображение Native Browser...");
+              requestFreshKeyframe("browser_host_unlocked");
+              if (!usingWebRtc) {
+                clearTimeout(decoderWatchdog);
+                decoderWatchdog = setTimeout(() => {
+                  if (!decodedFrameSeen && !browserHostLocked) fallbackFromH264("no_decoded_frames");
+                }, 8000);
+              }
+            } else if (browserHostLocked) {
+              return;
+            } else if (decodedFrameSeen) updateOverlay(false);
             statusBadge.textContent = decodedFrameSeen
               ? (usingWebRtc ? "WebRTC готов" : "H.264 готов")
               : "Захват активен...";
@@ -1673,12 +1704,16 @@
         await Promise.race([
           firstFrame,
           new Promise((_, reject) => setTimeout(() => reject(new Error("WebRTC first frame timeout")), 7000)),
-        ]);
-        decodedFrameSeen = true;
+        ]).catch((error) => {
+          if (!browserHostLocked) throw error;
+        });
+        decodedFrameSeen = !browserHostLocked;
         lastPresentedAt = performance.now();
-        updateOverlay(false);
-        statusBadge.textContent = "WebRTC готов";
-        statusBadge.className = "hud-badge badge-status";
+        if (!browserHostLocked) updateOverlay(false);
+        if (!browserHostLocked) {
+          statusBadge.textContent = "WebRTC готов";
+          statusBadge.className = "hud-badge badge-status";
+        }
         inputLayer.focus({ preventScroll: true });
         startVideoFrameObserver();
         startWebRtcStats();
@@ -1724,8 +1759,8 @@
             requestFreshKeyframe("connection_ready");
             sendProbe();
             clearTimeout(decoderWatchdog);
-            decoderWatchdog = setTimeout(() => {
-              if (!decodedFrameSeen) fallbackFromH264("no_decoded_frames");
+            if (!browserHostLocked) decoderWatchdog = setTimeout(() => {
+              if (!decodedFrameSeen && !browserHostLocked) fallbackFromH264("no_decoded_frames");
             }, 4000);
           };
 
