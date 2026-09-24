@@ -64,6 +64,8 @@ UI_PREFERENCES_FILE = Path(os.environ.get(
     str(Path.home() / ".local/share/fly-terminal/ui-preferences.json"),
 )).expanduser()
 UI_PREFERENCES_LOCK = threading.Lock()
+DISPLAY_WAKE_LOCK = threading.Lock()
+DISPLAY_WAKE_LAST = 0.0
 VALID_UI_THEMES = frozenset({
     "paper", "linen", "ledger", "harbor", "sage",
     "graphite", "ink", "midnight", "nord", "forest",
@@ -2132,6 +2134,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_mac_app_focus()
         elif self.path == "/api/desktop/display-resolution":
             self._handle_display_resolution()
+        elif self.path == "/api/desktop/wake-display":
+            self._handle_wake_display()
         elif self.path == "/api/system/recover":
             self._handle_recover()
         elif self.path == "/api/system/update":
@@ -2142,6 +2146,28 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_happ_location()
         else:
             send_json(self, 404, {"ok": False, "error": "not_found"})
+
+    def _handle_wake_display(self):
+        global DISPLAY_WAKE_LAST
+        if sys.platform != "darwin":
+            send_json(self, 501, {"ok": False, "error": "macos_only"})
+            return
+        with DISPLAY_WAKE_LOCK:
+            now = time.monotonic()
+            if now - DISPLAY_WAKE_LAST >= 25:
+                try:
+                    subprocess.Popen(
+                        ["/usr/bin/caffeinate", "-d", "-u", "-t", "65"],
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                except OSError as exc:
+                    send_json(self, 500, {"ok": False, "error": str(exc)})
+                    return
+                DISPLAY_WAKE_LAST = now
+        send_json(self, 200, {"ok": True})
 
     def _handle_mac_app_focus(self):
         payload, error = self._read_json_body()

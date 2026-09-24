@@ -31,6 +31,7 @@ const UI = {
     idleControlbarTimeout: null,
     closeControlbarTimeout: null,
     remoteDesktopIdleTimeout: null,
+    displayWakeInterval: null,
 
     controlbarGrabbed: false,
     controlbarDrag: false,
@@ -1096,6 +1097,8 @@ const UI = {
     disconnect() {
         clearTimeout(UI.remoteDesktopIdleTimeout);
         UI.remoteDesktopIdleTimeout = null;
+        clearInterval(UI.displayWakeInterval);
+        UI.displayWakeInterval = null;
         UI.rfb.disconnect();
 
         UI.connected = false;
@@ -1135,6 +1138,12 @@ const UI = {
         UI.connected = true;
         UI.inhibitReconnect = false;
         UI.armRemoteDesktopIdleTimeout();
+        clearInterval(UI.displayWakeInterval);
+        const wakeDisplay = () => {
+            fetch('/api/desktop/wake-display', { method: 'POST' }).catch(() => {});
+        };
+        wakeDisplay();
+        UI.displayWakeInterval = setInterval(wakeDisplay, 30000);
 
         let msg;
         if (UI.getSetting('encrypt')) {
@@ -1159,6 +1168,8 @@ const UI = {
         UI.connected = false;
         clearTimeout(UI.remoteDesktopIdleTimeout);
         UI.remoteDesktopIdleTimeout = null;
+        clearInterval(UI.displayWakeInterval);
+        UI.displayWakeInterval = null;
 
         UI.rfb = undefined;
 

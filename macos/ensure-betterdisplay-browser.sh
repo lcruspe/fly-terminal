@@ -41,11 +41,18 @@ if ! [[ "${remote_x}" =~ '^-?[0-9]+$' && "${remote_y}" =~ '^-?[0-9]+$' && "${rem
 fi
 
 browser_x=$((remote_x + remote_width))
-"${BETTERDISPLAY_BIN}" set \
-  -name="${BROWSER_NAME}" \
-  -connected=on \
-  -resolution=1280x720 \
-  -hiDPI=on \
-  -placement="${browser_x}x${remote_y}" >/dev/null
+browser_placement="$(${BETTERDISPLAY_BIN} get -name="${BROWSER_NAME}" -placement)"
+browser_resolution="$(${BETTERDISPLAY_BIN} get -name="${BROWSER_NAME}" -resolution)"
+browser_hidpi="$(${BETTERDISPLAY_BIN} get -name="${BROWSER_NAME}" -hiDPI)"
+if [ "${browser_placement}" != "${browser_x}x${remote_y}" ] ||
+   [ "${browser_resolution}" != "1280x720" ] ||
+   [ "${browser_hidpi}" != "on" ]; then
+  "${BETTERDISPLAY_BIN}" set \
+    -name="${BROWSER_NAME}" \
+    -connected=on \
+    -resolution=1280x720 \
+    -hiDPI=on \
+    -placement="${browser_x}x${remote_y}" >/dev/null
+fi
 
 printf '%s\n' "${browser_x}x${remote_y},1280x720"
