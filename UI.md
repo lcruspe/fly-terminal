@@ -98,3 +98,5 @@ YT Transcript не принимает Basic Auth напрямую как при�
 ## Ошибки YouTube при транскрипции
 
 HTTP `403`/`429` при чтении автоматических субтитров не должен выводиться пользователю как окончательная ошибка. YT Transcript повторяет запрос субтитров и затем прозрачно переключается на аудиодорожку + локальный Whisper. Ошибка показывается только если не удалось и получение аудио/транскрипция.
+
+Vertical toolbars open Settings, Tools and Apps toward the workspace, including the compact icon mode. Popups are constrained to the available side before measuring wrapped content, then kept within the viewport. Narrow Settings/Tools popups use scrollable horizontal section navigation. Sidebar scrolling repositions open menus and Apps submenus. The menu backdrop stays below the complete sidebar stacking context; styles for toolbar actions do not affect controls inside popups.

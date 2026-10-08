@@ -99,7 +99,7 @@
     .shell.orientation-vertical-left,
     .shell.orientation-vertical-right {
       display: flex;
-      height: 100vh;
+      height: 100dvh;
       width: 100vw;
       padding: 10px;
       gap: 10px;
@@ -170,17 +170,17 @@
       display: none;
     }
 
-    .shell[class*="orientation-vertical-"].sidebar-compact .controls button,
-    .shell[class*="orientation-vertical-"].sidebar-compact .controls a.button,
-    .shell[class*="orientation-vertical-"].sidebar-compact .controls summary.button {
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls > .control-group > button,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls > .control-group > a.button,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls > details > summary.button {
       padding: 9px 0;
       justify-content: center;
       width: 100%;
     }
 
-    .shell[class*="orientation-vertical-"].sidebar-compact .controls button .toolbar-action-label,
-    .shell[class*="orientation-vertical-"].sidebar-compact .controls a.button .toolbar-action-label,
-    .shell[class*="orientation-vertical-"].sidebar-compact .controls summary.button .toolbar-action-label {
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls > .control-group > button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls > .control-group > a.button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"].sidebar-compact .controls > details > summary.button .toolbar-action-label {
       display: none !important;
     }
 
@@ -189,7 +189,8 @@
     }
 
     .shell[class*="orientation-vertical-"] .tab-bar {
-      flex: 0 1 auto;
+      flex: 0 0 auto;
+      min-height: 0;
       max-height: 45vh;
       flex-direction: column;
       align-items: stretch;
@@ -218,7 +219,8 @@
     }
 
     .shell[class*="orientation-vertical-"] .toolbar {
-      flex: 1 1 auto;
+      flex: 1 1 0;
+      min-height: 0;
       flex-direction: column;
       align-items: stretch;
       justify-content: flex-start;
@@ -265,18 +267,18 @@
       gap: 6px;
     }
 
-    .shell[class*="orientation-vertical-"] .controls button,
-    .shell[class*="orientation-vertical-"] .controls a.button,
-    .shell[class*="orientation-vertical-"] .controls summary.button {
+    .shell[class*="orientation-vertical-"] .controls > .control-group > button,
+    .shell[class*="orientation-vertical-"] .controls > .control-group > a.button,
+    .shell[class*="orientation-vertical-"] .controls > details > summary.button {
       width: 100%;
       justify-content: flex-start;
       padding: 8px 10px;
       font-size: 12px;
     }
 
-    .shell[class*="orientation-vertical-"] .controls button .toolbar-action-label,
-    .shell[class*="orientation-vertical-"] .controls a.button .toolbar-action-label,
-    .shell[class*="orientation-vertical-"] .controls summary.button .toolbar-action-label {
+    .shell[class*="orientation-vertical-"] .controls > .control-group > button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"] .controls > .control-group > a.button .toolbar-action-label,
+    .shell[class*="orientation-vertical-"] .controls > details > summary.button .toolbar-action-label {
       display: inline !important;
     }
 
@@ -638,7 +640,7 @@
       display: none;
     }
 
-    body.menu-surface-open .bottom-panel {
+    body.menu-surface-open .shell .bottom-panel {
       z-index: 3000;
     }
 
@@ -903,6 +905,13 @@
       padding: 0;
       width: min(640px, calc(100vw - 28px));
     }
+    .settings-panel.menu-narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .menu-narrow > :is(.settings-navigation, .tools-navigation) { display: flex; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .menu-narrow > :is(.settings-navigation, .tools-navigation) > button { flex: 0 0 auto; width: auto; white-space: nowrap; }
+    .menu-narrow .settings-row { grid-template-columns: minmax(0, 1fr); }
+    .menu-narrow .display-resolution-control { grid-template-columns: minmax(0, 1fr); }
+    .settings-navigation, .tools-navigation { min-height: 0; overflow-y: auto; }
+    .settings-panel, .dropdown-menu { box-sizing: border-box; }
     .settings-navigation,
     .tools-navigation {
       align-content: start;
@@ -3700,6 +3709,37 @@
       panel.style.bottom = "auto";
       panel.style.maxHeight = "";
       panel.style.maxWidth = "";
+      panel.style.minWidth = "";
+    }
+
+    function positionAnchoredMenu(menu, anchor, { submenu = false } = {}) {
+      const pad = 10;
+      const gap = submenu ? 6 : 8;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const verticalLeft = shellEl?.classList.contains("orientation-vertical-left");
+      const verticalRight = shellEl?.classList.contains("orientation-vertical-right");
+      const side = submenu || verticalLeft || verticalRight;
+      const rightSpace = Math.max(0, viewportWidth - anchor.right - gap - pad);
+      const leftSpace = Math.max(0, anchor.left - gap - pad);
+      const openRight = submenu || verticalLeft
+        ? rightSpace >= leftSpace
+        : !(leftSpace >= rightSpace);
+      const maxWidth = Math.max(1, side ? Math.max(leftSpace, rightSpace) : viewportWidth - pad * 2);
+      const maxHeight = Math.max(1, viewportHeight - pad * 2);
+      const base = fixedPositionBaseFor(menu);
+      Object.assign(menu.style, {
+        position: "fixed", left: `${pad - base.left}px`, top: `${pad - base.top}px`,
+        right: "auto", bottom: "auto", maxWidth: `${Math.floor(maxWidth)}px`,
+        minWidth: "0px", maxHeight: `${Math.floor(maxHeight)}px`
+      });
+      menu.classList.toggle("menu-narrow", maxWidth < 520);
+      const fitted = menu.getBoundingClientRect();
+      const left = side ? (openRight ? anchor.right + gap : anchor.left - fitted.width - gap) : anchor.right - fitted.width;
+      const top = side ? anchor.top : anchor.top - gap - fitted.height;
+      menu.style.left = `${Math.round(clampNumber(left, pad, Math.max(pad, viewportWidth - pad - fitted.width)) - base.left)}px`;
+      menu.style.top = `${Math.round(clampNumber(top, pad, Math.max(pad, viewportHeight - pad - fitted.height)) - base.top)}px`;
+      menu.style.transformOrigin = side ? (openRight ? "top left" : "top right") : "bottom right";
     }
 
     function positionAppsRootMenu() {
@@ -3707,72 +3747,15 @@
       if (isTouchMenuMode()) {
         resetAppsPanelPosition(appsRootMenu);
         positionTouchMenuSurface(appsRootMenu);
-        return;
-      }
-      const pad = 10;
-      const gap = 8;
-      resetAppsPanelPosition(appsRootMenu);
-      const anchor = appsMenuButton.getBoundingClientRect();
-      const panelRect = appsRootMenu.getBoundingClientRect();
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const panelWidth = Math.min(panelRect.width, viewportWidth - pad * 2);
-      const isVerticalLeft = shellEl?.classList.contains("orientation-vertical-left");
-      const isVerticalRight = shellEl?.classList.contains("orientation-vertical-right");
-
-      let left;
-      let top;
-      let maxHeight;
-      if (isVerticalLeft || isVerticalRight) {
-        const rightSpace = viewportWidth - anchor.right - gap - pad;
-        const leftSpace = anchor.left - gap - pad;
-        const openRight = isVerticalLeft ? (rightSpace >= panelWidth || rightSpace >= leftSpace) : !(leftSpace >= panelWidth || leftSpace >= rightSpace);
-        left = openRight ? anchor.right + gap : anchor.left - panelWidth - gap;
-        maxHeight = viewportHeight - pad * 2;
-        top = anchor.top;
-      } else {
-        const above = anchor.top - gap - pad;
-        const below = viewportHeight - anchor.bottom - gap - pad;
-        const openAbove = above >= Math.min(panelRect.height, 120) || above >= below;
-        maxHeight = Math.max(80, openAbove ? above : below);
-        top = openAbove ? anchor.top - gap - Math.min(panelRect.height, maxHeight) : anchor.bottom + gap;
-        left = anchor.right - panelWidth;
-      }
-
-      const panelHeight = Math.min(panelRect.height, maxHeight);
-      left = clampNumber(left, pad, Math.max(pad, viewportWidth - pad - panelWidth));
-      top = clampNumber(top, pad, Math.max(pad, viewportHeight - pad - panelHeight));
-      appsRootMenu.style.left = `${Math.round(left)}px`;
-      appsRootMenu.style.top = `${Math.round(top)}px`;
-      appsRootMenu.style.maxHeight = `${Math.floor(maxHeight)}px`;
+      } else positionAnchoredMenu(appsRootMenu, appsMenuButton.getBoundingClientRect());
     }
 
     function positionAppsSubmenu(trigger, submenu) {
-      if (!submenu || submenu.hidden) return;
+      if (!submenu || submenu.hidden || !trigger) return;
       if (isTouchMenuMode()) {
         resetAppsPanelPosition(submenu);
         positionTouchMenuSurface(submenu);
-        return;
-      }
-      if (!trigger) return;
-      const pad = 10;
-      const gap = 6;
-      resetAppsPanelPosition(submenu);
-      const anchor = trigger.getBoundingClientRect();
-      const panelRect = submenu.getBoundingClientRect();
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const panelWidth = Math.min(panelRect.width, viewportWidth - pad * 2);
-      const rightSpace = viewportWidth - anchor.right - gap - pad;
-      const leftSpace = anchor.left - gap - pad;
-      const openRight = rightSpace >= panelWidth || rightSpace >= leftSpace;
-      const left = openRight ? anchor.right + gap : anchor.left - panelWidth - gap;
-      const maxHeight = viewportHeight - pad * 2;
-      const panelHeight = Math.min(panelRect.height, maxHeight);
-      const top = clampNumber(anchor.top - 4, pad, Math.max(pad, viewportHeight - pad - panelHeight));
-      submenu.style.left = `${Math.round(clampNumber(left, pad, Math.max(pad, viewportWidth - pad - panelWidth)))}px`;
-      submenu.style.top = `${Math.round(top)}px`;
-      submenu.style.maxHeight = `${Math.floor(maxHeight)}px`;
+      } else positionAnchoredMenu(submenu, trigger.getBoundingClientRect(), { submenu: true });
     }
 
     function positionOpenAppsMenus() {
@@ -3846,10 +3829,8 @@
       if (showMobileAppsLevel(null, { focusFirst })) return;
       appsRootMenu.hidden = false;
       syncMenuSurfaceState();
-      requestAnimationFrame(() => {
-        positionAppsRootMenu();
-        if (focusFirst) appsMenuItems(appsRootMenu)[0]?.focus();
-      });
+      positionAppsRootMenu();
+      if (focusFirst) appsMenuItems(appsRootMenu)[0]?.focus({ preventScroll: true });
     }
 
     function openAppsSubmenu(trigger, { focusFirst = false } = {}) {
@@ -3862,10 +3843,8 @@
       submenu.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
       syncMenuSurfaceState();
-      requestAnimationFrame(() => {
-        positionAppsSubmenu(trigger, submenu);
-        if (focusFirst) appsMenuItems(submenu)[0]?.focus();
-      });
+      positionAppsSubmenu(trigger, submenu);
+      if (focusFirst) appsMenuItems(submenu)[0]?.focus({ preventScroll: true });
     }
 
     function scheduleAppsSubmenuClose() {
@@ -4086,7 +4065,7 @@
         if (!insideMenu) closeAppsMenu();
       });
       window.addEventListener("resize", positionOpenAppsMenus, { passive: true });
-      window.addEventListener("scroll", positionOpenAppsMenus, { passive: true });
+
       touchMenuMedia.addEventListener?.("change", closeAllMenus);
 
       document.getElementById("closeSnippetEditor").onclick = closeSnippetEditor;
@@ -4119,7 +4098,7 @@
         button.tabIndex = active ? 0 : -1;
       });
       settingsPanels.forEach(panel => panel.hidden = panel.dataset.settingsPanel !== section);
-      requestAnimationFrame(() => positionFloatingMenu(settingsMenu));
+      positionFloatingMenu(settingsMenu);
     }
 
     function bindSettingsNavigation() {
@@ -4151,7 +4130,7 @@
         button.tabIndex = active ? 0 : -1;
       });
       toolsPanels.forEach(panel => panel.hidden = panel.dataset.toolsPanel !== section);
-      requestAnimationFrame(() => positionFloatingMenu(toolsMenu));
+      positionFloatingMenu(toolsMenu);
     }
 
     function bindToolsNavigation() {
@@ -4213,6 +4192,8 @@
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
       const fixedBase = fixedPositionBaseFor(menu);
+      menu.style.minWidth = "";
+      menu.classList.remove("menu-narrow");
       const maxHeight = Math.min(viewportHeight * 0.78, viewportHeight - viewportPad * 2);
       const maxWidth = Math.max(1, viewportWidth - viewportPad * 2);
 
@@ -4241,123 +4222,8 @@
         return;
       }
 
-      const viewportPad = 10;
-      const gap = 8;
-
-      // 1. Reset state for measurement
-      menu.style.position = "fixed";
-      menu.style.left = "0px";
-      menu.style.top = "0px";
-      menu.style.bottom = "auto";
-      menu.style.right = "auto";
-      menu.style.maxHeight = "";
-      menu.style.maxWidth = "";
-
-      const buttonRect = summary.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      // A fixed descendant is relative to the nearest transform/filter/backdrop-filter
-      // containing block, not necessarily the viewport. Keep all placement calculations
-      // in viewport coordinates, then translate only when writing CSS coordinates.
-      const fixedBase = fixedPositionBaseFor(menu);
-
-      const isVerticalLeft = shellEl?.classList.contains("orientation-vertical-left");
-      const isVerticalRight = shellEl?.classList.contains("orientation-vertical-right");
-      const isVertical = isVerticalLeft || isVerticalRight;
-
-      let left, top, maxHeight, maxWidth, origin = "center";
-
-      if (isVertical) {
-        // --- PRIMARY AXIS: HORIZONTAL (flyout to the side) ---
-        maxWidth = viewportWidth - buttonRect.width - gap - viewportPad * 2;
-        const menuWidth = Math.min(menuRect.width, maxWidth);
-
-        if (isVerticalLeft) {
-          // Default: open to the right of left sidebar
-          const spaceRight = viewportWidth - buttonRect.right - gap - viewportPad;
-          if (spaceRight >= menuWidth || spaceRight >= buttonRect.left) {
-            left = buttonRect.right + gap;
-            origin = "top left";
-          } else {
-            left = buttonRect.left - menuWidth - gap;
-            origin = "top right";
-          }
-        } else {
-          // Default: open to the left of right sidebar
-          const spaceLeft = buttonRect.left - gap - viewportPad;
-          if (spaceLeft >= menuWidth || spaceLeft >= (viewportWidth - buttonRect.right)) {
-            left = buttonRect.left - menuWidth - gap;
-            origin = "top right";
-          } else {
-            left = buttonRect.right + gap;
-            origin = "top left";
-          }
-        }
-        left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
-
-        // --- SECONDARY AXIS: VERTICAL (align with button top, keep in viewport) ---
-        maxHeight = viewportHeight - viewportPad * 2;
-        const menuHeight = Math.min(menuRect.height, maxHeight);
-        top = buttonRect.top;
-        if (top + menuHeight > viewportHeight - viewportPad) {
-          top = viewportHeight - viewportPad - menuHeight;
-        }
-        top = clampNumber(top, viewportPad, Math.max(viewportPad, viewportHeight - viewportPad - menuHeight));
-
-      } else {
-        // --- HORIZONTAL BOTTOM TOOLBAR LAYOUT ---
-        // Toolbar is at the bottom of the screen. Popups MUST anchor to the bottom and grow upward.
-        // Size against the viewport first, then place the measured box.
-        // This avoids border/padding differences leaking a tall popup above the viewport.
-        maxHeight = Math.max(1, viewportHeight - viewportPad * 2);
-
-        maxWidth = viewportWidth - viewportPad * 2;
-        const menuWidth = Math.min(menuRect.width, maxWidth);
-        left = buttonRect.right - menuWidth;
-        if (left < viewportPad) left = buttonRect.left;
-        left = clampNumber(left, viewportPad, Math.max(viewportPad, viewportWidth - viewportPad - menuWidth));
-
-        menu.style.position = "fixed";
-        menu.style.left = `${Math.round(viewportPad - fixedBase.left)}px`;
-        menu.style.top = `${Math.round(viewportPad - fixedBase.top)}px`;
-        menu.style.bottom = "auto";
-        menu.style.right = "auto";
-        menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
-        menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
-        menu.style.zIndex = "9999";
-        menu.style.transformOrigin = "bottom right";
-
-        // Measure after constraints, clamp in viewport coordinates, then translate
-        // to the actual fixed-position containing block when assigning CSS offsets.
-        const fittedRect = menu.getBoundingClientRect();
-        const fittedHeight = Math.min(fittedRect.height, maxHeight);
-        const fittedWidth = Math.min(fittedRect.width, maxWidth);
-        left = clampNumber(
-          buttonRect.right - fittedWidth,
-          viewportPad,
-          Math.max(viewportPad, viewportWidth - viewportPad - fittedWidth)
-        );
-        top = clampNumber(
-          buttonRect.top - gap - fittedHeight,
-          viewportPad,
-          Math.max(viewportPad, viewportHeight - viewportPad - fittedHeight)
-        );
-        menu.style.left = `${Math.round(left - fixedBase.left)}px`;
-        menu.style.top = `${Math.round(top - fixedBase.top)}px`;
-        return;
-      }
-
-      // 2. Apply vertical layout properties
-      menu.style.position = "fixed";
-      menu.style.left = `${Math.round(left - fixedBase.left)}px`;
-      menu.style.top = `${Math.round(top - fixedBase.top)}px`;
-      menu.style.bottom = "auto";
-      menu.style.right = "auto";
-      menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
-      menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
+      positionAnchoredMenu(menu, summary.getBoundingClientRect());
       menu.style.zIndex = "9999";
-      menu.style.transformOrigin = origin;
     }
 
     function positionOpenFloatingMenus() {
@@ -4388,7 +4254,7 @@
           if (details.open) {
             closeAppsMenu();
             closeFloatingMenus({ except: details });
-            requestAnimationFrame(() => positionFloatingMenu(details));
+            positionFloatingMenu(details);
           } else {
             resetFloatingMenuPosition(details);
           }
@@ -4396,7 +4262,15 @@
         });
       });
       window.addEventListener("resize", positionOpenFloatingMenus, { passive: true });
-      window.addEventListener("scroll", positionOpenFloatingMenus, { passive: true });
+      let menuPositionFrame = null;
+      document.addEventListener("scroll", () => {
+        if (menuPositionFrame !== null) return;
+        menuPositionFrame = requestAnimationFrame(() => {
+          menuPositionFrame = null;
+          positionOpenFloatingMenus();
+          positionOpenAppsMenus();
+        });
+      }, { passive: true, capture: true });
       document.addEventListener("click", (event) => {
         document.querySelectorAll("details.settings[open], details.dropdown[open]").forEach((details) => {
           if (!details.contains(event.target)) details.removeAttribute("open");
@@ -4555,7 +4429,6 @@
       if (!toolbarControls || !overflowMenu || !overflowMenuList) return;
 
       restoreResponsiveToolbarItems();
-      closeAppsMenu();
       setResponsiveToolbarIconOnly(false);
       overflowMenu.open = false;
       overflowMenu.hidden = true;
@@ -6153,6 +6026,8 @@
         shellEl.classList.add("orientation-vertical-right");
       }
       applyPanelCollapsedPref();
+      scheduleResponsiveToolbarLayout();
+      requestAnimationFrame(() => { positionOpenFloatingMenus(); positionOpenAppsMenus(); });
     }
 
     if (toolbarOrientationSelect) {
