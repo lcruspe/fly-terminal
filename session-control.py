@@ -146,7 +146,7 @@ def _happ_ax_command(*args):
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise HappAXError("happ_accessibility_unavailable") from exc
     if result.returncode != 0:
-        for error in ("happ_accessibility_denied", "happ_not_running", "happ_window_unavailable",
+        for error in ("happ_screen_locked", "happ_accessibility_denied", "happ_not_running", "happ_window_unavailable",
                       "happ_servers_unavailable", "happ_location_not_found", "happ_ax_press_failed"):
             if error in result.stderr:
                 raise HappAXError(error)
@@ -225,6 +225,7 @@ TOOL_ERROR_MESSAGES = {
     "happ_subscription_not_found": "Выбранная подписка Happ больше недоступна. Обновите список подписок и повторите действие.",
     "happ_action_already_running": "Другая операция Happ уже выполняется. Дождитесь её завершения.",
     "happ_location_switch_failed": "Не удалось переключить локацию Happ.",
+    "happ_screen_locked": "Экран Mac mini заблокирован. Для переключения локации через Happ необходимо разблокировать macOS.",
     "happ_accessibility_denied": "Нет разрешения macOS на управление интерфейсом Happ через Accessibility.",
     "happ_not_running": "Happ Plus не запущен.",
     "happ_window_unavailable": "Откройте главное окно Happ Plus на Mac mini.",

@@ -83,6 +83,10 @@ func extractRows(_ subscription: AXUIElement, groupId: String) -> [ServerRow] {
     return rows
 }
 func readGroups() throws -> [Group] {
+    if let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+       let locked = session["CGSSessionScreenIsLocked"] as? NSNumber, locked.boolValue {
+        throw NSError(domain: "happ_screen_locked", code: 8)
+    }
     guard AXIsProcessTrusted() else {
         throw NSError(domain: "happ_accessibility_denied", code: 3)
     }

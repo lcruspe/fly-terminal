@@ -77,6 +77,16 @@ class HappAccessibilityTests(unittest.TestCase):
             with self.assertRaisesRegex(module.HappAXError, "^happ_accessibility_denied$"):
                 module._happ_ax_command("list")
 
+    def test_locked_screen_returns_stable_error(self):
+        class Result:
+            returncode = 1
+            stderr = 'Error Domain=happ_screen_locked Code=8'
+            stdout = ""
+        with patch.object(module, "_happ_ax_executable", return_value="/tmp/happ-ax"), \
+             patch.object(module.subprocess, "run", return_value=Result()):
+            with self.assertRaisesRegex(module.HappAXError, "^happ_screen_locked$"):
+                module._happ_ax_command("list")
+
 
 if __name__ == "__main__":
     unittest.main()
