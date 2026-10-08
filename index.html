@@ -1132,6 +1132,12 @@
       min-height: 0;
     }
 
+    .file-drop-zone { display: grid; gap: 8px; padding: 24px 12px; border: 2px dashed var(--border); border-radius: 12px; text-align: center; cursor: pointer; }
+    .file-drop-zone span, .file-drop-zone small { color: var(--muted); font-weight: 400; }
+    .file-drop-zone.drag-over { border-color: var(--accent); background: var(--control); }
+    .file-transfer-queue { display: grid; gap: 6px; max-height: 210px; overflow: auto; }
+    .file-transfer-queue progress { width: 100%; height: 5px; accent-color: var(--accent); }
+    #documentsSearch { min-width: 0; width: 150px; padding: 6px; color: var(--ink); background: var(--control); border: 1px solid var(--border); border-radius: 6px; }
     .file-transfer-control {
       display: grid;
       gap: 9px;
@@ -2160,24 +2166,17 @@
                   </div>
                 </section>
                 <section class="tools-panel" id="toolsPanelFiles" role="tabpanel" aria-labelledby="toolsTabFiles" data-tools-panel="files" hidden>
-                  <div class="settings-section-heading"><strong>Обмен файлами</strong><span>Между локальным компьютером и виртуальной машиной</span></div>
+                  <div class="settings-section-heading"><strong>Обмен файлами</strong><span>Клиент ↔ сервер · общая папка Documents</span></div>
                   <div class="file-transfer-control">
-                    <input class="file-transfer-mode-input" type="radio" name="fileTransferMode" id="fileTransferToVm" checked />
-                    <input class="file-transfer-mode-input" type="radio" name="fileTransferMode" id="fileTransferToLocal" />
-                    <div class="file-transfer-switch" role="tablist" aria-label="Направление передачи файлов">
-                      <label for="fileTransferToVm" role="tab">На виртуальную машину</label>
-                      <label for="fileTransferToLocal" role="tab">На локальный компьютер</label>
-                    </div>
-                    <div class="file-transfer-panel file-transfer-vm-panel">
-                      <input class="file-upload-input" type="file" id="documentsUploadInput" multiple aria-label="Файлы для загрузки на виртуальную машину" />
-                      <div class="file-tools-actions"><button type="button" id="documentsUploadBtn" title="Загрузить выбранные файлы в Documents виртуальной машины">Загрузить</button><button type="button" id="documentsRefreshBtn" title="Обновить список файлов">Обновить</button></div>
-                      <div class="settings-action-status" id="documentsStatus"></div>
-                      <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
-                    </div>
-                    <div class="file-transfer-panel file-transfer-local-panel">
-                      <button type="button" id="containerFileBrowseBtn" title="Выбрать файл на виртуальной машине и скачать его на локальный компьютер">Выбрать файл на виртуальной машине</button>
-                      <div class="settings-action-status" id="containerFileStatus"></div>
-                    </div>
+                    <input type="file" id="documentsUploadInput" multiple hidden />
+                    <button type="button" id="documentsDropZone" class="file-drop-zone"><strong>Перетащите файлы сюда</strong><span>или нажмите, чтобы выбрать на клиенте</span><small id="documentsUploadLimit">Загрузка в Documents сервера</small></button>
+                    <div id="documentsTransferQueue" class="file-transfer-queue" aria-live="polite"></div>
+                    <div class="file-tools-actions"><button type="button" id="documentsUploadBtn">Выбрать файлы</button><button type="button" id="documentsRefreshBtn">Обновить</button></div>
+                    <div class="settings-action-status" id="documentsStatus" role="status"></div>
+                    <div class="file-tools-actions"><strong>Файлы сервера · Documents</strong><input type="search" id="documentsSearch" placeholder="Поиск файлов" aria-label="Поиск файлов сервера" /></div>
+                    <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
+                    <button type="button" id="containerFileBrowseBtn">Скачать из Downloads Chromium…</button>
+                    <div class="settings-action-status" id="containerFileStatus"></div>
                   </div>
                 </section>
                 <section class="tools-panel tools-displays-section" id="toolsPanelDisplays" role="tabpanel" aria-labelledby="toolsTabDisplays" data-tools-panel="displays" hidden>
@@ -2235,8 +2234,9 @@
       </div>
       <div class="container-file-picker-toolbar">
         <button type="button" id="containerFileUpBtn" title="На уровень выше">↑</button>
-        <div class="container-file-picker-path" id="containerFilePath" title="Текущий путь">/config</div>
+        <div class="container-file-picker-path" id="containerFilePath" title="Текущий путь">/config/Downloads</div>
       </div>
+      <div class="file-tools-actions"><button type="button" data-file-folder="/config/Downloads">Downloads</button><button type="button" data-file-folder="/config/Documents">Documents</button></div>
       <div class="container-file-picker-entries" id="containerFileEntries" aria-live="polite"></div>
       <div class="container-file-picker-footer">
         <div class="settings-action-status" id="containerFilePickerStatus"></div>
@@ -4665,7 +4665,7 @@
       if (!Array.isArray(files) || files.length === 0) {
         const empty = document.createElement("div");
         empty.className = "document-file-empty";
-        empty.textContent = "Папка Documents пуста";
+        empty.textContent = "Нет файлов для скачивания";
         documentsFileList.appendChild(empty);
         return;
       }
@@ -4708,7 +4708,9 @@
           throw new Error(payload.message || payload.details || payload.summary || "Не удалось получить список файлов");
         }
         documentsMaxUploadBytes = Number(payload.maxUploadBytes) || null;
-        renderDocumentFiles(payload.files);
+        serverDocumentFiles = payload.files || [];
+        filterDocumentFiles();
+        document.getElementById("documentsUploadLimit").textContent = documentsMaxUploadBytes ? `До ${formatFileBytes(documentsMaxUploadBytes)} на файл · Documents сервера` : "Documents сервера";
         if (announce) {
           const count = Array.isArray(payload.files) ? payload.files.length : 0;
           const limit = documentsMaxUploadBytes ? ` · лимит ${formatFileBytes(documentsMaxUploadBytes)}` : "";
@@ -4716,72 +4718,104 @@
         }
       } catch (error) {
         renderDocumentFiles([]);
-        if (announce) setDocumentsStatus("danger", error.message || "Не удалось получить список файлов");
+        setDocumentsStatus("danger", error.message || "Не удалось получить список файлов");
       }
     }
 
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error(`Не удалось прочитать ${file.name}`));
-        reader.onload = () => {
-          const result = String(reader.result || "");
-          const comma = result.indexOf(",");
-          resolve(comma >= 0 ? result.slice(comma + 1) : "");
+    const transferQueue = [];
+    let transferRunning = false;
+    let serverDocumentFiles = [];
+
+    function queueDocumentFiles(files) {
+      for (const file of files) {
+        const row = document.createElement("div");
+        row.className = "document-file-row";
+        const info = document.createElement("div");
+        info.className = "document-file-info";
+        const name = document.createElement("span");
+        name.className = "document-file-name";
+        name.textContent = file.name;
+        const status = document.createElement("span");
+        status.className = "document-file-meta";
+        status.textContent = `${formatFileBytes(file.size)} · В очереди`;
+        const progress = document.createElement("progress");
+        progress.max = 100;
+        progress.value = 0;
+        progress.setAttribute("aria-label", `Загрузка ${file.name}`);
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.textContent = "Отменить";
+        const item = { file, status, progress, cancel, cancelled: false, xhr: null };
+        cancel.onclick = () => {
+          item.cancelled = true;
+          item.xhr?.abort();
+          status.textContent = "Отменено";
+          cancel.hidden = true;
+          item.file = null;
         };
-        reader.readAsDataURL(file);
+        info.append(name, status, progress);
+        row.append(info, cancel);
+        document.getElementById("documentsTransferQueue").append(row);
+        transferQueue.push(item);
+      }
+      uploadDocumentFiles();
+    }
+
+    function sendDocumentFile(item) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        item.xhr = xhr;
+        const url = new URL("/api/files/upload", window.location.href);
+        url.username = "";
+        url.password = "";
+        xhr.open("POST", url.toString());
+        xhr.withCredentials = true;
+        xhr.timeout = 300000;
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.setRequestHeader("X-File-Name", encodeURIComponent(item.file.name));
+        if (window.location.username) xhr.setRequestHeader("Authorization", `Basic ${btoa(`${window.location.username}:${window.location.password}`)}`);
+        xhr.upload.onprogress = event => {
+          if (!event.lengthComputable) return;
+          item.progress.value = Math.round(event.loaded / event.total * 100);
+          item.status.textContent = event.loaded === event.total ? "Сервер сохраняет файл…" : `${formatFileBytes(event.loaded)} / ${formatFileBytes(event.total)} · ${item.progress.value}%`;
+        };
+        xhr.onload = () => {
+          let payload;
+          try { payload = JSON.parse(xhr.responseText); } catch { payload = {}; }
+          if (xhr.status < 200 || xhr.status >= 300 || !payload.ok) reject(new Error(payload.message || payload.summary || payload.error || "Ошибка загрузки"));
+          else resolve(payload);
+        };
+        xhr.onerror = () => reject(new Error("Соединение прервано"));
+        xhr.ontimeout = () => reject(new Error("Сервер не ответил вовремя"));
+        xhr.onabort = () => reject(new Error("Отменено"));
+        xhr.send(item.file);
       });
     }
 
     async function uploadDocumentFiles() {
-      if (!documentsUploadInput || !documentsUploadBtn) return;
-      const files = Array.from(documentsUploadInput.files || []);
-      if (!files.length) {
-        setDocumentsStatus("warn", "Выберите один или несколько файлов");
-        return;
-      }
-
-      documentsUploadBtn.disabled = true;
-      if (documentsRefreshBtn) documentsRefreshBtn.disabled = true;
-      const saved = [];
+      if (transferRunning) return;
+      transferRunning = true;
       try {
-        for (let index = 0; index < files.length; index += 1) {
-          const file = files[index];
-          if (documentsMaxUploadBytes && file.size > documentsMaxUploadBytes) {
-            throw new Error(`${file.name}: размер превышает ${formatFileBytes(documentsMaxUploadBytes)}`);
+        while (transferQueue.length) {
+          const item = transferQueue.shift();
+          if (item.cancelled) continue;
+          try {
+            if (documentsMaxUploadBytes && item.file.size > documentsMaxUploadBytes) throw new Error(`Превышен лимит ${formatFileBytes(documentsMaxUploadBytes)}`);
+            item.status.textContent = "Подключение…";
+            const result = await sendDocumentFile(item);
+            item.progress.value = 100;
+            item.status.textContent = `Сохранён: ${result.name}${result.browserMirrored === false ? " · Chromium: копирование ожидается" : " · доступен в Chromium"}`;
+          } catch (error) {
+            item.status.textContent = error.message;
+            item.status.style.color = item.cancelled ? "var(--muted)" : "var(--danger)";
+          } finally {
+            item.cancel.hidden = true;
+            item.file = null;
+            item.xhr = null;
           }
-          setDocumentsStatus("warn", `Загружаю ${index + 1}/${files.length}: ${file.name}`);
-          const data = await fileToBase64(file);
-          const response = await localApiFetch("/api/files/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              fileName: file.name,
-              mimeType: file.type || "application/octet-stream",
-              data
-            })
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok || !payload.ok) {
-            throw new Error(payload.message || payload.details || payload.summary || `Не удалось загрузить ${file.name}`);
-          }
-          saved.push(payload);
+          await loadDocumentFiles({ announce: false });
         }
-        documentsUploadInput.value = "";
-        await loadDocumentFiles({ announce: false });
-        const renamed = saved.filter(item => item.renamed).length;
-        const browserPending = saved.filter(item => item.browserMirrored === false).length;
-        setDocumentsStatus(
-          browserPending ? "warn" : "ok",
-          `Загружено: ${saved.length}${renamed ? ` · ${renamed} переименовано из-за совпадения имён` : ""}${browserPending ? ` · ${browserPending} появится в Chromium после его запуска` : " · доступно в Chromium"}`
-        );
-      } catch (error) {
-        await loadDocumentFiles({ announce: false });
-        setDocumentsStatus("danger", error.message || "Не удалось загрузить файл");
-      } finally {
-        documentsUploadBtn.disabled = false;
-        if (documentsRefreshBtn) documentsRefreshBtn.disabled = false;
-      }
+      } finally { transferRunning = false; }
     }
 
     function setContainerFileStatus(tone, message) {
@@ -4893,8 +4927,8 @@
       if (!containerFileDialog) return;
       if (!containerFileDialog.open) containerFileDialog.showModal();
       setContainerFileStatus("", "");
-      containerFileCurrentPath = "/config";
-      await loadContainerDirectory("/config");
+      containerFileCurrentPath = "/config/Downloads";
+      await loadContainerDirectory("/config/Downloads");
     }
 
     function closeContainerFileBrowser() {
@@ -6398,9 +6432,27 @@
     bindFloatingMenus();
     bindAppsMenu();
     bindResponsiveToolbar();
-    if (documentsUploadBtn) documentsUploadBtn.onclick = uploadDocumentFiles;
+    function filterDocumentFiles() {
+      const query = document.getElementById("documentsSearch").value.toLocaleLowerCase();
+      renderDocumentFiles(serverDocumentFiles.filter(file => file.name.toLocaleLowerCase().includes(query)));
+    }
+    document.getElementById("documentsSearch").oninput = filterDocumentFiles;
+    const dropZone = document.getElementById("documentsDropZone");
+    dropZone.onclick = () => documentsUploadInput.click();
+    if (documentsUploadBtn) documentsUploadBtn.onclick = () => documentsUploadInput.click();
+    documentsUploadInput.onchange = () => {
+      queueDocumentFiles(Array.from(documentsUploadInput.files || []));
+      documentsUploadInput.value = "";
+    };
+    for (const type of ["dragenter", "dragover", "dragleave", "drop"]) dropZone.addEventListener(type, event => {
+      event.preventDefault();
+      event.stopPropagation();
+      dropZone.classList.toggle("drag-over", type === "dragenter" || type === "dragover");
+      if (type === "drop") queueDocumentFiles(Array.from(event.dataTransfer.files || []));
+    });
     if (documentsRefreshBtn) documentsRefreshBtn.onclick = () => loadDocumentFiles();
     if (documentsFileList) loadDocumentFiles();
+    document.querySelectorAll("[data-file-folder]").forEach(button => { button.onclick = () => loadContainerDirectory(button.dataset.fileFolder); });
     if (containerFileBrowseBtn) containerFileBrowseBtn.onclick = openContainerFileBrowser;
     if (containerFileCloseBtn) containerFileCloseBtn.onclick = closeContainerFileBrowser;
     if (containerFileCancelBtn) containerFileCancelBtn.onclick = closeContainerFileBrowser;

@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -2529,30 +2529,46 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_document_upload(self):
-        max_body = int(MAX_UPLOAD_BYTES * 1.4) + 65536
-        payload, error = self._read_json_body(max_body)
-        if error:
-            status = 413 if error == "payload_too_large" else 400
-            send_json(self, status, {"ok": False, "error": error})
-            return
+        binary = self.headers.get("Content-Type", "").split(";", 1)[0].strip() == "application/octet-stream"
+        if binary:
+            file_name = normalize_document_file_name(unquote(self.headers.get("X-File-Name", "")))
+            try:
+                content_length = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                content_length = -1
+            if not file_name or content_length < 0 or self.headers.get("Transfer-Encoding"):
+                self.close_connection = True
+                send_json(self, 400, {"ok": False, "error": "file_request_invalid"})
+                return
+            if content_length > MAX_UPLOAD_BYTES:
+                self.close_connection = True
+                send_json(self, 413, {"ok": False, "error": "file_too_large"})
+                return
+        else:
+            max_body = int(MAX_UPLOAD_BYTES * 1.4) + 65536
+            payload, error = self._read_json_body(max_body)
+            if error:
+                status = 413 if error == "payload_too_large" else 400
+                send_json(self, status, {"ok": False, "error": error})
+                return
 
-        file_name = normalize_document_file_name(payload.get("fileName"))
-        if not file_name:
-            send_json(self, 400, {"ok": False, "error": "file_name_invalid"})
-            return
+            file_name = normalize_document_file_name(payload.get("fileName"))
+            if not file_name:
+                send_json(self, 400, {"ok": False, "error": "file_name_invalid"})
+                return
 
-        data_b64 = payload.get("data")
-        if not isinstance(data_b64, str):
-            send_json(self, 400, {"ok": False, "error": "file_data_invalid"})
-            return
-        try:
-            content = base64.b64decode(data_b64, validate=True)
-        except (ValueError, TypeError):
-            send_json(self, 400, {"ok": False, "error": "file_data_invalid"})
-            return
-        if len(content) > MAX_UPLOAD_BYTES:
-            send_json(self, 413, {"ok": False, "error": "file_too_large"})
-            return
+            data_b64 = payload.get("data")
+            if not isinstance(data_b64, str):
+                send_json(self, 400, {"ok": False, "error": "file_data_invalid"})
+                return
+            try:
+                content = base64.b64decode(data_b64, validate=True)
+            except (ValueError, TypeError):
+                send_json(self, 400, {"ok": False, "error": "file_data_invalid"})
+                return
+            if len(content) > MAX_UPLOAD_BYTES:
+                send_json(self, 413, {"ok": False, "error": "file_too_large"})
+                return
 
         root, root_error = documents_root()
         if root_error:
@@ -2565,7 +2581,17 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             target_path, fd = reserve_document_file(root, file_name)
             with os.fdopen(fd, "wb") as target_file:
                 fd = None
-                target_file.write(content)
+                if binary:
+                    remaining = content_length
+                    self.connection.settimeout(60)
+                    while remaining:
+                        chunk = self.rfile.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise OSError("Upload interrupted")
+                        target_file.write(chunk)
+                        remaining -= len(chunk)
+                else:
+                    target_file.write(content)
                 target_file.flush()
                 os.fsync(target_file.fileno())
         except OSError as exc:
@@ -2589,7 +2615,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "name": saved_name,
                 "originalName": file_name,
                 "renamed": saved_name != file_name,
-                "bytes": len(content),
+                "bytes": content_length if binary else len(content),
                 "directory": "Documents",
                 "browserMirrored": browser_mirrored,
                 "browserMirrorError": browser_mirror_error,
