@@ -32,6 +32,7 @@ class Recovery:
         self.entries = []
         self.ok = True
         self.current_step = "starting"
+        self.terminal_port = int(self.read_env_file().get("CADDY_TERMINAL_PORT", "8081"))
 
     def write_status(self, state, summary):
         payload = {
@@ -142,7 +143,7 @@ class Recovery:
 
     def wait_for_ports(self):
         targets = {
-            8080: "caddy",
+            self.terminal_port: "caddy",
             7682: "ttyd",
             7683: "session-control",
             7690: "browser-upstream",
@@ -168,11 +169,11 @@ class Recovery:
     def http_status(self, path, auth_header):
         request = (
             f"GET {path} HTTP/1.1\r\n"
-            "Host: 127.0.0.1:8080\r\n"
+            f"Host: 127.0.0.1:{self.terminal_port}\r\n"
             f"Authorization: {auth_header}\r\n"
             "Connection: close\r\n\r\n"
         )
-        with socket.create_connection(("127.0.0.1", 8080), timeout=5) as sock:
+        with socket.create_connection(("127.0.0.1", self.terminal_port), timeout=5) as sock:
             sock.sendall(request.encode("utf-8"))
             response = sock.recv(1024).decode("latin1", "replace")
         return response.splitlines()[0] if response else ""
@@ -181,14 +182,14 @@ class Recovery:
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         request = (
             f"GET {path} HTTP/1.1\r\n"
-            "Host: 127.0.0.1:8080\r\n"
+            f"Host: 127.0.0.1:{self.terminal_port}\r\n"
             f"Authorization: {auth_header}\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\n"
             "Sec-WebSocket-Version: 13\r\n\r\n"
         )
-        with socket.create_connection(("127.0.0.1", 8080), timeout=5) as sock:
+        with socket.create_connection(("127.0.0.1", self.terminal_port), timeout=5) as sock:
             sock.sendall(request.encode("utf-8"))
             response = sock.recv(2048).decode("latin1", "replace")
         return response.splitlines()[0] if response else ""

@@ -117,28 +117,16 @@ class Updater:
                         target.unlink()
                 except OSError:
                     pass
-        remaining = self._tracked_changes()
-        if remaining:
-            visible = ", ".join(remaining[:8])
-            if len(remaining) > 8:
-                visible += f" и ещё {len(remaining) - 8}"
-            self.entries.append({
-                "time": now(),
-                "step": "preflight",
-                "ok": False,
-                "message": "Есть локальные изменения, которые Fly Terminal не будет перезаписывать автоматически",
-                "output": visible,
-            })
-            self.ok = False
-            self.write("failed", f"Обновление остановлено: есть локальные изменения ({visible})", "preflight")
-            raise RuntimeError("local tracked changes")
+        # git pull --ff-only preserves local edits and refuses to overwrite files
+        # changed upstream. Let Git check conflicts instead of blocking every
+        # update merely because the local deployment has custom configuration.
 
     def restart_stack(self):
         uid = subprocess.check_output(["id", "-u"], text=True).strip()
         domain = f"gui/{uid}"
         for label in LABELS:
             self.run(f"restart-{label}", ["launchctl", "kickstart", "-k", f"{domain}/{label}"], timeout=30)
-        for port in (8080, 7682, 7683):
+        for port in (8080, 8081, 7682, 7683):
             deadline = time.monotonic() + 30
             while True:
                 probe = subprocess.run(

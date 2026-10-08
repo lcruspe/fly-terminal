@@ -1734,7 +1734,7 @@ def operation_failure_message(operation, step):
         return "Восстановление Chromium завершилось с ошибкой. Подробности сохранены в журнале."
 
     if operation == "update":
-        if step == "git-status":
+        if step in {"git-status", "preflight"}:
             return "Обновление остановлено: есть локальные изменения или не удалось проверить состояние репозитория."
         if step == "git-fetch":
             return "Не удалось получить обновления из origin/main. Проверьте доступ к GitHub."

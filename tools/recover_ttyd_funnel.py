@@ -24,8 +24,6 @@ ENV_FILE = Path.home() / ".config/fly-terminal-mac/fly-terminal.env"
 STATUS_FILE = Path.home() / ".local/share/fly-terminal/funnel-recovery-status.json"
 LOCK_FILE = Path("/tmp/fly-terminal-funnel-recovery.lock")
 TAILSCALE_SERVICE = "Tailscale"
-FUNNEL_HOST = "mac-mini.tail1c55c5.ts.net"
-FUNNEL_TARGET = "http://127.0.0.1:8080"
 FUNNEL_PORTS = (443, 8443)
 LOCAL_LABELS = (
     "ai.kruspe.fly-terminal.caddy",
@@ -49,6 +47,20 @@ class Recovery:
         self.status_file = Path(args.status_file).expanduser()
         self.status_file.parent.mkdir(parents=True, exist_ok=True)
         self.env_values = self.read_env_file()
+        self.terminal_port = int(self.env_values.get("CADDY_TERMINAL_PORT", "8081"))
+        self.funnel_targets = {
+            443: f"http://127.0.0.1:{self.env_values.get('CADDY_PORT', '8080')}",
+            8443: f"http://127.0.0.1:{self.terminal_port}",
+        }
+
+    def funnel_host(self) -> str:
+        result = self.run_command(["tailscale", "status", "--json"], timeout=10)
+        if result.returncode != 0:
+            raise RecoveryError("cannot read current Tailscale hostname")
+        host = json.loads(result.stdout).get("Self", {}).get("DNSName", "").rstrip(".")
+        if not host:
+            raise RecoveryError("current Tailscale hostname is unavailable")
+        return host
 
     def emit(self, step: str, ok: bool, message: str, **details: object) -> None:
         event: dict[str, object] = {
@@ -112,8 +124,8 @@ class Recovery:
         return f"Basic {encoded}"
 
     def http_status(self, path: str, authenticated: bool = True) -> int:
-        connection = http.client.HTTPConnection("127.0.0.1", 8080, timeout=5)
-        headers = {"Host": "127.0.0.1:8080", "Connection": "close"}
+        connection = http.client.HTTPConnection("127.0.0.1", self.terminal_port, timeout=5)
+        headers = {"Host": f"127.0.0.1:{self.terminal_port}", "Connection": "close"}
         if authenticated:
             headers["Authorization"] = self.auth_header()
         try:
@@ -128,14 +140,14 @@ class Recovery:
         key = base64.b64encode(os.urandom(16)).decode()
         request = (
             f"GET {path} HTTP/1.1\r\n"
-            "Host: 127.0.0.1:8080\r\n"
+            f"Host: 127.0.0.1:{self.terminal_port}\r\n"
             f"Authorization: {self.auth_header()}\r\n"
             "Connection: Upgrade\r\n"
             "Upgrade: websocket\r\n"
             "Sec-WebSocket-Version: 13\r\n"
             f"Sec-WebSocket-Key: {key}\r\n\r\n"
         )
-        with socket.create_connection(("127.0.0.1", 8080), timeout=5) as sock:
+        with socket.create_connection(("127.0.0.1", self.terminal_port), timeout=5) as sock:
             sock.sendall(request.encode())
             first_line = sock.recv(1024).split(b"\r\n", 1)[0].decode("latin1", "replace")
         parts = first_line.split()
@@ -272,13 +284,8 @@ class Recovery:
 
     def republish_funnel(self) -> None:
         for port in FUNNEL_PORTS:
-            off = self.run_command(
-                ["tailscale", "funnel", "--yes", f"--https={port}", "off"], timeout=20
-            )
-            if off.returncode != 0:
-                raise RecoveryError(f"failed to disable Funnel port {port}: {off.stdout.strip()}")
             on = self.run_command(
-                ["tailscale", "funnel", "--bg", "--yes", f"--https={port}", FUNNEL_TARGET],
+                ["tailscale", "funnel", "--bg", "--yes", f"--https={port}", self.funnel_targets[port]],
                 timeout=30,
             )
             if on.returncode != 0:
@@ -286,14 +293,14 @@ class Recovery:
         status = self.run_command(["tailscale", "funnel", "status", "--json"], timeout=10)
         configured = (
             status.returncode == 0
-            and FUNNEL_HOST in status.stdout
-            and FUNNEL_TARGET in status.stdout
+            and self.funnel_host() in status.stdout
+            and all(target in status.stdout for target in self.funnel_targets.values())
             and all(f'"{port}"' in status.stdout for port in FUNNEL_PORTS)
         )
         self.emit(
             "funnel-republish",
             configured,
-            f"{','.join(str(port) for port in FUNNEL_PORTS)} -> {FUNNEL_TARGET}",
+            json.dumps(self.funnel_targets, sort_keys=True),
         )
         if not configured:
             raise RecoveryError("Funnel status does not contain the expected mapping")
@@ -312,13 +319,14 @@ class Recovery:
         )
 
     def wait_public_dns(self) -> bool:
+        host = self.funnel_host()
         providers = {
             "google": (
-                f"https://dns.google/resolve?name={FUNNEL_HOST}&type=A",
+                f"https://dns.google/resolve?name={host}&type=A",
                 {},
             ),
             "cloudflare": (
-                f"https://cloudflare-dns.com/dns-query?name={FUNNEL_HOST}&type=A",
+                f"https://cloudflare-dns.com/dns-query?name={host}&type=A",
                 {"accept": "application/dns-json"},
             ),
         }
@@ -365,7 +373,7 @@ class Recovery:
                     True,
                     (
                         "manual browser check required: "
-                        f"https://{FUNNEL_HOST}/ and https://{FUNNEL_HOST}:8443/"
+                        f"https://{self.funnel_host()}/ and https://{self.funnel_host()}:8443/"
                     ),
                 )
             self.finish(code)
