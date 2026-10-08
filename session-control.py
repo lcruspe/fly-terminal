@@ -100,6 +100,108 @@ HAPP_SUBSCRIPTION_REFRESH_CACHE_TTL_SECONDS = 60
 HAPP_SUBSCRIPTION_REFRESH_CACHE = {}
 HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK = threading.Lock()
 
+HAPP_AX_SOURCE = REPO_ROOT / "macos" / "happ-ax.swift"
+HAPP_AX_BINARY = Path.home() / "Library/Caches/FlyTerminal/happ-ax"
+HAPP_AX_BUILD_LOCK = threading.Lock()
+
+
+class HappAXError(Exception):
+    pass
+
+
+def _happ_ax_executable():
+    """Build the native Accessibility bridge only when the checked-in source changes."""
+    if sys.platform != "darwin" or not HAPP_AX_SOURCE.is_file():
+        raise HappAXError("happ_accessibility_unavailable")
+    with HAPP_AX_BUILD_LOCK:
+        if not HAPP_AX_BINARY.is_file() or HAPP_AX_BINARY.stat().st_mtime < HAPP_AX_SOURCE.stat().st_mtime:
+            HAPP_AX_BINARY.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            # A unique artifact prevents concurrent API workers from clobbering
+            # the same compiler output while still publishing atomically.
+            fd, temporary_name = tempfile.mkstemp(prefix="happ-ax-", dir=str(HAPP_AX_BINARY.parent))
+            os.close(fd)
+            temporary = Path(temporary_name)
+            try:
+                result = subprocess.run(
+                    ["/usr/bin/swiftc", str(HAPP_AX_SOURCE), "-o", str(temporary)],
+                    capture_output=True, text=True, timeout=90, check=False,
+                )
+                if result.returncode != 0:
+                    raise HappAXError("happ_accessibility_build_failed")
+                os.replace(temporary, HAPP_AX_BINARY)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise HappAXError("happ_accessibility_build_failed") from exc
+            finally:
+                temporary.unlink(missing_ok=True)
+    return str(HAPP_AX_BINARY)
+
+
+def _happ_ax_command(*args):
+    try:
+        result = subprocess.run(
+            [_happ_ax_executable(), *args],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=12, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise HappAXError("happ_accessibility_unavailable") from exc
+    if result.returncode != 0:
+        for error in ("happ_accessibility_denied", "happ_not_running", "happ_window_unavailable",
+                      "happ_servers_unavailable", "happ_location_not_found", "happ_ax_press_failed"):
+            if error in result.stderr:
+                raise HappAXError(error)
+        raise HappAXError("happ_accessibility_unavailable")
+    try:
+        return json.loads(result.stdout)
+    except (ValueError, TypeError) as exc:
+        raise HappAXError("happ_accessibility_unavailable") from exc
+
+
+def _happ_normalize_location_label(label):
+    """Happ's AX rows omit the flag icon included in connectedConfigJson remarks."""
+    return re.sub(r"^(?:[\U0001F1E6-\U0001F1FF]{2}\s*)+", "", str(label or "").strip()).strip()
+
+
+def happ_accessibility_catalog():
+    """Read subscription/server rows from Happ's UI instead of its private CFNetwork cache."""
+    catalog = _happ_ax_command("list")
+    if not catalog.get("currentLocationId"):
+        # AX does not always expose selected state. The connected config carries
+        # a leading flag emoji while AX rows often omit it. Only accept a unique
+        # match to avoid confusing duplicate server names across subscriptions.
+        current_name = happ_current_location()
+        entries = [(subscription, location)
+                   for subscription in catalog["subscriptions"]
+                   for location in subscription["locations"]]
+        matches = [(sub, loc) for sub, loc in entries if loc["label"] == current_name]
+        if not matches and current_name:
+            normalized = _happ_normalize_location_label(current_name)
+            matches = [(sub, loc) for sub, loc in entries
+                       if _happ_normalize_location_label(loc["label"]) == normalized]
+        if len(matches) == 1:
+            subscription, location = matches[0]
+            catalog.update(current=current_name, currentSubscription=subscription["label"],
+                           currentSubscriptionId=subscription["id"], currentLocationId=location["id"])
+    return catalog
+
+
+def select_happ_accessibility_location(subscription, location):
+    """Invoke Happ's native AXPress and verify the app's persisted selection."""
+    # Already selected: do not disrupt the existing VPN tunnel.
+    if _happ_normalize_location_label(happ_current_location()) == _happ_normalize_location_label(location["label"]):
+        current = happ_accessibility_catalog()
+        if current.get("currentSubscriptionId") == subscription["id"] and current.get("currentLocationId") == location["id"]:
+            return True, ""
+    _happ_ax_command("select", subscription["id"], location["id"])
+    for _ in range(12):
+        catalog = happ_accessibility_catalog()
+        if (catalog.get("currentSubscriptionId") == subscription["id"]
+                and catalog.get("currentLocationId") == location["id"]):
+            return True, ""
+        time.sleep(0.4)
+    return False, "happ_selection_unconfirmed"
+
+
 TOOL_ERROR_MESSAGES = {
     "file_delete_failed": "Не удалось удалить файлы. Проверьте доступ к папке.",
     "invalid_json": "Сервер получил некорректный запрос. Обновите страницу и повторите действие.",
@@ -123,6 +225,14 @@ TOOL_ERROR_MESSAGES = {
     "happ_subscription_not_found": "Выбранная подписка Happ больше недоступна. Обновите список подписок и повторите действие.",
     "happ_action_already_running": "Другая операция Happ уже выполняется. Дождитесь её завершения.",
     "happ_location_switch_failed": "Не удалось переключить локацию Happ.",
+    "happ_accessibility_denied": "Нет разрешения macOS на управление интерфейсом Happ через Accessibility.",
+    "happ_not_running": "Happ Plus не запущен.",
+    "happ_window_unavailable": "Откройте главное окно Happ Plus на Mac mini.",
+    "happ_servers_unavailable": "Не удалось прочитать серверы из окна Happ Plus.",
+    "happ_ax_press_failed": "Happ не принял команду выбора сервера.",
+    "happ_selection_unconfirmed": "Happ не подтвердил выбор сервера. Проверьте состояние клиента.",
+    "happ_accessibility_build_failed": "Не удалось собрать компонент управления Happ.",
+    "happ_accessibility_unavailable": "Интерфейс Happ Plus недоступен для удалённого управления.",
     "happ_routing_apply_failed": "Не удалось применить профиль маршрутизации Happ для выбранной подписки.",
     "happ_routing_fallback_failed": "Happ не смог подключиться даже после отключения проблемного профиля маршрутизации.",
     "payload_too_large": "Размер запроса превышает допустимый лимит.",
@@ -2206,14 +2316,23 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "state": state,
                 "location": happ_current_location(),
             }
+            try:
+                native = happ_accessibility_catalog()
+                payload["location"] = native.get("current") or payload["location"]
+                payload["subscription"] = native.get("currentSubscription", "")
+            except HappAXError:
+                pass
             if error:
                 payload.update({"error": "happ_service_unavailable", "details": error})
             send_json(self, 200 if not error else 503, payload)
             return
 
         if urlsplit(self.path).path in {"/api/vpn/happ/locations", "/api/vpn/happ/subscriptions"}:
-            refresh = parse_qs(urlsplit(self.path).query).get("refresh") == ["1"]
-            catalog = happ_subscription_catalog(force_refresh=True) if refresh else happ_subscription_catalog()
+            try:
+                catalog = happ_accessibility_catalog()
+            except HappAXError as exc:
+                send_json(self, 503, {"ok": False, "error": str(exc)})
+                return
             public_subscriptions = [
                 {
                     "id": subscription["id"],
@@ -3089,7 +3208,11 @@ class SessionControlHandler(BaseHTTPRequestHandler):
 
         subscription_id = str(payload.get("subscriptionId") or "")
         location_id = str(payload.get("locationId") or "")
-        catalog = happ_subscription_catalog()
+        try:
+            catalog = happ_accessibility_catalog()
+        except HappAXError as exc:
+            send_json(self, 503, {"ok": False, "error": str(exc)})
+            return
         subscriptions = catalog["subscriptions"]
 
         subscription = None
@@ -3106,11 +3229,16 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         if not location:
             send_json(self, 404, {"ok": False, "error": "happ_location_not_found"})
             return
+        if subscription is None:
+            # Preserve the legacy API accepting locationId without an explicit
+            # subscriptionId, while always passing a real group ID to AXPress.
+            subscription = next((item for item in subscriptions
+                                 if any(entry["id"] == location_id for entry in item["locations"])), None)
         if not HAPP_RECONNECT_LOCK.acquire(blocking=False):
             send_json(self, 409, {"ok": False, "error": "happ_action_already_running"})
             return
         try:
-            switched, switch_error, routing_fallback = apply_happ_location(subscription or {}, location)
+            switched, switch_error = select_happ_accessibility_location(subscription, location)
             final_state, final_error = happ_vpn_status()
             if not switched:
                 send_json(self, 504, {"ok": False, "error": "happ_location_switch_failed", "state": final_state, "details": switch_error or final_error})
@@ -3122,10 +3250,10 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "subscriptionId": subscription["id"] if subscription else "",
                 "subscription": subscription["label"] if subscription else "",
                 "location": happ_current_location() or location["label"],
-                "routingFallback": routing_fallback,
+                "routingFallback": False,
             })
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            send_json(self, 500, {"ok": False, "error": "happ_location_switch_failed", "details": str(exc)})
+        except (OSError, subprocess.TimeoutExpired, HappAXError) as exc:
+            send_json(self, 503, {"ok": False, "error": "happ_location_switch_failed", "details": str(exc)})
         finally:
             HAPP_RECONNECT_LOCK.release()
 

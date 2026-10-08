@@ -4951,7 +4951,7 @@
           happSubscriptionSelect.appendChild(new Option("Подписки не найдены", ""));
           happSubscriptionSelect.disabled = true;
           renderHappLocationOptions("");
-          happLocationStatus.textContent = "В кэше Happ не найдены подписки с доступными локациями";
+          happLocationStatus.textContent = "Happ не показывает доступных подписок и локаций";
           return;
         }
 
@@ -4994,6 +4994,26 @@
       updateHappCatalogStatus(subscriptionId);
     }
 
+    async function confirmHappLocationAfterReconnect(subscriptionId, locationId) {
+      // Changing the macOS VPN can interrupt the HTTP response even when Happ
+      // successfully selected the server. Reconcile with authoritative state.
+      const retryDelays = [1000, 2500, 4500, 7000, 10000, 15000];
+      for (const delay of retryDelays) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        try {
+          const response = await localApiFetch("/api/vpn/happ/subscriptions");
+          if (!response.ok) continue;
+          const payload = await response.json();
+          if (payload.currentSubscriptionId === subscriptionId && payload.currentLocationId === locationId) {
+            return payload;
+          }
+        } catch (_error) {
+          // The route may still be recovering; do not issue a second switch.
+        }
+      }
+      return null;
+    }
+
     async function switchHappLocation() {
       const subscriptionId = happSubscriptionSelect?.value || "";
       const locationId = happLocationSelect?.value || "";
@@ -5014,7 +5034,9 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok === false) {
-          throw new Error(payload.message || payload.details || "Не удалось переключить локацию Happ");
+          const failure = new Error(payload.message || payload.details || "Не удалось переключить локацию Happ");
+          failure.definitive = response.status >= 400 && response.status < 500;
+          throw failure;
         }
         renderHappState(payload);
         if (payload.routingFallback) {
@@ -5024,8 +5046,17 @@
           setStatusText(`Happ: ${payload.subscription || subscriptionLabel} → ${payload.location || selectedLabel}`, 2800);
         }
       } catch (error) {
+        if (!error.definitive) {
+          happLocationStatus.textContent = "Связь прервана при смене VPN. Проверяю текущую локацию…";
+          const confirmed = await confirmHappLocationAfterReconnect(subscriptionId, locationId);
+          if (confirmed) {
+            setStatusText(`Happ: ${subscriptionLabel} → ${selectedLabel}`, 4000);
+            renderHappState({ ok: true, service: "Happ Plus", state: "Connected", location: selectedLabel, subscription: subscriptionLabel });
+            return;
+          }
+        }
         happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
-        setStatusText("Не удалось переключить локацию Happ", 3600);
+        setStatusText("Не удалось подтвердить переключение Happ", 3600);
       } finally {
         reconnectHappBtn.disabled = false;
         await loadHappSubscriptions();
