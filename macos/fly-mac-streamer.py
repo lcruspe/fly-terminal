@@ -771,10 +771,8 @@ class StreamServer:
         })
 
     async def monitor_lock_state(self):
-        if not self.follow_main_when_locked:
-            return
         logger.info(
-            "Lock-aware display routing enabled: requested=%r, locked=%s, active=%r",
+            "Screen lock monitoring enabled: requested=%r, locked=%s, active=%r",
             self.requested_display_name, self.screen_locked, self.target_display_name
         )
         while self.running:
@@ -791,7 +789,7 @@ class StreamServer:
             await self.broadcast_json({
                 "type": "status",
                 "state": "host_locked" if locked else "host_unlocked",
-                "message": "Mac заблокирован: показан основной дисплей для входа" if locked else "Mac разблокирован: возвращаю браузерный дисплей",
+                "message": "Mac заблокирован" if locked else "Mac разблокирован",
             })
             if self.clients:
                 await self.configure_encoder(
