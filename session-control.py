@@ -277,7 +277,7 @@ def _happ_saved_request_headers(request_object):
     return headers
 
 
-def _happ_refresh_subscription_body(request_key, request_object):
+def _happ_refresh_subscription_body(request_key, request_object, force_refresh=False, cached_only=False):
     try:
         parsed = urlsplit(str(request_key or ""))
     except ValueError:
@@ -294,8 +294,10 @@ def _happ_refresh_subscription_body(request_key, request_object):
     now = time.monotonic()
     with HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK:
         cached = HAPP_SUBSCRIPTION_REFRESH_CACHE.get(cache_key)
-        if cached and now - cached[0] < HAPP_SUBSCRIPTION_REFRESH_CACHE_TTL_SECONDS:
+        if not force_refresh and cached and (cached_only or now - cached[0] < HAPP_SUBSCRIPTION_REFRESH_CACHE_TTL_SECONDS):
             return cached[1]
+    if cached_only:
+        return b""
 
     try:
         request = Request(str(request_key), headers=headers, method="GET")
@@ -513,7 +515,7 @@ def _happ_locations_from_configs(configs):
     return locations
 
 
-def _legacy_happ_subscriptions():
+def _legacy_happ_subscriptions(excluded_files=()):
     """Compatibility fallback for installations where Cache.db cannot be read."""
     try:
         cache_files = sorted(HAPP_CACHE_DIR.iterdir(), key=lambda item: item.stat().st_mtime, reverse=True)
@@ -523,6 +525,8 @@ def _legacy_happ_subscriptions():
     subscriptions = []
     fingerprints = set()
     for cache_file in cache_files:
+        if cache_file.name in excluded_files:
+            continue
         try:
             configs = _parse_happ_subscription_configs(cache_file.read_bytes())
         except OSError:
@@ -542,13 +546,14 @@ def _legacy_happ_subscriptions():
     return subscriptions
 
 
-def happ_subscriptions():
+def happ_subscriptions(force_refresh=False):
     """Return every cached Happ subscription and its locations without exposing subscription URLs."""
     if not HAPP_CACHE_DB.is_file():
         subscriptions = _legacy_happ_subscriptions()
     else:
         subscriptions = []
         seen_subscriptions = set()
+        referenced_files = set()
         connection = None
         try:
             database_uri = f"file:{quote(str(HAPP_CACHE_DB), safe='/')}?mode=ro"
@@ -574,18 +579,27 @@ def happ_subscriptions():
                        {fs_expr} AS is_data_on_fs,
                        d.receiver_data, b.response_object, b.request_object
                 FROM cfurl_cache_response AS r
-                JOIN cfurl_cache_receiver_data AS d USING (entry_ID)
+                LEFT JOIN cfurl_cache_receiver_data AS d USING (entry_ID)
                 LEFT JOIN cfurl_cache_blob_data AS b USING (entry_ID)
                 ORDER BY r.time_stamp DESC
                 """
             )
             for entry_id, request_key, _timestamp, is_data_on_fs, receiver_data, response_object, request_object in rows:
+                file_name = _cached_value_bytes(receiver_data).decode("utf-8", errors="ignore").strip("\x00\r\n ")
+                if file_name and len(file_name) < 256 and Path(file_name).name == file_name:
+                    referenced_files.add(file_name)
                 body = _happ_cached_response_body(receiver_data, is_data_on_fs)
-                if not body and _happ_is_subscription_response(response_object):
-                    body = _happ_refresh_subscription_body(request_key, request_object)
+                is_subscription = _happ_is_subscription_response(response_object)
+                if is_subscription:
+                    fresh_body = _happ_refresh_subscription_body(
+                        request_key, request_object, force_refresh=force_refresh,
+                        cached_only=bool(_parse_happ_subscription_configs(body)) and not force_refresh,
+                    )
+                    if _parse_happ_subscription_configs(fresh_body):
+                        body = fresh_body
                 configs = _parse_happ_subscription_configs(body)
                 locations = _happ_locations_from_configs(configs)
-                if not locations:
+                if not locations and not is_subscription:
                     continue
 
                 stable_key = str(request_key or f"cache-entry:{entry_id}")
@@ -605,8 +619,13 @@ def happ_subscriptions():
             if connection is not None:
                 connection.close()
 
-        if not subscriptions:
-            subscriptions = _legacy_happ_subscriptions()
+        # CFNetwork can evict the database entry while retaining a response file.
+        known_locations = {tuple(item["id"] for item in sub["locations"]) for sub in subscriptions}
+        for subscription in _legacy_happ_subscriptions(excluded_files=referenced_files):
+            fingerprint = tuple(item["id"] for item in subscription["locations"])
+            if fingerprint not in known_locations:
+                subscriptions.append(subscription)
+                known_locations.add(fingerprint)
 
     label_counts = {}
     for subscription in subscriptions:
@@ -618,8 +637,8 @@ def happ_subscriptions():
     return subscriptions
 
 
-def happ_subscription_catalog():
-    subscriptions = happ_subscriptions()
+def happ_subscription_catalog(force_refresh=False):
+    subscriptions = happ_subscriptions(force_refresh=True) if force_refresh else happ_subscriptions()
     current_config = happ_current_config()
     current_label = str(current_config.get("remarks") or "").strip()
     current_config_id = _happ_config_id(current_config) if current_config else ""
@@ -2163,8 +2182,9 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 200 if not error else 503, payload)
             return
 
-        if self.path in {"/api/vpn/happ/locations", "/api/vpn/happ/subscriptions"}:
-            catalog = happ_subscription_catalog()
+        if urlsplit(self.path).path in {"/api/vpn/happ/locations", "/api/vpn/happ/subscriptions"}:
+            refresh = parse_qs(urlsplit(self.path).query).get("refresh") == ["1"]
+            catalog = happ_subscription_catalog(force_refresh=True) if refresh else happ_subscription_catalog()
             public_subscriptions = [
                 {
                     "id": subscription["id"],

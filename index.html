@@ -2154,6 +2154,7 @@
                   <select id="happLocation" aria-label="Локация Happ"><option value="">Сначала выберите подписку</option></select>
                   <div class="settings-action-status" id="happLocationStatus"></div>
                   <div class="vpn-action-row">
+                    <button type="button" id="refreshHappSubscriptions">Обновить список</button>
                     <button type="button" id="reconnectHapp" title="Отключить и снова подключить активную конфигурацию Happ Plus через macOS scutil"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>Переподключить</button>
                     <div class="settings-action-status" id="happStatus"></div>
                   </div>
@@ -2846,6 +2847,7 @@
     const updateStatus = document.getElementById("updateStatus");
     const reconnectHappBtn = document.getElementById("reconnectHapp");
     const happStatus = document.getElementById("happStatus");
+    const refreshHappSubscriptionsBtn = document.getElementById("refreshHappSubscriptions");
     const happSubscriptionSelect = document.getElementById("happSubscription");
     const happLocationSelect = document.getElementById("happLocation");
     const happLocationStatus = document.getElementById("happLocationStatus");
@@ -2863,6 +2865,7 @@
     let macAppsError = "";
     let browserApps = [];
     let browserAppsError = "";
+    let happSubscriptionsLoading = false;
     let happSubscriptions = [];
     let happCatalogState = { currentSubscriptionId: "", currentLocationId: "", current: "", currentSubscription: "" };
     let bootRecoveryAttempted = false;
@@ -4964,10 +4967,20 @@
       happLocationStatus.textContent = selected ? `Подписка: ${selected.label}` : "";
     }
 
-    async function loadHappSubscriptions() {
-      if (!happSubscriptionSelect || !happLocationSelect) return;
+    async function loadHappSubscriptions(forceRefresh = false) {
+      if (!happSubscriptionSelect || !happLocationSelect || happSubscriptionsLoading) return;
+      const previousSubscriptionId = happSubscriptionSelect.value;
+      const previousLocationId = happLocationSelect.value;
+      happSubscriptionsLoading = true;
+      happSubscriptionSelect.disabled = true;
+      happLocationSelect.disabled = true;
+      if (refreshHappSubscriptionsBtn) {
+        refreshHappSubscriptionsBtn.disabled = true;
+        refreshHappSubscriptionsBtn.textContent = "Обновляю…";
+      }
+      happLocationStatus.textContent = "Загружаю подписки и локации…";
       try {
-        const response = await localApiFetch("/api/vpn/happ/subscriptions");
+        const response = await localApiFetch(`/api/vpn/happ/subscriptions${forceRefresh ? "?refresh=1" : ""}`, { cache: "no-store" });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok === false) {
           throw new Error(payload.message || payload.details || "Не удалось получить подписки Happ");
@@ -4997,22 +5010,26 @@
         happSubscriptionSelect.disabled = false;
 
         const currentExists = happSubscriptions.some(item => item.id === happCatalogState.currentSubscriptionId);
-        const selectedSubscriptionId = currentExists
+        const previousExists = forceRefresh && happSubscriptions.some(item => item.id === previousSubscriptionId);
+        const selectedSubscriptionId = previousExists ? previousSubscriptionId : currentExists
           ? happCatalogState.currentSubscriptionId
           : happSubscriptions[0].id;
         happSubscriptionSelect.value = selectedSubscriptionId;
         renderHappLocationOptions(
           selectedSubscriptionId,
-          selectedSubscriptionId === happCatalogState.currentSubscriptionId ? happCatalogState.currentLocationId : ""
+          previousExists ? previousLocationId : selectedSubscriptionId === happCatalogState.currentSubscriptionId ? happCatalogState.currentLocationId : ""
         );
         updateHappCatalogStatus(selectedSubscriptionId);
       } catch (error) {
-        happSubscriptions = [];
-        happSubscriptionSelect.innerHTML = "";
-        happSubscriptionSelect.appendChild(new Option("Недоступно", ""));
-        happSubscriptionSelect.disabled = true;
-        renderHappLocationOptions("");
+        happSubscriptionSelect.disabled = !happSubscriptions.length;
+        renderHappLocationOptions(previousSubscriptionId, previousLocationId);
         happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
+      } finally {
+        happSubscriptionsLoading = false;
+        if (refreshHappSubscriptionsBtn) {
+          refreshHappSubscriptionsBtn.disabled = false;
+          refreshHappSubscriptionsBtn.textContent = "Обновить список";
+        }
       }
     }
 
@@ -6406,6 +6423,9 @@
     if (reconnectHappBtn) {
       reconnectHappBtn.onclick = reconnectHapp;
       refreshHappStatus();
+    }
+    if (refreshHappSubscriptionsBtn) {
+      refreshHappSubscriptionsBtn.onclick = () => loadHappSubscriptions(true);
     }
     if (happSubscriptionSelect && happLocationSelect) {
       happSubscriptionSelect.onchange = handleHappSubscriptionChange;

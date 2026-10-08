@@ -28,6 +28,71 @@ class FakeResponse:
 
 
 class HappSubscriptionCacheRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        module.HAPP_SUBSCRIPTION_REFRESH_CACHE.clear()
+
+    def make_cache(self, root, entries):
+        cache_dir = root / "fsCachedData"
+        cache_dir.mkdir()
+        cache_db = root / "Cache.db"
+        with sqlite3.connect(cache_db) as connection:
+            connection.executescript("""
+                CREATE TABLE cfurl_cache_response(entry_ID INTEGER PRIMARY KEY, request_key TEXT, time_stamp TEXT);
+                CREATE TABLE cfurl_cache_receiver_data(entry_ID INTEGER PRIMARY KEY, isDataOnFS INTEGER, receiver_data BLOB);
+                CREATE TABLE cfurl_cache_blob_data(entry_ID INTEGER PRIMARY KEY, response_object BLOB, request_object BLOB);
+            """)
+            for entry_id, body in enumerate(entries, 1):
+                connection.execute("INSERT INTO cfurl_cache_response VALUES (?, ?, ?)",
+                                   (entry_id, f"https://provider.example/sub/{entry_id}", str(entry_id)))
+                if body is not None:
+                    connection.execute("INSERT INTO cfurl_cache_receiver_data VALUES (?, 0, ?)", (entry_id, body))
+                connection.execute("INSERT INTO cfurl_cache_blob_data VALUES (?, ?, ?)",
+                                   (entry_id, plistlib.dumps({"profile-title": f"VPN {entry_id}"}),
+                                    plistlib.dumps({"User-Agent": "Happ/test"})))
+        return cache_dir, cache_db
+
+    def test_includes_subscription_without_receiver_row_and_orphan_file(self):
+        cached = json.dumps([{"remarks": "Cached", "outbounds": [{}]}]).encode()
+        recovered = json.dumps([{"remarks": "Recovered", "outbounds": [{}]}]).encode()
+        orphan = json.dumps([{"remarks": "Orphan", "outbounds": [{}]}]).encode()
+        with tempfile.TemporaryDirectory() as temp:
+            cache_dir, cache_db = self.make_cache(Path(temp), [cached, None])
+            (cache_dir / "orphan").write_bytes(orphan)
+            (cache_dir / "duplicate").write_bytes(cached)
+            with patch.object(module, "HAPP_CACHE_DIR", cache_dir), \
+                 patch.object(module, "HAPP_CACHE_DB", cache_db), \
+                 patch.object(module, "urlopen", return_value=FakeResponse(recovered)):
+                subscriptions = module.happ_subscriptions()
+        self.assertEqual(len(subscriptions), 3)
+        self.assertEqual({loc["label"] for sub in subscriptions for loc in sub["locations"]},
+                         {"Cached", "Recovered", "Orphan"})
+
+    def test_force_refresh_replaces_existing_body_and_bypasses_memory_cache(self):
+        old = json.dumps([{"remarks": "Old", "outbounds": [{}]}]).encode()
+        fresh = json.dumps([{"remarks": name, "outbounds": [{}]} for name in ("New", "Extra")]).encode()
+        with tempfile.TemporaryDirectory() as temp:
+            cache_dir, cache_db = self.make_cache(Path(temp), [old])
+            with patch.object(module, "HAPP_CACHE_DIR", cache_dir), \
+                 patch.object(module, "HAPP_CACHE_DB", cache_db), \
+                 patch.object(module, "urlopen", side_effect=[FakeResponse(old), FakeResponse(fresh)]) as fetch:
+                module._happ_refresh_subscription_body("https://provider.example/sub/1", plistlib.dumps({"User-Agent": "Happ/test"}))
+                subscriptions = module.happ_subscriptions(force_refresh=True)
+                self.assertEqual(module.happ_subscriptions(), subscriptions)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual([loc["label"] for loc in subscriptions[0]["locations"]], ["New", "Extra"])
+
+    def test_refresh_failure_keeps_cached_locations_and_empty_subscription(self):
+        old = json.dumps([{"remarks": "Old", "outbounds": [{}]}]).encode()
+        with tempfile.TemporaryDirectory() as temp:
+            cache_dir, cache_db = self.make_cache(Path(temp), [old, None])
+            with patch.object(module, "HAPP_CACHE_DIR", cache_dir), \
+                 patch.object(module, "HAPP_CACHE_DB", cache_db), \
+                 patch.object(module, "urlopen", side_effect=OSError("offline")):
+                subscriptions = module.happ_subscriptions(force_refresh=True)
+        self.assertEqual(len(subscriptions), 2)
+        self.assertEqual(subscriptions[0]["locations"], [])
+        self.assertEqual(subscriptions[1]["locations"][0]["label"], "Old")
+
     def test_recovers_missing_fs_cache_body_from_saved_happ_request(self):
         config = {"remarks": "NL test", "outbounds": [{}]}
         body = json.dumps([config]).encode("utf-8")
