@@ -101,6 +101,7 @@ HAPP_SUBSCRIPTION_REFRESH_CACHE = {}
 HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK = threading.Lock()
 
 TOOL_ERROR_MESSAGES = {
+    "file_delete_failed": "Не удалось удалить файлы. Проверьте доступ к папке.",
     "invalid_json": "Сервер получил некорректный запрос. Обновите страницу и повторите действие.",
     "not_found": "Запрошенная функция недоступна в текущей версии Fly Terminal.",
     "recovery_already_running": "Восстановление Chromium уже выполняется.",
@@ -1696,6 +1697,34 @@ def list_document_files():
     return files, "", ""
 
 
+FILE_DELETE_SCRIPT = r"""
+import json, os, stat, sys
+root, name = sys.argv[1:3]
+result = {"ok": True, "deleted": [], "failed": []}
+try:
+    if os.path.realpath(root) != root:
+        raise OSError("symlink_directory")
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        names = [name] if name else os.listdir(fd)
+        for entry in names:
+            try:
+                info = os.stat(entry, dir_fd=fd, follow_symlinks=False)
+                if not stat.S_ISREG(info.st_mode):
+                    if name: result["failed"].append(entry)
+                    continue
+                os.unlink(entry, dir_fd=fd)
+                result["deleted"].append(entry)
+            except OSError:
+                result["failed"].append(entry)
+    finally:
+        os.close(fd)
+except OSError:
+    result = {"ok": False, "error": "file_delete_failed"}
+print(json.dumps(result))
+"""
+
+
 def reserve_document_file(root, file_name):
     """Atomically reserve a non-existing filename; collisions get ' (N)' suffixes."""
     original = Path(file_name)
@@ -2220,6 +2249,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_last_answer()
         elif self.path == "/api/session/run-snippet":
             self._handle_run_snippet()
+        elif self.path in {"/api/files/delete", "/api/container/files/delete"}:
+            self._handle_file_delete()
         elif self.path == "/api/files/upload":
             self._handle_document_upload()
         elif self.path == "/api/session/upload-image":
@@ -2527,6 +2558,35 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "files": files,
             },
         )
+
+    def _handle_file_delete(self):
+        payload, error = self._read_json_body(65536)
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+        all_files = payload.get("all") is True
+        name = normalize_document_file_name(payload.get("name"))
+        if not all_files and not name:
+            send_json(self, 400, {"ok": False, "error": "file_name_invalid"})
+            return
+        container = self.path == "/api/container/files/delete"
+        if container:
+            root = normalize_container_browser_path(payload.get("directory"))
+            if root not in {"/config/Documents", "/config/Downloads"}:
+                send_json(self, 400, {"ok": False, "error": "file_delete_failed"})
+                return
+        else:
+            root, root_error = documents_root()
+            if root_error:
+                send_json(self, 500, {"ok": False, "error": "documents_unavailable"})
+                return
+        try:
+            args = ["python3", "-c", FILE_DELETE_SCRIPT, str(root), "" if all_files else name]
+            result = docker_exec(args, timeout=30) if container else subprocess.run(args, capture_output=True, text=True, timeout=30)
+            response = json.loads(result.stdout)
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            response = {"ok": False, "error": "file_delete_failed"}
+        send_json(self, 200 if response.get("ok") else 500, response)
 
     def _handle_document_upload(self):
         binary = self.headers.get("Content-Type", "").split(";", 1)[0].strip() == "application/octet-stream"

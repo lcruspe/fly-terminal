@@ -1135,6 +1135,7 @@
     .file-drop-zone { display: grid; gap: 8px; padding: 24px 12px; border: 2px dashed var(--border); border-radius: 12px; text-align: center; cursor: pointer; }
     .file-drop-zone span, .file-drop-zone small { color: var(--muted); font-weight: 400; }
     .file-drop-zone.drag-over { border-color: var(--accent); background: var(--control); }
+    .file-delete-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
     .file-transfer-queue { display: grid; gap: 6px; max-height: 210px; overflow: auto; }
     .file-transfer-queue progress { width: 100%; height: 5px; accent-color: var(--accent); }
     #documentsSearch { min-width: 0; width: 150px; padding: 6px; color: var(--ink); background: var(--control); border: 1px solid var(--border); border-radius: 6px; }
@@ -2174,6 +2175,7 @@
                     <div class="file-tools-actions"><button type="button" id="documentsUploadBtn">Выбрать файлы</button><button type="button" id="documentsRefreshBtn">Обновить</button></div>
                     <div class="settings-action-status" id="documentsStatus" role="status"></div>
                     <div class="file-tools-actions"><strong>Файлы сервера · Documents</strong><input type="search" id="documentsSearch" placeholder="Поиск файлов" aria-label="Поиск файлов сервера" /></div>
+                    <button type="button" id="documentsDeleteAllBtn">Удалить все файлы из Documents…</button>
                     <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
                     <button type="button" id="containerFileBrowseBtn">Скачать из Downloads Chromium…</button>
                     <div class="settings-action-status" id="containerFileStatus"></div>
@@ -2237,6 +2239,7 @@
         <div class="container-file-picker-path" id="containerFilePath" title="Текущий путь">/config/Downloads</div>
       </div>
       <div class="file-tools-actions"><button type="button" data-file-folder="/config/Downloads">Downloads</button><button type="button" data-file-folder="/config/Documents">Documents</button></div>
+      <button type="button" id="containerDeleteAllBtn" hidden>Удалить все файлы из этой папки…</button>
       <div class="container-file-picker-entries" id="containerFileEntries" aria-live="polite"></div>
       <div class="container-file-picker-footer">
         <div class="settings-action-status" id="containerFilePickerStatus"></div>
@@ -4659,6 +4662,30 @@
       return url.toString();
     }
 
+    async function deleteExchangeFiles(container, name, directory, button) {
+      if (!container && (transferRunning || transferQueue.length)) {
+        setDocumentsStatus("warn", "Дождитесь окончания загрузки или отмените файлы в очереди");
+        return;
+      }
+      const message = name ? `Удалить файл «${name}» из ${directory}?` : `Удалить ВСЕ файлы из ${directory}? Подпапки сохранятся. Поиск не ограничивает удаление.`;
+      if (!window.confirm(`${message}\nУдаление нельзя отменить.`)) return;
+      button.disabled = true;
+      const setStatus = container ? setContainerFilePickerStatus : setDocumentsStatus;
+      setStatus("warn", "Удаляю…");
+      try {
+        const response = await localApiFetch(container ? "/api/container/files/delete" : "/api/files/delete", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, directory, all: !name })
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) throw new Error(payload.message || "Не удалось удалить файлы");
+        if (container) await loadContainerDirectory(directory);
+        else await loadDocumentFiles({ announce: false });
+        setStatus(payload.failed?.length ? "warn" : "ok", `Удалено: ${payload.deleted.length}${payload.failed?.length ? ` · не удалено: ${payload.failed.length}` : ""}`);
+      } catch (error) { setStatus("danger", error.message); }
+      finally { button.disabled = false; }
+    }
+
     function renderDocumentFiles(files) {
       if (!documentsFileList) return;
       documentsFileList.replaceChildren();
@@ -4693,7 +4720,14 @@
         download.download = file.name;
         download.onclick = () => setDocumentsStatus("ok", `Скачивание: ${file.name}`);
 
-        row.append(info, download);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Удалить";
+        remove.onclick = () => deleteExchangeFiles(false, file.name, "Documents", remove);
+        const actions = document.createElement("div");
+        actions.className = "file-delete-actions";
+        actions.append(download, remove);
+        row.append(info, actions);
         documentsFileList.appendChild(row);
       });
     }
@@ -4841,6 +4875,7 @@
     function renderContainerDirectory(payload) {
       if (!containerFileEntries || !containerFilePath) return;
       containerFileCurrentPath = payload.path || "/";
+      document.getElementById("containerDeleteAllBtn").hidden = !["/config/Documents", "/config/Downloads"].includes(containerFileCurrentPath);
       containerFileParentPath = payload.parent || null;
       containerFilePath.textContent = containerFileCurrentPath;
       containerFilePath.title = containerFileCurrentPath;
@@ -4891,7 +4926,17 @@
             setContainerFileStatus("ok", `Скачивание из контейнера: ${entry.name}`);
             setContainerFilePickerStatus("ok", `Скачивание: ${entry.name}`);
           };
-          row.appendChild(download);
+          const actions = document.createElement("div");
+          actions.className = "file-delete-actions";
+          actions.append(download);
+          if (["/config/Documents", "/config/Downloads"].includes(containerFileCurrentPath)) {
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.textContent = "Удалить";
+            remove.onclick = () => deleteExchangeFiles(true, entry.name, payload.path, remove);
+            actions.append(remove);
+          }
+          row.appendChild(actions);
         }
         containerFileEntries.appendChild(row);
       });
@@ -6450,6 +6495,8 @@
       dropZone.classList.toggle("drag-over", type === "dragenter" || type === "dragover");
       if (type === "drop") queueDocumentFiles(Array.from(event.dataTransfer.files || []));
     });
+    document.getElementById("documentsDeleteAllBtn").onclick = event => deleteExchangeFiles(false, null, "Documents", event.currentTarget);
+    document.getElementById("containerDeleteAllBtn").onclick = event => deleteExchangeFiles(true, null, containerFileCurrentPath, event.currentTarget);
     if (documentsRefreshBtn) documentsRefreshBtn.onclick = () => loadDocumentFiles();
     if (documentsFileList) loadDocumentFiles();
     document.querySelectorAll("[data-file-folder]").forEach(button => { button.onclick = () => loadContainerDirectory(button.dataset.fileFolder); });
