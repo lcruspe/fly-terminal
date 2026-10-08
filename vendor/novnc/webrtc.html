@@ -212,6 +212,8 @@
       background: rgba(255, 255, 255, 0.16);
       border-color: rgba(255, 255, 255, 0.25);
     }
+    .hud-btn[hidden] { display: none; }
+    #autoResizeBtn[aria-pressed="true"] { background: rgba(59, 130, 246, 0.3); border-color: rgba(96, 165, 250, 0.7); }
 
     .hud-btn:active {
       transform: scale(0.97);
@@ -374,6 +376,7 @@
         <select id="streamResolution" title="Разрешение потока" aria-label="Разрешение потока">
           <option value="1280x720">1280×720</option><option value="1600x900">1600×900</option><option value="1920x1080">1920×1080</option><option value="2560x1440">2560×1440</option>
         </select>
+        <button type="button" class="hud-btn" id="autoResizeBtn" title="Подстраивать дисплей под окно RDC" aria-pressed="false">Авто дисплей</button>
         <select id="idleTimeout" title="Отключение при бездействии" aria-label="Отключение при бездействии">
           <option value="60">Откл. 1 мин</option><option value="180">Откл. 3 мин</option><option value="300">Откл. 5 мин</option><option value="600">Откл. 10 мин</option><option value="900">Откл. 15 мин</option><option value="1800">Откл. 30 мин</option><option value="3600">Откл. 60 мин</option>
         </select>
@@ -421,6 +424,7 @@
     </div>
   </div>
 
+  <script src="display-auto-resize.js"></script>
   <script>
     (function () {
       const urlParams = new URLSearchParams(window.location.search);
@@ -437,6 +441,7 @@
       const explicitClientRole = urlParams.get("client");
       const clientRole = explicitClientRole === "browser" ? "browser" : "desktop";
       const isBrowserClient = clientRole === "browser";
+      let autoResizeEnabled = !isBrowserClient && urlParams.get("autoResize") === "1";
       const wsPath = isBrowserClient
         ? (rawWsPath === "desktop-stream-ws" ? "native-browser-stream-ws" : rawWsPath)
         : (rawWsPath === "native-browser-stream-ws" ? "desktop-stream-ws" : rawWsPath);
@@ -465,6 +470,14 @@
       const clipboardModal = document.getElementById("clipboardModal");
       const clipboardText = document.getElementById("clipboardText");
       const viewport = document.getElementById("viewport");
+      const displayAutoResize = window.FlyDisplayAutoResize({
+        element: viewport,
+        target: requestedDisplayName === "Fly Remote" ? "virtual" : "main",
+        enabled: autoResizeEnabled,
+        isConnected: () => socket?.readyState === WebSocket.OPEN || reliableChannel?.readyState === "open",
+        onApplied: () => configureStream(true),
+        onError: error => console.warn("Unable to resize RDC display", error)
+      });
       const hudDock = document.getElementById("hudDock");
       const hudBar = document.getElementById("hudBar");
       const hudChip = document.getElementById("hudChip");
@@ -475,6 +488,8 @@
       const qualityModeSelect = document.getElementById("qualityMode");
       const fpsLimitSelect = document.getElementById("fpsLimit");
       const streamResolutionSelect = document.getElementById("streamResolution");
+      const autoResizeBtn = document.getElementById("autoResizeBtn");
+      autoResizeBtn.hidden = isBrowserClient;
       const idleTimeoutSelect = document.getElementById("idleTimeout");
       const diagnosticsBtn = document.getElementById("diagnosticsBtn");
       const diagnosticsPanel = document.getElementById("diagnosticsPanel");
@@ -804,6 +819,7 @@
       setInterval(sendProbe, 2000);
       setInterval(refreshDiagnostics, 1000);
       const NO_VNC_URL = "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=4&compression=9&show_dot=true";
+      const vncFallbackUrl = () => `${NO_VNC_URL}&autoResize=${autoResizeEnabled ? "1" : "0"}`;
 
       function updateOverlay(show, title, subtext, showButton = false) {
         if (show) {
@@ -838,7 +854,7 @@
         const vncBtn = document.getElementById("fallbackVncBtn");
         if (vncBtn) {
           vncBtn.onclick = () => {
-            window.location.href = NO_VNC_URL;
+            window.location.href = vncFallbackUrl();
           };
         }
       }
@@ -848,7 +864,7 @@
         decodedFrameSeen = false;
         clearTimeout(decoderWatchdog);
         updateOverlay(true, "Mac заблокирован", "Разблокируйте Mac через RDC VNC. Native Browser продолжит работу после разблокировки.");
-        overlaySubtext.innerHTML += `<br><br><a href="${NO_VNC_URL}" target="_blank" rel="noopener" style="color:var(--accent)">Открыть RDC VNC для разблокировки</a>`;
+        overlaySubtext.innerHTML += `<br><br><a href="${vncFallbackUrl()}" target="_blank" rel="noopener" style="color:var(--accent)">Открыть RDC VNC для разблокировки</a>`;
         document.getElementById("overlaySpinner").style.display = "none";
         statusBadge.textContent = "Mac заблокирован";
         statusBadge.className = "hud-badge badge-status warn";
@@ -880,7 +896,7 @@
         } else {
           updateOverlay(true, "Совместимый режим", "H.264 недоступен в этом браузере. Переключение на noVNC...");
         }
-        window.location.replace(NO_VNC_URL);
+        window.location.replace(vncFallbackUrl());
       }
 
       function keepRecent(list, value, limit = 240) {
@@ -1661,6 +1677,7 @@
         reliableChannel.onmessage = (event) => handleServerText(event.data);
         reliableChannel.onopen = () => {
           configureStream();
+          displayAutoResize.schedule();
           sendSessionSettings(false);
           requestFreshKeyframe("webrtc_datachannel_ready");
           sendProbe();
@@ -1755,6 +1772,7 @@
             statusBadge.textContent = "Ожидание кадра...";
             statusBadge.className = "hud-badge badge-status warn";
             configureStream();
+            displayAutoResize.schedule();
             sendSessionSettings(false);
             requestFreshKeyframe("connection_ready");
             sendProbe();
@@ -1811,8 +1829,8 @@
 
       function calculateCaptureSize() {
         const profile = qualityProfile();
-        const baseWidth = fitMode === "sync" ? serverPixelWidth : requestedWidth;
-        const baseHeight = fitMode === "sync" ? serverPixelHeight : requestedHeight;
+        const baseWidth = autoResizeEnabled ? Math.max(640, viewport.clientWidth) : (fitMode === "sync" ? serverPixelWidth : requestedWidth);
+        const baseHeight = autoResizeEnabled ? Math.max(360, viewport.clientHeight) : (fitMode === "sync" ? serverPixelHeight : requestedHeight);
         let scale = profile.baseScale * adaptiveScaleState.value;
         if (currentQualityMode === "auto") {
           const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
@@ -1873,8 +1891,21 @@
         return true;
       }
 
+      function setAutoResizeEnabled(enabled, notifyParent = true) {
+        if (isBrowserClient) return;
+        autoResizeEnabled = enabled === true;
+        autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
+        displayAutoResize.setEnabled(autoResizeEnabled);
+        configureStream(true);
+        if (notifyParent && window.parent !== window) {
+          window.parent.postMessage({ type: "fly-desktop-auto-resize", enabled: autoResizeEnabled }, window.location.origin);
+        }
+      }
+
       fpsLimitSelect.value = String(requestedFps);
       streamResolutionSelect.value = requestedResolution;
+      autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
+      autoResizeBtn.addEventListener("click", () => setAutoResizeEnabled(!autoResizeEnabled));
       idleTimeoutSelect.value = String(sessionIdleTimeoutSeconds);
       fpsLimitSelect.addEventListener("change", () => applyFpsLimit(fpsLimitSelect.value));
       streamResolutionSelect.addEventListener("change", () => applyStreamResolution(streamResolutionSelect.value));
@@ -1891,6 +1922,9 @@
         if (event.origin !== window.location.origin) return;
         if (event.data?.type === "fly-desktop-set-fps") applyFpsLimit(event.data.fps, false);
         if (event.data?.type === "fly-desktop-set-resolution") applyStreamResolution(event.data.resolution, false);
+        if (event.data?.type === "fly-desktop-set-auto-resize" && !isBrowserClient) {
+          setAutoResizeEnabled(event.data.enabled, false);
+        }
       });
 
       function scheduleSyncConfigure() {

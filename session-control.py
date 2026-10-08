@@ -66,6 +66,7 @@ UI_PREFERENCES_FILE = Path(os.environ.get(
 UI_PREFERENCES_LOCK = threading.Lock()
 DISPLAY_WAKE_LOCK = threading.Lock()
 DISPLAY_WAKE_LAST = 0.0
+DISPLAY_RESOLUTION_LOCK = threading.Lock()
 VALID_UI_THEMES = frozenset({
     "paper", "linen", "ledger", "harbor", "sage",
     "graphite", "ink", "midnight", "nord", "forest",
@@ -1424,14 +1425,58 @@ def get_display_modes(target):
     return modes, ""
 
 
+def closest_display_mode(resolution, modes):
+    width, height = (int(part) for part in resolution.split("x"))
+    valid_modes = [mode for mode in modes if normalize_display_resolution(mode)]
+    if not valid_modes:
+        return ""
+    return min(valid_modes, key=lambda mode: (
+        abs(int(mode.split("x")[0]) / int(mode.split("x")[1]) - width / height),
+        abs(int(mode.split("x")[0]) * int(mode.split("x")[1]) - width * height),
+    ))
+
+
+def get_display_mode_number(target, resolution):
+    output, error = betterdisplay_command("get", *display_identifier_args(target), "-displayModeList")
+    if error:
+        return "", error
+    hidpi, error = betterdisplay_command("get", *display_identifier_args(target), "-hiDPI")
+    if error:
+        return "", error
+    refresh, error = betterdisplay_command("get", *display_identifier_args(target), "-refreshRate")
+    if error:
+        return "", error
+    candidates = []
+    for line in output.splitlines():
+        match = re.match(r"^\s*(\d+)\s+-\s+(\d{3,4}x\d{3,4})\s+(.+)$", line)
+        if match and match.group(2) == resolution:
+            details = match.group(3)
+            candidates.append((
+                ("HiDPI" in details) != (hidpi == "on"),
+                not bool(re.search(rf"(?<![-\d]){re.escape(refresh)}\b", details)),
+                int(match.group(1)),
+            ))
+    if not candidates:
+        return "", "resolution_not_supported"
+    return str(min(candidates)[2]), ""
+
+
 def set_display_resolution(target, resolution, virtual_presets=()):
     resolution = normalize_display_resolution(resolution)
     if target not in {"main", "virtual"} or not resolution:
         return False, "invalid_display_resolution"
 
+    with DISPLAY_RESOLUTION_LOCK:
+        return _set_display_resolution(target, resolution, virtual_presets)
+
+
+def _set_display_resolution(target, resolution, virtual_presets):
+
     current, error = get_display_resolution(target)
     if error:
         return False, error
+    if current == resolution:
+        return True, ""
     if target == "virtual":
         resolution_list = []
         for value in (*DEFAULT_VIRTUAL_RESOLUTIONS, *virtual_presets, resolution):
@@ -1446,17 +1491,15 @@ def set_display_resolution(target, resolution, virtual_presets=()):
             return False, error
         time.sleep(1)
     else:
-        modes, error = get_display_modes(target)
+        mode_number, error = get_display_mode_number(target, resolution)
         if error:
             return False, error
-        if resolution not in modes:
-            return False, "resolution_not_supported"
 
-    if current != resolution or target == "virtual":
-        _, error = betterdisplay_command("set", *display_identifier_args(target), f"-resolution={resolution}")
-        if error:
-            return False, error
-        time.sleep(1)
+    mode_arg = f"-resolution={resolution}" if target == "virtual" else f"-displayModeNumber={mode_number}"
+    _, error = betterdisplay_command("set", *display_identifier_args(target), mode_arg)
+    if error:
+        return False, error
+    time.sleep(1)
     applied, error = get_display_resolution(target)
     return (applied == resolution, error or ("" if applied == resolution else "resolution_apply_failed"))
 
@@ -1859,6 +1902,9 @@ def normalize_ui_preferences(payload):
     if desktop_resolution in VALID_DESKTOP_RESOLUTIONS:
         preferences["desktopResolution"] = desktop_resolution
 
+    if isinstance(payload.get("desktopAutoResize"), bool):
+        preferences["desktopAutoResize"] = payload["desktopAutoResize"]
+
     try:
         desktop_fps = int(payload.get("desktopFps"))
     except (TypeError, ValueError):
@@ -2189,9 +2235,19 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         target = str(payload.get("target") or "").strip().lower()
         resolution = normalize_display_resolution(payload.get("resolution"))
         presets = payload.get("presets") if isinstance(payload.get("presets"), list) else []
+        automatic = payload.get("automatic") is True
         if target not in {"main", "virtual"} or not resolution:
             send_json(self, 400, {"ok": False, "error": "invalid_display_resolution"})
             return
+        if automatic and target == "main":
+            modes, details = get_display_modes(target)
+            if details:
+                send_json(self, 500, {"ok": False, "error": details})
+                return
+            resolution = closest_display_mode(resolution, modes)
+            if not resolution:
+                send_json(self, 409, {"ok": False, "error": "resolution_not_supported"})
+                return
         ok, details = set_display_resolution(target, resolution, presets)
         if not ok:
             status = 409 if details == "resolution_not_supported" else 500

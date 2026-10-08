@@ -964,6 +964,8 @@
       font-size: 12px;
       font-weight: 700;
     }
+    .settings-row .desktop-auto-resize-label { display: flex; align-items: center; gap: 8px; }
+    .settings-row .desktop-auto-resize-label input { min-height: 0; }
 
     .display-resolution-control {
       display: grid;
@@ -2127,6 +2129,7 @@
                   <div class="settings-section-heading"><strong>Remote Desktop</strong><span>Параметры потока удалённого рабочего стола</span></div>
                   <div class="settings-row"><label for="desktopMode">Протокол</label><select id="desktopMode"><option value="webrtc">H.264 / WebSocket</option><option value="vnc">noVNC (Совместимость)</option></select></div>
                   <div class="settings-row"><label for="desktopResolution">Поток</label><select id="desktopResolution"><option value="1280x720">1280×720</option><option value="1600x900">1600×900</option><option value="1920x1080">1920×1080</option><option value="2560x1440">2560×1440</option></select></div>
+                  <div class="settings-row"><label for="desktopAutoResize">Дисплей</label><label class="desktop-auto-resize-label"><input id="desktopAutoResize" type="checkbox"> Под размер окна RDC</label></div>
                   <div class="settings-row"><label for="desktopScaleMode">Масштаб</label><select id="desktopScaleMode"><option value="contain">Fit — вписать</option><option value="fill">Fill — растянуть</option><option value="sync">Sync — как на сервере</option></select></div>
                   <div class="settings-row"><label for="desktopFps">Частота</label><select id="desktopFps"><option value="15">15 FPS</option><option value="30">30 FPS</option><option value="45">45 FPS</option><option value="60">60 FPS</option></select></div>
                 </section>
@@ -2950,6 +2953,7 @@
         desktopMode: ["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc",
         desktopScaleMode: ["contain", "fill", "sync"].includes(raw.desktopScaleMode) ? raw.desktopScaleMode : "contain",
         desktopResolution: ["1280x720", "1600x900", "1920x1080", "2560x1440"].includes(raw.desktopResolution) ? raw.desktopResolution : "1920x1080",
+        desktopAutoResize: raw.desktopAutoResize === true,
         desktopFps: [15, 30, 45, 60].includes(Number(raw.desktopFps)) ? Number(raw.desktopFps) : 60,
         mainResolutionPresets: normalizeResolutionPresets(raw.mainResolutionPresets),
         virtualResolutionPresets: normalizeResolutionPresets(raw.virtualResolutionPresets),
@@ -2991,7 +2995,7 @@
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopScaleMode", "desktopResolution", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
+        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopScaleMode", "desktopResolution", "desktopAutoResize", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
@@ -3203,12 +3207,13 @@
     function buildDesktopUrl(targetDisplay = "") {
       const mode = preferences.desktopMode || "webrtc";
       if (mode === "vnc") {
-        return desktopConfig.vncUrl || desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true";
+        const url = desktopConfig.vncUrl || desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true";
+        return `${url}&autoResize=${preferences.desktopAutoResize ? "1" : "0"}`;
       }
       const configuredStreamPath = (desktopConfig.webrtcUrl || "desktop-stream-ws").replace(/^\//, "");
       const streamPath = configuredStreamPath === "native-browser-stream-ws" ? "desktop-stream-ws" : configuredStreamPath;
       const displayParam = targetDisplay === "Fly Remote" ? "&display=Fly%20Remote" : "";
-      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&client=desktop&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}&scale=${encodeURIComponent(preferences.desktopScaleMode || "contain")}${displayParam}`;
+      return `/desktop/webrtc.html?path=${encodeURIComponent(streamPath)}&autoconnect=true&client=desktop&resolution=${encodeURIComponent(preferences.desktopResolution)}&fps=${preferences.desktopFps}&scale=${encodeURIComponent(preferences.desktopScaleMode || "contain")}&autoResize=${preferences.desktopAutoResize ? "1" : "0"}${displayParam}`;
     }
 
     function viewModeSwitchMarkup() {
@@ -6070,6 +6075,7 @@
     const desktopModeSelect = document.getElementById("desktopMode");
     const desktopScaleModeSelect = document.getElementById("desktopScaleMode");
     const desktopResolutionSelect = document.getElementById("desktopResolution");
+    const desktopAutoResizeCheckbox = document.getElementById("desktopAutoResize");
     const desktopFpsSelect = document.getElementById("desktopFps");
     function reloadDesktopTabs() {
       tabs.forEach(tab => {
@@ -6118,6 +6124,15 @@
         setStatusText(`Разрешение RDC: ${preferences.desktopResolution.replace("x", "×")}`, 2400);
       };
     }
+    if (desktopAutoResizeCheckbox) {
+      desktopAutoResizeCheckbox.checked = preferences.desktopAutoResize;
+      desktopAutoResizeCheckbox.onchange = () => {
+        preferences.desktopAutoResize = desktopAutoResizeCheckbox.checked;
+        savePreferences();
+        postToDesktopFrames({ type: "fly-desktop-set-auto-resize", enabled: preferences.desktopAutoResize });
+        setStatusText(preferences.desktopAutoResize ? "Автоподстройка дисплея RDC включена" : "Автоподстройка дисплея RDC выключена", 2400);
+      };
+    }
     if (desktopScaleModeSelect) {
       desktopScaleModeSelect.value = preferences.desktopScaleMode || "contain";
       desktopScaleModeSelect.onchange = () => {
@@ -6144,6 +6159,11 @@
         preferences.desktopResolution = event.data.resolution;
         if (desktopResolutionSelect) desktopResolutionSelect.value = preferences.desktopResolution;
         savePreferences();
+      } else if (event.data?.type === "fly-desktop-auto-resize" && typeof event.data.enabled === "boolean") {
+        preferences.desktopAutoResize = event.data.enabled;
+        if (desktopAutoResizeCheckbox) desktopAutoResizeCheckbox.checked = event.data.enabled;
+        savePreferences();
+        postToDesktopFrames({ type: "fly-desktop-set-auto-resize", enabled: event.data.enabled });
       }
     });
     window.addEventListener("message", event => {
@@ -6468,6 +6488,7 @@
       if (desktopModeSelect) desktopModeSelect.value = preferences.desktopMode || "webrtc";
       if (desktopScaleModeSelect) desktopScaleModeSelect.value = preferences.desktopScaleMode || "contain";
       if (desktopResolutionSelect) desktopResolutionSelect.value = preferences.desktopResolution;
+      if (desktopAutoResizeCheckbox) desktopAutoResizeCheckbox.checked = preferences.desktopAutoResize;
       if (desktopFpsSelect) desktopFpsSelect.value = String(preferences.desktopFps);
       renderDisplayResolutionControl("main");
       renderDisplayResolutionControl("virtual");

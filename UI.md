@@ -45,7 +45,7 @@ On coarse-pointer/touch devices, floating menus switch to a viewport bottom-shee
 
 The top-level menus follow a task-based boundary: **Apps** launches environments and applications, **Settings** contains user preferences, and **Tools** contains operational actions that affect the local/remote environment. Do not place operational commands in Settings merely because they have configurable parameters.
 
-Settings is a sectioned hub with three panels: **Внешний вид** (theme, UI density, font size/family), **Рабочая область** (toolbar orientation and tab title), and **Remote Desktop** (transport, stream resolution, scale mode, and FPS). Desktop uses persistent left-side section navigation inside the popup; touch/coarse-pointer layouts move the same navigation to a horizontally scrollable selector above the content. Only one section panel is visible at a time. Arrow keys plus Home/End move between section tabs.
+Settings is a sectioned hub with three panels: **Внешний вид** (theme, UI density, font size/family), **Рабочая область** (toolbar orientation and tab title), and **Remote Desktop** (transport, stream resolution, automatic display resize, scale mode, and FPS). Desktop uses persistent left-side section navigation inside the popup; touch/coarse-pointer layouts move the same navigation to a horizontally scrollable selector above the content. Only one section panel is visible at a time. Arrow keys plus Home/End move between section tabs.
 
 The active Settings section is intentionally session-local UI state and is not persisted as a preference. Existing control IDs and preference bindings remain stable when controls move between sections.
 
@@ -53,7 +53,7 @@ The active Settings section is intentionally session-local UI state and is not p
 
 Tools is also sectioned by operation rather than rendered as one long scrolling column: **VPN**, **Файлы**, **Displays**, and **Система**. Desktop uses the same left-side section-navigation pattern as Settings; touch/coarse-pointer layouts expose a horizontal four-item selector.
 
-Display resolution controls belong to **Tools → Displays** because applying them changes actual macOS display modes. They must not be presented as ordinary Remote Desktop preferences. `desktopResolution` remains in Settings because it controls the Remote Desktop stream; `mainDisplayResolution` and `virtualDisplayResolution` remain operational controls under Tools.
+Manual display resolution controls belong to **Tools → Displays** because applying them changes actual macOS display modes. `desktopResolution` remains in Settings because it controls the Remote Desktop stream; `desktopAutoResize` is the persistent opt-in for following the active RDC window, and `mainDisplayResolution` and `virtualDisplayResolution` remain manual controls under Tools.
 
 When adding new menu functionality, classify it first: launchers go to Apps, durable presentation/behavior preferences go to Settings, and environment-changing commands go to Tools. Prefer extending an existing section over adding another top-level menu.
 

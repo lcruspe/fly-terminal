@@ -32,6 +32,7 @@ const UI = {
     closeControlbarTimeout: null,
     remoteDesktopIdleTimeout: null,
     displayWakeInterval: null,
+    displayAutoResize: null,
 
     controlbarGrabbed: false,
     controlbarDrag: false,
@@ -61,6 +62,28 @@ const UI = {
     start() {
 
         UI.initSettings();
+        UI.displayAutoResize = window.FlyDisplayAutoResize({
+            element: document.getElementById('noVNC_container'),
+            target: 'main',
+            enabled: new URLSearchParams(window.location.search).get('autoResize') === '1',
+            isConnected: () => UI.connected,
+            onApplied: () => {},
+            onError: error => Log.Warn('Unable to resize RDC display: ' + error)
+        });
+        const autoResizeCheckbox = document.getElementById('noVNC_setting_fly_auto_resize');
+        autoResizeCheckbox.checked = new URLSearchParams(window.location.search).get('autoResize') === '1';
+        autoResizeCheckbox.addEventListener('change', () => {
+            UI.displayAutoResize.setEnabled(autoResizeCheckbox.checked);
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'fly-desktop-auto-resize', enabled: autoResizeCheckbox.checked }, window.location.origin);
+            }
+        });
+        window.addEventListener('message', event => {
+            if (event.origin === window.location.origin && event.data?.type === 'fly-desktop-set-auto-resize') {
+                autoResizeCheckbox.checked = event.data.enabled === true;
+                UI.displayAutoResize.setEnabled(autoResizeCheckbox.checked);
+            }
+        });
 
         // Translate the DOM
         l10n.translateDOM();
@@ -1136,6 +1159,7 @@ const UI = {
 
     connectFinished(e) {
         UI.connected = true;
+        UI.displayAutoResize.schedule();
         UI.inhibitReconnect = false;
         UI.armRemoteDesktopIdleTimeout();
         clearInterval(UI.displayWakeInterval);
