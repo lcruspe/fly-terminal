@@ -47,6 +47,25 @@ test('auto resize sends latest window geometry and skips repeated dimensions', a
   size = { width: 1301, height: 901 };
   resize.schedule();
   await timers.pop()();
-  assert.deepEqual(requests.map(request => request.resolution), ['1200x800', '1302x902']);
+  size = { width: 390, height: 701 };
+  resize.schedule();
+  await timers.pop()();
+  assert.deepEqual(requests.map(request => request.resolution), ['1200x800', '1301x901', '390x701']);
   assert.ok(requests.every(request => request.target === 'virtual' && request.automatic === true));
+});
+
+test('Native auto resize captures Fly Remote and manual mode keeps the selected display', () => {
+  const source = native.match(/function configureStream\(force = false\) \{([\s\S]*?)\n      \}/)[0];
+  const messages = [];
+  const context = {
+    autoResizeEnabled: true, requestedDisplayName: '', currentBitrate: 4500000,
+    calculateCaptureSize: () => ({width: 1378, height: 846, fps: 30}),
+    sendTransportMessage: message => messages.push(message)
+  };
+  vm.runInNewContext(source, context);
+  context.configureStream(true);
+  context.autoResizeEnabled = false;
+  context.configureStream(true);
+  assert.equal(messages[0].displayName, 'Fly Remote');
+  assert.equal(messages[1].displayName, '');
 });

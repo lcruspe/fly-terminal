@@ -11,8 +11,8 @@
       if (!active || !isConnected() || document.visibilityState === "hidden") return;
       const rect = element.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      const width = Math.max(640, Math.min(7680, Math.round(rect.width / 2) * 2));
-      const height = Math.max(360, Math.min(4320, Math.round(rect.height / 2) * 2));
+      const width = Math.max(100, Math.min(7680, Math.round(rect.width)));
+      const height = Math.max(100, Math.min(4320, Math.round(rect.height)));
       const resolution = `${width}x${height}`;
       if (resolution === lastApplied) return;
       if (running) {
@@ -55,7 +55,7 @@
       schedule,
       setEnabled(value) {
         active = value === true;
-        if (active) schedule();
+        if (active) { lastApplied = ""; schedule(); }
         else clearTimeout(timer);
       }
     };

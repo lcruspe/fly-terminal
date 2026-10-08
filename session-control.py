@@ -1439,13 +1439,15 @@ def closest_display_mode(resolution, modes):
     ))
 
 
-def get_display_mode_number(target, resolution):
+def get_display_mode_number(target, resolution, hidpi_override=None):
     output, error = betterdisplay_command("get", *display_identifier_args(target), "-displayModeList")
     if error:
         return "", error
     hidpi, error = betterdisplay_command("get", *display_identifier_args(target), "-hiDPI")
     if error:
         return "", error
+    if hidpi_override is not None:
+        hidpi = hidpi_override
     refresh, error = betterdisplay_command("get", *display_identifier_args(target), "-refreshRate")
     if error:
         return "", error
@@ -1479,27 +1481,52 @@ def _set_display_resolution(target, resolution, virtual_presets):
     if error:
         return False, error
     if current == resolution:
-        return True, ""
+        if target == "main":
+            return True, ""
+        hidpi, error = betterdisplay_command("get", "-name=Fly Remote", "-hiDPI")
+        if error:
+            return False, error
+        if hidpi == "off":
+            return True, ""
     if target == "virtual":
-        resolution_list = []
-        for value in (*DEFAULT_VIRTUAL_RESOLUTIONS, *virtual_presets, resolution):
-            normalized = normalize_display_resolution(value)
-            if normalized and normalized not in resolution_list:
-                resolution_list.append(normalized)
-        _, error = betterdisplay_command(
-            "set", "-name=Fly Remote", "-useResolutionList=on",
-            f"-resolutionList={','.join(resolution_list)}",
-        )
+        modes, error = get_display_modes(target)
         if error:
             return False, error
-        time.sleep(1)
-    else:
-        mode_number, error = get_display_mode_number(target, resolution)
-        if error:
-            return False, error
-
-    mode_arg = f"-resolution={resolution}" if target == "virtual" else f"-displayModeNumber={mode_number}"
-    _, error = betterdisplay_command("set", *display_identifier_args(target), mode_arg)
+        if resolution not in modes:
+            resolution_list = []
+            for value in (*DEFAULT_VIRTUAL_RESOLUTIONS, current, *virtual_presets, resolution):
+                normalized = normalize_display_resolution(value)
+                if normalized and normalized not in resolution_list:
+                    resolution_list.append(normalized)
+            _, error = betterdisplay_command(
+                "set", "-name=Fly Remote", "-useResolutionList=on",
+                f"-resolutionList={','.join(resolution_list)}",
+            )
+            if error:
+                return False, error
+            # A saved definition does not update a connected virtual display.
+            # Reconnect it before selecting a newly advertised macOS mode.
+            _, error = betterdisplay_command("set", "-name=Fly Remote", "-connected=off")
+            if error:
+                return False, error
+            time.sleep(1)
+            _, error = betterdisplay_command("set", "-name=Fly Remote", "-connected=on")
+            if error:
+                return False, error
+            deadline = time.monotonic() + 10
+            while True:
+                modes, error = get_display_modes(target)
+                if resolution in modes:
+                    break
+                if time.monotonic() >= deadline:
+                    return False, error or "resolution_not_supported"
+                time.sleep(0.25)
+    mode_number, error = get_display_mode_number(
+        target, resolution, hidpi_override="off" if target == "virtual" else None,
+    )
+    if error:
+        return False, error
+    _, error = betterdisplay_command("set", *display_identifier_args(target), f"-displayModeNumber={mode_number}")
     if error:
         return False, error
     time.sleep(1)

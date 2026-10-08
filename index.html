@@ -2950,7 +2950,7 @@
         panelCollapsed: !!raw.panelCollapsed,
         density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
         toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal",
-        desktopMode: ["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc",
+        desktopMode: raw.desktopAutoResize === true ? "webrtc" : (["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc"),
         desktopScaleMode: ["contain", "fill", "sync"].includes(raw.desktopScaleMode) ? raw.desktopScaleMode : "contain",
         desktopResolution: ["1280x720", "1600x900", "1920x1080", "2560x1440"].includes(raw.desktopResolution) ? raw.desktopResolution : "1920x1080",
         desktopAutoResize: raw.desktopAutoResize === true,
@@ -3205,7 +3205,7 @@
     }
 
     function buildDesktopUrl(targetDisplay = "") {
-      const mode = preferences.desktopMode || "webrtc";
+      const mode = preferences.desktopAutoResize ? "webrtc" : (preferences.desktopMode || "webrtc");
       if (mode === "vnc") {
         const url = desktopConfig.vncUrl || desktopConfig.url || "/desktop/vnc.html?path=desktop-ws&autoconnect=true&resize=scale&quality=6&compression=0&show_dot=true";
         return `${url}&autoResize=${preferences.desktopAutoResize ? "1" : "0"}`;
@@ -6110,6 +6110,10 @@
       desktopModeSelect.onchange = () => {
         const val = desktopModeSelect.value;
         preferences.desktopMode = val;
+        if (val === "vnc") {
+          preferences.desktopAutoResize = false;
+          desktopAutoResizeCheckbox.checked = false;
+        }
         savePreferences();
         reloadDesktopTabs();
         setStatusText(`Режим рабочего стола: ${val === "webrtc" ? "H.264 / WebSocket" : "noVNC"}`, 2400);
@@ -6124,12 +6128,22 @@
         setStatusText(`Разрешение RDC: ${preferences.desktopResolution.replace("x", "×")}`, 2400);
       };
     }
+    function setDesktopAutoResizePreference(enabled) {
+      preferences.desktopAutoResize = enabled;
+      if (desktopAutoResizeCheckbox) desktopAutoResizeCheckbox.checked = enabled;
+      const switchToNative = enabled && preferences.desktopMode === "vnc";
+      if (switchToNative) {
+        preferences.desktopMode = "webrtc";
+        if (desktopModeSelect) desktopModeSelect.value = "webrtc";
+      }
+      savePreferences();
+      if (switchToNative) reloadDesktopTabs();
+      postToDesktopFrames({ type: "fly-desktop-set-auto-resize", enabled });
+    }
     if (desktopAutoResizeCheckbox) {
       desktopAutoResizeCheckbox.checked = preferences.desktopAutoResize;
       desktopAutoResizeCheckbox.onchange = () => {
-        preferences.desktopAutoResize = desktopAutoResizeCheckbox.checked;
-        savePreferences();
-        postToDesktopFrames({ type: "fly-desktop-set-auto-resize", enabled: preferences.desktopAutoResize });
+        setDesktopAutoResizePreference(desktopAutoResizeCheckbox.checked);
         setStatusText(preferences.desktopAutoResize ? "Автоподстройка дисплея RDC включена" : "Автоподстройка дисплея RDC выключена", 2400);
       };
     }
@@ -6160,10 +6174,7 @@
         if (desktopResolutionSelect) desktopResolutionSelect.value = preferences.desktopResolution;
         savePreferences();
       } else if (event.data?.type === "fly-desktop-auto-resize" && typeof event.data.enabled === "boolean") {
-        preferences.desktopAutoResize = event.data.enabled;
-        if (desktopAutoResizeCheckbox) desktopAutoResizeCheckbox.checked = event.data.enabled;
-        savePreferences();
-        postToDesktopFrames({ type: "fly-desktop-set-auto-resize", enabled: event.data.enabled });
+        setDesktopAutoResizePreference(event.data.enabled);
       }
     });
     window.addEventListener("message", event => {

@@ -65,23 +65,26 @@ const UI = {
         UI.displayAutoResize = window.FlyDisplayAutoResize({
             element: document.getElementById('noVNC_container'),
             target: 'main',
-            enabled: new URLSearchParams(window.location.search).get('autoResize') === '1',
+            enabled: false,
             isConnected: () => UI.connected,
             onApplied: () => {},
             onError: error => Log.Warn('Unable to resize RDC display: ' + error)
         });
         const autoResizeCheckbox = document.getElementById('noVNC_setting_fly_auto_resize');
-        autoResizeCheckbox.checked = new URLSearchParams(window.location.search).get('autoResize') === '1';
+        // macOS VNC shares the display layout and cannot select Fly Remote.
+        autoResizeCheckbox.checked = false;
+        autoResizeCheckbox.disabled = true;
+        autoResizeCheckbox.title = 'Точный размер окна доступен в RDC Native';
         autoResizeCheckbox.addEventListener('change', () => {
-            UI.displayAutoResize.setEnabled(autoResizeCheckbox.checked);
+            UI.displayAutoResize.setEnabled(false);
             if (window.parent !== window) {
                 window.parent.postMessage({ type: 'fly-desktop-auto-resize', enabled: autoResizeCheckbox.checked }, window.location.origin);
             }
         });
         window.addEventListener('message', event => {
             if (event.origin === window.location.origin && event.data?.type === 'fly-desktop-set-auto-resize') {
-                autoResizeCheckbox.checked = event.data.enabled === true;
-                UI.displayAutoResize.setEnabled(autoResizeCheckbox.checked);
+                autoResizeCheckbox.checked = false;
+                UI.displayAutoResize.setEnabled(false);
             }
         });
 

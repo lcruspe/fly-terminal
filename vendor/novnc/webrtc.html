@@ -472,11 +472,18 @@
       const viewport = document.getElementById("viewport");
       const displayAutoResize = window.FlyDisplayAutoResize({
         element: viewport,
-        target: requestedDisplayName === "Fly Remote" ? "virtual" : "main",
+        target: "virtual",
         enabled: autoResizeEnabled,
         isConnected: () => socket?.readyState === WebSocket.OPEN || reliableChannel?.readyState === "open",
-        onApplied: () => configureStream(true),
-        onError: error => console.warn("Unable to resize RDC display", error)
+        onApplied: async () => {
+          await wakeDesktopDisplay();
+          configureStream(true);
+        },
+        onError: error => {
+          statusBadge.textContent = "Не удалось изменить разрешение дисплея";
+          statusBadge.className = "hud-badge badge-status error";
+          console.warn("Unable to resize RDC display", error);
+        }
       });
       const hudDock = document.getElementById("hudDock");
       const hudBar = document.getElementById("hudBar");
@@ -1727,6 +1734,7 @@
         reliableChannel.onmessage = (event) => handleServerText(event.data);
         reliableChannel.onopen = () => {
           configureStream();
+          wakeDesktopDisplay();
           displayAutoResize.schedule();
           sendSessionSettings(false);
           requestFreshKeyframe("webrtc_datachannel_ready");
@@ -1822,6 +1830,7 @@
             statusBadge.textContent = "Ожидание кадра...";
             statusBadge.className = "hud-badge badge-status warn";
             configureStream();
+            wakeDesktopDisplay();
             displayAutoResize.schedule();
             sendSessionSettings(false);
             requestFreshKeyframe("connection_ready");
@@ -1906,7 +1915,7 @@
           height: settings.height,
           fps: settings.fps,
           bitrate: currentBitrate,
-          displayName: requestedDisplayName,
+          displayName: autoResizeEnabled ? "Fly Remote" : requestedDisplayName,
           force
         });
       }
@@ -1941,11 +1950,24 @@
         return true;
       }
 
+      async function wakeDesktopDisplay() {
+        if (isBrowserClient) return;
+        try { await fetch("/api/desktop/wake-display", { method: "POST" }); }
+        catch (error) { console.warn("Unable to wake RDC display", error); }
+      }
+      setInterval(() => {
+        if (document.visibilityState !== "hidden" &&
+            (socket?.readyState === WebSocket.OPEN || reliableChannel?.readyState === "open")) {
+          wakeDesktopDisplay();
+        }
+      }, 30000);
+
       function setAutoResizeEnabled(enabled, notifyParent = true) {
         if (isBrowserClient) return;
         autoResizeEnabled = enabled === true;
         autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
         displayAutoResize.setEnabled(autoResizeEnabled);
+        applyFitMode();
         configureStream(true);
         if (notifyParent && window.parent !== window) {
           window.parent.postMessage({ type: "fly-desktop-auto-resize", enabled: autoResizeEnabled }, window.location.origin);
@@ -1986,7 +2008,7 @@
       function applyFitMode() {
         const button = document.getElementById("scaleModeBtn");
         const sync = fitMode === "sync";
-        const objectFit = fitMode === "fill" ? "fill" : "contain";
+        const objectFit = autoResizeEnabled || fitMode === "fill" ? "fill" : "contain";
         canvas.style.objectFit = objectFit;
         screenVideo.style.objectFit = objectFit;
         button.textContent = sync ? "Sync" : (fitMode === "fill" ? "Fill" : "Fit");

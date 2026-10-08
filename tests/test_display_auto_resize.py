@@ -16,9 +16,9 @@ class DisplayAutoResizeTests(unittest.TestCase):
         self.assertNotIn("desktopAutoResize", module.normalize_ui_preferences({"desktopAutoResize": "true"}))
 
     def test_unchanged_virtual_mode_does_not_reconfigure_betterdisplay(self):
-        with patch.object(module, "get_display_resolution", return_value=("1280x720", "")), patch.object(module, "betterdisplay_command") as command:
+        with patch.object(module, "get_display_resolution", return_value=("1280x720", "")), patch.object(module, "betterdisplay_command", return_value=("off", "")) as command:
             self.assertEqual(module.set_display_resolution("virtual", "1280x720"), (True, ""))
-        command.assert_not_called()
+        command.assert_called_once_with("get", "-name=Fly Remote", "-hiDPI")
 
     def test_main_display_uses_nearest_supported_aspect_and_area(self):
         modes = ["1280x720", "1600x900", "1920x1080", "1024x768"]
@@ -58,9 +58,21 @@ class DisplayAutoResizeTests(unittest.TestCase):
             calls.append(arguments)
             return "", ""
 
-        with patch.object(module, "get_display_resolution", side_effect=[("1280x720", ""), ("1440x900", "")]), patch.object(module, "betterdisplay_command", side_effect=command), patch.object(module.time, "sleep"):
+        with patch.object(module, "get_display_resolution", side_effect=[("1280x720", ""), ("1440x900", "")]), patch.object(module, "get_display_modes", side_effect=[(["1280x720"], ""), (["1440x900"], "")]), patch.object(module, "get_display_mode_number", return_value=("7", "")), patch.object(module, "betterdisplay_command", side_effect=command), patch.object(module.time, "sleep"):
             self.assertEqual(module.set_display_resolution("virtual", "1440x900"), (True, ""))
-        self.assertTrue(any("-resolution=1440x900" in call for call in calls))
+        self.assertTrue(any("-resolutionList=" in argument and "1440x900" in argument for call in calls for argument in call))
+        self.assertIn(("set", "-name=Fly Remote", "-connected=off"), calls)
+        self.assertIn(("set", "-name=Fly Remote", "-connected=on"), calls)
+        self.assertIn(("set", "-name=Fly Remote", "-displayModeNumber=7"), calls)
+
+    def test_existing_virtual_mode_does_not_disconnect_display(self):
+        with patch.object(module, "get_display_resolution", side_effect=[("1280x720", ""), ("1378x846", "")]), patch.object(module, "get_display_modes", return_value=(["1378x846"], "")), patch.object(module, "get_display_mode_number", return_value=("7", "")), patch.object(module, "betterdisplay_command", return_value=("", "")) as command, patch.object(module.time, "sleep"):
+            self.assertEqual(module.set_display_resolution("virtual", "1378x846"), (True, ""))
+        command.assert_called_once_with("set", "-name=Fly Remote", "-displayModeNumber=7")
+
+    def test_virtual_reconnect_must_publish_requested_mode(self):
+        with patch.object(module, "get_display_resolution", return_value=("1280x720", "")), patch.object(module, "get_display_modes", return_value=(["1280x720"], "")), patch.object(module, "betterdisplay_command", return_value=("", "")), patch.object(module.time, "monotonic", side_effect=[0, 11]), patch.object(module.time, "sleep"):
+            self.assertEqual(module.set_display_resolution("virtual", "1378x846"), (False, "resolution_not_supported"))
 
 
 if __name__ == "__main__":
