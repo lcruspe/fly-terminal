@@ -9,6 +9,9 @@ test('native RDC maps platform copy/paste shortcuts to clipboard protocol', () =
   assert.match(client, /CLIENT_IS_APPLE/);
   assert.match(client, /isPrimaryShortcut\(e, "c"\)/);
   assert.match(client, /type: "clipboard_pull"/);
+  assert.match(client, /beginNativeCopy\(\)/);
+  assert.match(client, /new ClipboardItem/);
+  assert.match(client, /setTimeout\(fallbackPasteFromAsyncClipboard, 800\)/);
   assert.match(client, /isPrimaryShortcut\(e, "v"\)/);
   assert.match(client, /clipboardSink\.addEventListener\("paste", handleNativePaste\)/);
   assert.match(client, /navigator\.clipboard\?\.writeText/);

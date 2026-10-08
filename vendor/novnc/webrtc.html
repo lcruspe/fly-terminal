@@ -505,6 +505,7 @@
       let pendingNativePaste = false;
       let swallowedClipboardCode = "";
       let clipboardPasteFallbackTimer = null;
+      let pendingClipboardCopy = null;
       let sessionIdleTimeoutSeconds = IDLE_TIMEOUT_OPTIONS.includes(Number(safeStorageGet(IDLE_TIMEOUT_KEY)))
         ? Number(safeStorageGet(IDLE_TIMEOUT_KEY)) : 300;
       let lastSessionActivityAt = performance.now();
@@ -1042,6 +1043,45 @@
         return copied;
       }
 
+      function beginNativeCopy() {
+        if (pendingClipboardCopy) {
+          clearTimeout(pendingClipboardCopy.timer);
+          pendingClipboardCopy.resolve("");
+          pendingClipboardCopy = null;
+        }
+        let resolveCopy;
+        const content = new Promise((resolve) => { resolveCopy = resolve; });
+        const pending = {
+          resolve: resolveCopy,
+          nativeWrite: false,
+          timer: setTimeout(() => {
+            if (pendingClipboardCopy !== pending) return;
+            pendingClipboardCopy = null;
+            resolveCopy("");
+            console.warn("Native clipboard copy timed out");
+          }, 5000)
+        };
+        pendingClipboardCopy = pending;
+        // Start the browser write while Ctrl+C still provides user activation.
+        // A write started after the remote snapshot arrives may be denied.
+        if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+          try {
+            const item = new ClipboardItem({
+              "text/plain": content.then((value) => new Blob([value], { type: "text/plain" }))
+            });
+            pending.nativeWrite = true;
+            navigator.clipboard.write([item]).catch((error) => {
+              console.warn("Native clipboard copy rejected:", error);
+              content.then((value) => writeLocalClipboardText(value));
+            });
+          } catch (error) {
+            pending.nativeWrite = false;
+            console.warn("Deferred clipboard write unavailable:", error);
+          }
+        }
+        registerInput({ type: "clipboard_pull" });
+      }
+
       async function fallbackPasteFromAsyncClipboard() {
         if (!pendingNativePaste) return;
         pendingNativePaste = false;
@@ -1389,7 +1429,17 @@
         let msg;
         try { msg = JSON.parse(text); } catch (_) { return; }
         if (msg.type === "clipboard_snapshot") {
-          if (msg.kind === "text") await writeLocalClipboardText(msg.text || "");
+          if (msg.kind === "text") {
+            if (pendingClipboardCopy) {
+              const pending = pendingClipboardCopy;
+              pendingClipboardCopy = null;
+              clearTimeout(pending.timer);
+              pending.resolve(String(msg.text || ""));
+              if (!pending.nativeWrite) await writeLocalClipboardText(msg.text || "");
+            } else {
+              await writeLocalClipboardText(msg.text || "");
+            }
+          }
         } else if (msg.type === "clipboard_files_applied") {
           statusBadge.textContent = "Буфер: " + Number(msg.count || 0) + " файл(а)";
           statusBadge.className = "hud-badge badge-status";
@@ -2038,7 +2088,7 @@
         if (isPrimaryShortcut(e, "c")) {
           e.preventDefault();
           swallowedClipboardCode = e.code;
-          registerInput({ type: "clipboard_pull" });
+          if (!e.repeat) beginNativeCopy();
           return;
         }
         if (isPrimaryShortcut(e, "v")) {
@@ -2047,7 +2097,7 @@
           clipboardSink.value = "";
           clipboardSink.focus({ preventScroll: true });
           clearTimeout(clipboardPasteFallbackTimer);
-          clipboardPasteFallbackTimer = setTimeout(fallbackPasteFromAsyncClipboard, 140);
+          clipboardPasteFallbackTimer = setTimeout(fallbackPasteFromAsyncClipboard, 800);
           return;
         }
         e.preventDefault();
