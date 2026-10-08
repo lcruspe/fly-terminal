@@ -1421,7 +1421,9 @@ def get_display_modes(target):
     output, error = betterdisplay_command("get", *display_identifier_args(target), "-displayModeList")
     if output is None:
         return [], error
-    modes = sorted(set(re.findall(r"\b\d{3,4}x\d{3,4}\b", output)), key=lambda item: tuple(map(int, item.split("x"))))
+    modes = sorted({mode for line in output.splitlines() if "Unsafe" not in line
+                    for mode in re.findall(r"\b\d{3,4}x\d{3,4}\b", line)},
+                   key=lambda item: tuple(map(int, item.split("x"))))
     return modes, ""
 
 
@@ -1431,8 +1433,9 @@ def closest_display_mode(resolution, modes):
     if not valid_modes:
         return ""
     return min(valid_modes, key=lambda mode: (
+        ((int(mode.split("x")[0]) - width) / width) ** 2
+        + ((int(mode.split("x")[1]) - height) / height) ** 2,
         abs(int(mode.split("x")[0]) / int(mode.split("x")[1]) - width / height),
-        abs(int(mode.split("x")[0]) * int(mode.split("x")[1]) - width * height),
     ))
 
 
@@ -1449,7 +1452,7 @@ def get_display_mode_number(target, resolution):
     candidates = []
     for line in output.splitlines():
         match = re.match(r"^\s*(\d+)\s+-\s+(\d{3,4}x\d{3,4})\s+(.+)$", line)
-        if match and match.group(2) == resolution:
+        if match and match.group(2) == resolution and "Unsafe" not in line:
             details = match.group(3)
             candidates.append((
                 ("HiDPI" in details) != (hidpi == "on"),

@@ -25,6 +25,17 @@ class DisplayAutoResizeTests(unittest.TestCase):
         self.assertEqual(module.closest_display_mode("1500x850", modes), "1600x900")
         self.assertEqual(module.closest_display_mode("1100x800", modes), "1024x768")
 
+    def test_unsafe_modes_are_excluded_from_automatic_selection(self):
+        listing = "42 - 1280x720 60Hz\n144 - 720x480 60Hz Unsafe"
+        with patch.object(module, "betterdisplay_command", return_value=(listing, "")):
+            self.assertEqual(module.get_display_modes("main"), (["1280x720"], ""))
+        self.assertEqual(module.closest_display_mode("1200x800", ["720x480", "1280x720"]), "1280x720")
+
+    def test_unsafe_exact_mode_is_not_used(self):
+        listing = "42 - 1280x720 60Hz Unsafe\n43 - 1280x720 60Hz"
+        with patch.object(module, "betterdisplay_command", side_effect=[(listing, ""), ("off", ""), ("60Hz", "")]):
+            self.assertEqual(module.get_display_mode_number("main", "1280x720"), ("43", ""))
+
     def test_main_display_uses_exact_mode_number_without_hidpi_switch(self):
         listing = "38 - 1280x720 HiDPI 60Hz\n42 - 1280x720 60Hz\n56 - 2560x1440 60Hz"
         with patch.object(module, "betterdisplay_command", side_effect=[(listing, ""), ("off", ""), ("60Hz", "")]):
