@@ -2027,11 +2027,15 @@
       function getRenderedScreenRect() {
         const mediaSurface = usingWebRtc ? screenVideo : canvas;
         const rect = mediaSurface.getBoundingClientRect();
-        if (fitMode === "fill" || !streamWidth || !streamHeight) return rect;
+        // Use the actual presentation and decoded frame, including while a
+        // resolution change is still in flight.
+        const widthPixels = usingWebRtc ? screenVideo.videoWidth : canvas.width;
+        const heightPixels = usingWebRtc ? screenVideo.videoHeight : canvas.height;
+        if (getComputedStyle(mediaSurface).objectFit === "fill" || !widthPixels || !heightPixels) return rect;
 
-        const scale = Math.min(rect.width / streamWidth, rect.height / streamHeight);
-        const width = streamWidth * scale;
-        const height = streamHeight * scale;
+        const scale = Math.min(rect.width / widthPixels, rect.height / heightPixels);
+        const width = widthPixels * scale;
+        const height = heightPixels * scale;
         return {
           left: rect.left + (rect.width - width) / 2,
           top: rect.top + (rect.height - height) / 2,
