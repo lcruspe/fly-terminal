@@ -56,6 +56,24 @@ class GatewayStatusTests(unittest.TestCase):
             self.assertFalse(module._gateway_http_probe(8080, "/roomaudio/", gateway_page=True))
             self.assertTrue(module._gateway_http_probe(8080, "/"))
 
+
+    def test_roomaudio_own_basic_auth_counts_as_up(self):
+        class Response:
+            status = 401
+        class Connection:
+            def __init__(self, *args, **kwargs):
+                pass
+            def request(self, *args, **kwargs):
+                pass
+            def getresponse(self):
+                return Response()
+            def close(self):
+                pass
+        with patch.object(module.http.client, "HTTPConnection", Connection):
+            self.assertTrue(module._gateway_http_probe(
+                8080, "/roomaudio/", headers={"Authorization": "Basic test"}, gateway_page=True
+            ))
+
     def test_native_websocket_rejection_means_listener_is_up(self):
         class Response:
             status = 426

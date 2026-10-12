@@ -11,6 +11,7 @@
 	@ytLogin path /yt-login
 	@gatewayStatus path /gateway-status
 	@ytUi path /yt-transcriber /yt-transcriber/*
+	@roomaudioRoot path /roomaudio
 	@gatewayProtected not path /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
 
 	basic_auth @gatewayProtected {
@@ -52,6 +53,14 @@
 	handle @gatewayStatus {
 		rewrite * /api/gateway/status
 		reverse_proxy 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}
+	}
+
+	redir @roomaudioRoot /roomaudio/ 302
+	handle_path /roomaudio/* {
+		reverse_proxy {$FLY_ROOMAUDIO_UPSTREAM:http://127.0.0.1:8766} {
+			header_up -Authorization
+			header_up X-Forwarded-Prefix /roomaudio
+		}
 	}
 
 	handle @assets {

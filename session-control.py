@@ -2195,10 +2195,12 @@ def _gateway_http_probe(port, path="/", *, headers=None, websocket=False, gatewa
         if not (200 <= response.status < 400 or response.status == 401):
             return False
         if gateway_page:
-            # The default Caddy catch-all serves the Gateway HTML even when
-            # /roomaudio/ has no upstream. Never count that as RoomAudio healthy.
+            # The gateway's own Basic Auth was supplied in the request. A 401
+            # from the upstream RoomAudio server means it is running but needs
+            # its separate credentials, so it must count as reachable.
             if response.status == 401:
-                return False
+                return True
+            # Reject Caddy's catch-all Gateway HTML when /roomaudio/ is absent.
             snippet = response.read(32768).decode("utf-8", errors="replace").lower()
             if "<title>gateway</title>" in snippet or "<strong>fly terminal</strong>" in snippet:
                 return False
