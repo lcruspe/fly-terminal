@@ -1955,13 +1955,15 @@ def humanize_operation_status(status, operation):
             technical_message = str(normalized.get("message") or "").strip()
             if technical_message:
                 normalized["technicalMessage"] = technical_message
-            normalized["message"] = operation_failure_message(operation, normalized.get("step"))
+            if operation != "update" or normalized.get("step") != "preflight":
+                normalized["message"] = operation_failure_message(operation, normalized.get("step"))
         entries.append(normalized)
     result["entries"] = entries
 
     if result.get("state") == "failed":
         latest_failure = next(
-            (entry for entry in reversed(entries) if isinstance(entry, dict) and entry.get("ok") is False),
+            (entry for entry in reversed(entries) if isinstance(entry, dict) and entry.get("ok") is False
+             and (operation != "update" or entry.get("step") != "fatal")),
             None,
         )
         if latest_failure:

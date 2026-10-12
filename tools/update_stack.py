@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ LABELS = (
     "ai.kruspe.fly-terminal.browser",
 )
 SAFE_GENERATED_BASENAMES = {".DS_Store"}
+DEPLOYMENT_FILES = {"macos/Caddyfile", "macos/gateway/admin.html"}
 
 
 def now():
@@ -138,9 +140,78 @@ class Updater:
                     self.write("running", f"Порт {port} готов", f"check-port-{port}")
                     break
                 if time.monotonic() >= deadline:
+                    self.ok = False
                     self.entries.append({"time": now(), "step": f"check-port-{port}", "ok": False, "message": f"port {port} did not become ready"})
+                    self.write("failed", f"Порт {port} не готов", f"check-port-{port}")
                     raise RuntimeError(f"port {port} did not become ready")
                 time.sleep(1)
+
+    def pull_preserving_deployment(self):
+        """Merge local deployment overrides, retaining a durable Git backup."""
+        changed = set(self._tracked_changes())
+        upstream = subprocess.check_output(
+            ["git", "diff", "--name-only", "HEAD", "origin/main"],
+            cwd=REPO_ROOT, text=True,
+        ).splitlines()
+        paths = sorted(changed.intersection(upstream).intersection(DEPLOYMENT_FILES))
+        if not paths:
+            self.run("git-pull", ["git", "pull", "--ff-only", "origin", "main"], timeout=90)
+            return
+
+        # Check before stashing: an actual content conflict must leave the live
+        # configuration untouched, rather than insert Git conflict markers.
+        staged = subprocess.check_output(
+            ["git", "diff", "--cached", "--name-only"], cwd=REPO_ROOT, text=True,
+        ).splitlines()
+        with tempfile.TemporaryDirectory(prefix="fly-update-merge-") as directory:
+            for path in paths:
+                local = REPO_ROOT / path
+                if path in staged or not local.is_file() or local.is_symlink():
+                    self.preflight_failure(f"Требуется ручное сохранение локальных изменений: {path}")
+                blobs = []
+                for index, revision in enumerate((None, "HEAD", "origin/main")):
+                    target = Path(directory) / str(index)
+                    if revision is None:
+                        target.write_bytes(local.read_bytes())
+                    else:
+                        result = subprocess.run(
+                            ["git", "show", f"{revision}:{path}"], cwd=REPO_ROOT,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+                        )
+                        if result.returncode:
+                            self.preflight_failure(f"Не удалось совместить локальные настройки: {path}")
+                        target.write_bytes(result.stdout)
+                    blobs.append(str(target))
+                result = subprocess.run(
+                    ["git", "merge-file", "-p", *blobs], cwd=REPO_ROOT,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+                )
+                if result.returncode:
+                    self.preflight_failure(f"Конфликт локальных настроек с обновлением: {path}. Настройки сохранены; требуется ручное объединение.")
+
+        self.run("backup-config", ["git", "stash", "push", "-m", f"Fly Terminal deployment backup {now()}", "--", *paths])
+        backup = subprocess.check_output(["git", "rev-parse", "stash@{0}"], cwd=REPO_ROOT, text=True).strip()
+        try:
+            self.run("git-pull", ["git", "pull", "--ff-only", "origin", "main"], timeout=90)
+        finally:
+            # Restore even if pull fails. Keep the stash as a recoverable backup.
+            restored = subprocess.run(
+                ["git", "stash", "apply", backup], cwd=REPO_ROOT,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False, timeout=30,
+            )
+            self.entries.append({"time": now(), "step": "restore-config", "ok": restored.returncode == 0,
+                                 "message": f"deployment backup: {backup}", "output": restored.stdout[-4000:]})
+            if restored.returncode:
+                # Never leave conflict markers in files used by running services.
+                self.run("restore-config", ["git", "restore", f"--source={backup}", "--worktree", "--", *paths])
+                self.run("restore-index", ["git", "reset", "HEAD", "--", *paths])
+                self.preflight_failure(f"Не удалось восстановить настройки после обновления. Исходные файлы восстановлены; резервная копия Git: {backup}")
+
+    def preflight_failure(self, message):
+        self.ok = False
+        self.entries.append({"time": now(), "step": "preflight", "ok": False, "message": message})
+        self.write("failed", message, "preflight")
+        raise RuntimeError(message)
 
     def execute(self):
         # Fetch first: this lets the updater know the latest upstream state before
@@ -148,7 +219,7 @@ class Updater:
         self.run("git-fetch", ["git", "fetch", "origin", "main"], timeout=90)
         self.write("running", "Проверяю локальные изменения", "preflight")
         self._clean_safe_generated_changes()
-        self.run("git-pull", ["git", "pull", "--ff-only", "origin", "main"], timeout=90)
+        self.pull_preserving_deployment()
         self.restart_stack()
         self.write("success", "Обновление и перезапуск стека завершены", "complete")
         return 0
@@ -163,14 +234,13 @@ def main():
         return updater.execute()
     except Exception as exc:
         updater.ok = False
-        # Preserve a more specific summary written by preflight when available.
+        # Preserve the actual failing step instead of hiding it behind "fatal".
         try:
             current = json.loads(updater.status_file.read_text(encoding="utf-8"))
         except Exception:
             current = {}
-        if current.get("state") == "failed" and current.get("step") == "preflight":
-            updater.entries.append({"time": now(), "step": "fatal", "ok": False, "message": str(exc)})
-            updater.write("failed", current.get("summary") or "Обновление остановлено с ошибкой", "preflight")
+        if current.get("state") == "failed":
+            updater.write("failed", current.get("summary") or str(exc), current.get("step") or "fatal")
         else:
             updater.entries.append({"time": now(), "step": "fatal", "ok": False, "message": str(exc)})
             updater.write("failed", "Обновление остановлено с ошибкой", "fatal")
