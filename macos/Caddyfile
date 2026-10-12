@@ -12,6 +12,11 @@
 	@gatewayStatus path /gateway-status
 	@ytUi path /yt-transcriber /yt-transcriber/*
 	@roomaudioRoot path /roomaudio
+	# Recording ingest, client control and setup stay LAN/Tailscale-only.
+	@roomAudioPrivate path /roomaudio/ingest/* /roomaudio/client/* /roomaudio/setup/*
+	handle @roomAudioPrivate {
+		respond "Not found" 404
+	}
 	# RoomAudio authenticates requests with its own Basic Auth realm.
 	@gatewayProtected not path /roomaudio /roomaudio/* /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
 
