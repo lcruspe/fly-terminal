@@ -12,7 +12,8 @@
 	@gatewayStatus path /gateway-status
 	@ytUi path /yt-transcriber /yt-transcriber/*
 	@roomaudioRoot path /roomaudio
-	@gatewayProtected not path /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
+	# RoomAudio authenticates requests with its own Basic Auth realm.
+	@gatewayProtected not path /roomaudio /roomaudio/* /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
 
 	basic_auth @gatewayProtected {
 		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
@@ -58,7 +59,7 @@
 	redir @roomaudioRoot /roomaudio/ 302
 	handle_path /roomaudio/* {
 		reverse_proxy {$FLY_ROOMAUDIO_UPSTREAM:http://127.0.0.1:8766} {
-			header_up -Authorization
+			# Forward RoomAudio's Authorization header, not Fly Terminal's.
 			header_up X-Forwarded-Prefix /roomaudio
 		}
 	}
