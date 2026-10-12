@@ -10,23 +10,27 @@
 <body>
   <main>
     <section class="services">
-      <a class="service" data-port="8443" href="#">
+      <a class="service" data-health="terminal" data-port="8443" href="#">
         <strong>Fly Terminal</strong>
         <span class="port">:8443</span>
       </a>
-      <a class="service" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#">
+      <a class="service" data-health="native" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#">
         <strong>Browser Native</strong>
         <span class="port">:8443 · native</span>
       </a>
-      <a class="service" data-port="8443" data-path="/browser/" href="#">
+      <a class="service" data-health="fallback" data-port="8443" data-path="/browser/" href="#">
         <strong>Browser Fallback</strong>
         <span class="port">:8443/browser/</span>
       </a>
-      <a class="service" href="/yt-transcriber/">
+      <a class="service" data-health="roomaudio" href="/roomaudio/">
+        <strong>RoomAudio</strong>
+        <span class="port">/roomaudio/ · Аудиоархив</span>
+      </a>
+      <a class="service" data-health="yt" href="/yt-transcriber/">
         <strong>YT Transcript</strong>
         <span class="port">/yt-transcriber/</span>
       </a>
-      <a class="service" data-port="10000" href="#">
+      <a class="service" data-health="spruthub" data-port="10000" href="#">
         <strong>Sprut.Hub</strong>
         <span class="port">:10000</span>
       </a>

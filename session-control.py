@@ -2,6 +2,8 @@
 import json
 import ctypes
 import ctypes.util
+import http.client
+from concurrent.futures import ThreadPoolExecutor
 import os
 import posixpath
 import re
@@ -2176,11 +2178,81 @@ def write_ui_preferences(preferences):
         os.replace(temp_path, UI_PREFERENCES_FILE)
 
 
+
+# The gateway runs on a separate HTTPS origin. Probe services on loopback here,
+# rather than trying to read cross-origin 8443/10000 responses in the browser.
+GATEWAY_PROBE_TIMEOUT_SECONDS = 1.5
+
+
+def _gateway_http_probe(port, path="/", *, headers=None, websocket=False, gateway_page=False):
+    connection = http.client.HTTPConnection("127.0.0.1", int(port), timeout=GATEWAY_PROBE_TIMEOUT_SECONDS)
+    try:
+        connection.request("GET", path, headers=headers or {})
+        response = connection.getresponse()
+        if websocket:
+            # A websocket-only server rejects a normal HTTP GET with 400/426.
+            return response.status in (400, 426)
+        if not (200 <= response.status < 400 or response.status == 401):
+            return False
+        if gateway_page:
+            # The default Caddy catch-all serves the Gateway HTML even when
+            # /roomaudio/ has no upstream. Never count that as RoomAudio healthy.
+            if response.status == 401:
+                return False
+            snippet = response.read(32768).decode("utf-8", errors="replace").lower()
+            if "<title>gateway</title>" in snippet or "<strong>fly terminal</strong>" in snippet:
+                return False
+        return True
+    except (OSError, ValueError, http.client.HTTPException):
+        return False
+    finally:
+        connection.close()
+
+
+def gateway_service_statuses():
+    user = os.environ.get("TERMINAL_USER", "")
+    password = os.environ.get("TERMINAL_PASSWORD", "")
+    gateway_headers = {}
+    if user and password:
+        encoded = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+        gateway_headers["Authorization"] = f"Basic {encoded}"
+
+    checks = {
+        "terminal": lambda: _gateway_http_probe(os.environ.get("TTYD_PORT", "7682")),
+        "native": lambda: (
+            os.environ.get("FLY_NATIVE_BROWSER_ENABLED", "1") == "1"
+            and _gateway_http_probe(os.environ.get("FLY_NATIVE_BROWSER_STREAMER_PORT", "5906"), websocket=True)
+        ),
+        "fallback": lambda: (
+            os.environ.get("FLY_BROWSER_ENABLED", "0") == "1"
+            and _gateway_http_probe(os.environ.get("FLY_BROWSER_HOST_PORT", "7690"))
+        ),
+        "roomaudio": lambda: (
+            bool(gateway_headers)
+            and _gateway_http_probe(os.environ.get("CADDY_PORT", "8080"), "/roomaudio/",
+                                    headers=gateway_headers, gateway_page=True)
+        ),
+        "yt": lambda: _gateway_http_probe(os.environ.get("FLY_YT_TRANSCRIBER_PORT", "8787")),
+        "spruthub": lambda: (
+            os.environ.get("FLY_SPRUTHUB_ENABLED", "0") == "1"
+            and _gateway_http_probe(os.environ.get("FLY_SPRUTHUB_FORWARD_PORT", "7693"))
+        ),
+    }
+    # A stalled upstream must not delay unrelated status checks.
+    with ThreadPoolExecutor(max_workers=len(checks)) as pool:
+        futures = {key: pool.submit(check) for key, check in checks.items()}
+        return {key: ("up" if future.result() else "down") for key, future in futures.items()}
+
+
 class SessionControlHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         send_json(self, 200, {})
 
     def do_GET(self):
+        if self.path == "/api/gateway/status":
+            send_json(self, 200, {"ok": True, "services": gateway_service_statuses()})
+            return
+
         if self.path == "/api/sessions/list":
             result = subprocess.run(
                 ["tmux", "list-sessions", "-F", "#{session_name}"],

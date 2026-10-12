@@ -9,6 +9,7 @@
 
 	@ytIcon path /yt-transcriber/apple-touch-icon.png
 	@ytLogin path /yt-login
+	@gatewayStatus path /gateway-status
 	@ytUi path /yt-transcriber /yt-transcriber/*
 	@gatewayProtected not path /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
 
@@ -46,6 +47,11 @@
 	handle @ytUi {
 		uri strip_prefix /yt-transcriber
 		reverse_proxy 127.0.0.1:8787
+	}
+
+	handle @gatewayStatus {
+		rewrite * /api/gateway/status
+		reverse_proxy 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}
 	}
 
 	handle @assets {

@@ -52,3 +52,30 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
   font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .note { margin-top: 22px; font-size: 13px; }
+
+/* Startup-only availability indicators; keep the cards' hit areas unchanged. */
+.service { position: relative; padding-right: 40px; }
+.service-health {
+  position: absolute;
+  top: 21px;
+  right: 20px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #171d24;
+  background: #788390;
+  box-shadow: 0 0 0 1px #788390;
+}
+.service-health[data-state="up"] {
+  background: #44ba79;
+  box-shadow: 0 0 0 1px #44ba79;
+}
+.service-health[data-state="down"] {
+  background: #e06a70;
+  box-shadow: 0 0 0 1px #e06a70;
+}
+.service-health[data-state="checking"] { animation: health-pulse 1.1s ease-in-out infinite; }
+@keyframes health-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .service-health[data-state="checking"] { animation: none; }
+}

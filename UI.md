@@ -100,3 +100,11 @@ YT Transcript не принимает Basic Auth напрямую как при�
 HTTP `403`/`429` при чтении автоматических субтитров не должен выводиться пользователю как окончательная ошибка. YT Transcript повторяет запрос субтитров и затем прозрачно переключается на аудиодорожку + локальный Whisper. Ошибка показывается только если не удалось и получение аудио/транскрипция.
 
 Vertical toolbars open Settings, Tools and Apps toward the workspace, including the compact icon mode. Popups are constrained to the available side before measuring wrapped content, then kept within the viewport. Narrow Settings/Tools popups use scrollable horizontal section navigation. Sidebar scrolling repositions open menus and Apps submenus. The menu backdrop stays below the complete sidebar stacking context; styles for toolbar actions do not affect controls inside popups.
+
+## Доступность сервисов на стартовой странице
+
+На защищённом каталоге `macos/gateway/admin.html` в правом верхнем углу карточек показаны небольшие индикаторы: зелёный — отвечает, красный — не отвечает, серый — проверяется/не удалось проверить. Проверка выполняется однократно при загрузке страницы, без фонового опроса. Состояние и текстовое описание доступны при наведении на индикатор.
+
+`macos/gateway/gateway.js` делает один same-origin запрос `GET /gateway-status` (Caddy Basic Auth обязателен), а `session-control.py` параллельно опрашивает локальные HTTP endpoints с таймаутом 1,5 с: ttyd `7682`, WebSocket-транспорт Native Browser `5906` (ответ 400/426 на обычный HTTP-запрос), Chromium fallback `7690`, YT Transcriber `8787`, Sprut.Hub forwarder `7693`. Проверка Native означает готовность транспортного порта, но не подтверждает наличие видеокадров. Выключенные через env сервисы считаются недоступными. При ошибке общего запроса все индикаторы остаются серыми, а не красными.
+
+RoomAudio проверяется через локальный Caddy `/roomaudio/` с конфигурационными Basic Auth credentials. Типовая HTML-страница каталога `Gateway` отвергается, чтобы отсутствие маршрута не превращалось в ложный зелёный индикатор. Если маршрут отсутствует или не отвечает, индикатор красный. Проброс RoomAudio через Caddy на рабочей машине должен быть настроен отдельно; этот механизм не угадывает внутренний порт приложения. Проверка не обращается напрямую к другим HTTPS-портам из браузера и не снимает с них Basic Auth.
