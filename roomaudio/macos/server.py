@@ -253,7 +253,12 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Invalid live stream identifier")
             except ValueError:
                 return self.reply(400, "Invalid live packet")
-            data = self.rfile.read(count)
+            self.connection.settimeout(12)
+            try:
+                data = self.rfile.read(count)
+            except (TimeoutError, ConnectionResetError, OSError):
+                self.close_connection = True
+                return
             if len(data) != count:
                 return self.reply(400, "Truncated packet")
             if not live_relay.hub.ingest_packet(session, sequence, data):
