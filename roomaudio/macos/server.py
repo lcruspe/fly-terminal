@@ -15,6 +15,7 @@ import archive_cleanup
 import audio_quality
 import recording_settings
 import speech_index
+import live_relay
 import storage_paths
 import subprocess
 import threading
@@ -234,6 +235,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path == "/ingest/live":
+            # Sequential transport for one continuous MP3 encoder. Never
+            # concatenate separately encoded 15-second archive fragments.
+            if not hmac.compare_digest(self.headers.get("X-Ingest-Key", ""),
+                                       CONFIG["ingest_key"]):
+                return self.reply(403, "Forbidden")
+            if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "audio/mpeg":
+                return self.reply(415, "Expected audio/mpeg")
+            try:
+                count = int(self.headers.get("Content-Length", "0"))
+                sequence = int(self.headers.get("X-Live-Sequence", "-1"))
+                session = self.headers.get("X-Live-Stream", "")
+                if not 0 < count <= 65536 or not 0 <= sequence < 10_000_000:
+                    raise ValueError("Invalid live packet")
+                if not re.fullmatch(r"[0-9a-f]{32}", session):
+                    raise ValueError("Invalid live stream identifier")
+            except ValueError:
+                return self.reply(400, "Invalid live packet")
+            data = self.rfile.read(count)
+            if len(data) != count:
+                return self.reply(400, "Truncated packet")
+            if not live_relay.hub.ingest_packet(session, sequence, data):
+                return self.reply(409, "Out-of-order live packet")
+            return self.reply(200, "OK")
         if path.startswith("/api/archive/cleanup/"):
             if not self.authorized():
                 return self.reply(401, "Login required")
@@ -389,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(401, "Authentication required")
         if path == "/api/recording-mode":
             return self.json_reply(recording_settings.status())
+        if path == "/api/live/status":
+            return self.json_reply(live_relay.hub.status())
         if path == "/api/media-token":
             target = query.get("path", [""])[0]
             if not self.authorized() or not self.is_media_path(target):
@@ -569,35 +596,32 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def live_stream(self):
-        if not fresh_live_segments(1):
-            return self.reply(503, "No recent live audio. Waiting for speech.")
+        current = live_relay.hub.subscribe()
+        if current is None:
+            return self.reply(503, "Continuous live audio is not connected")
+        generation, seq = current
         self.send_response(200)
         self.send_header("Content-Type", "audio/mpeg")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-store, no-transform")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Accel-Buffering", "no")
         self.send_header("Connection", "close")
         self.end_headers()
         self.close_connection = True
-        last_name = None
         try:
-            latest = fresh_live_segments(1)
-            if latest:
-                with latest[0].open("rb") as f:
-                    shutil.copyfileobj(f, self.wfile)
-                self.wfile.flush()
-                last_name = latest[0].name
             while True:
-                with condition:
-                    condition.wait(timeout=25)
-                files = fresh_live_segments(8)
-                for p in files:
-                    if last_name is not None and p.name <= last_name:
-                        continue
-                    with p.open("rb") as f:
-                        shutil.copyfileobj(f, self.wfile)
+                result = live_relay.hub.read(generation, seq)
+                if result is None:
+                    return
+                frames, seq = result
+                for _, data in frames:
+                    self.wfile.write(data)
+                if frames:
                     self.wfile.flush()
-                    last_name = p.name
         except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
             pass
+        finally:
+            live_relay.hub.unsubscribe()
 
 if __name__ == "__main__":
     threading.Thread(target=maintenance, daemon=True).start()
