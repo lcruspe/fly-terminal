@@ -10,6 +10,7 @@ import time
 
 import numpy as np
 import sounddevice as sd
+from live_publisher import LivePublisher
 
 BASE=Path(__file__).resolve().parent
 CONFIG=json.loads((BASE/"client.json").read_text(encoding="utf-8-sig"))
@@ -67,6 +68,8 @@ def run(outdir,seconds=None):
         except queue.Full:
             errors[0]+=1
 
+    publisher=LivePublisher(CONFIG)
+    publisher.start()
     with open(LOG,"a",encoding="utf-8") as stderr:
         ff=subprocess.Popen(commands,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=stderr,bufsize=0)
         start=time.monotonic()
@@ -82,10 +85,12 @@ def run(outdir,seconds=None):
                     except queue.Empty:
                         raise RuntimeError("No microphone data received for 4 seconds")
                     ff.stdin.write(payload)
+                    publisher.feed(payload)
                     written+=len(payload)
                     if ff.poll() is not None:
                         raise RuntimeError("FFmpeg unexpectedly stopped: "+str(ff.returncode))
         finally:
+            publisher.stop()
             if ff.stdin:
                 try:ff.stdin.close()
                 except OSError:pass
