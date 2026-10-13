@@ -9,6 +9,7 @@ import subprocess
 import time
 import numpy as np
 import sounddevice as sd
+from live_publisher import LivePublisher
 from capture_ks import select_device,CONFIG,BASE,SAMPLE_RATE,CHANNELS
 from speech_activity import detect_float
 
@@ -61,6 +62,8 @@ def capture(folder,seconds=None):
     parts=[]
     frames=0
     first=None
+    publisher=LivePublisher(CONFIG)
+    publisher.start()
     with sd.InputStream(device=device,samplerate=SAMPLE_RATE,channels=CHANNELS,
                         dtype="float32",callback=callback,blocksize=0,latency="high"):
         logging.info("Voice-trigger recording active on WDM-KS input %d",device)
@@ -70,6 +73,7 @@ def capture(folder,seconds=None):
                 data=buffers.get(timeout=4)
             except queue.Empty:
                 raise RuntimeError("No microphone input for 4 seconds")
+            publisher.feed(np.ascontiguousarray(data,dtype="<f4").tobytes())
             if first is None:first=dt.datetime.now()
             position=0
             while position<len(data):
@@ -84,6 +88,7 @@ def capture(folder,seconds=None):
     # Finish a partial fragment on graceful stop, if it contains speech.
     if parts and first is not None and frames>=SAMPLE_RATE*2:
         store(np.concatenate(parts),first,folder)
+    publisher.stop()
     logging.info("Voice-trigger exited; callback overruns=%d",overruns[0])
 
 if __name__=="__main__":
