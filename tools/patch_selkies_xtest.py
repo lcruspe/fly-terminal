@@ -6,8 +6,10 @@ as independent keydown/keyup events.
 The linuxserver Chromium image currently runs Selkies on X11. Newer Selkies
 routes alphabetic printable input through pynput or xdotool key events; for
 Cyrillic this can race under fast typing and characters are dropped. The patch
-keeps shortcuts and Latin key events intact, but batches Cyrillic characters
-and sends each batch with one `xdotool type` call.
+serializes text, shortcuts, and key releases through one worker, batches
+printable characters, and sends each batch with one `xdotool type` call.
+A 12 ms X11 injection interval allows applications to observe Unicode keymap
+changes before the next character reuses the temporary keycode.
 """
 
 import os
@@ -105,7 +107,8 @@ X11_TYPE_METHOD = f'''
                 await self.send_x11_keypress(mod_keysym, down=False)
 
             process = await subprocess.create_subprocess_exec(
-                "xdotool", "type", "--clearmodifiers", "--delay", "1", "--", text_to_type,
+                # Unicode keymap changes need time to reach the target app.
+                "xdotool", "type", "--clearmodifiers", "--delay", "12", "--", text_to_type,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
@@ -373,6 +376,65 @@ def patch_co_end(src):
     return src.replace(old, new, 1), True
 
 
+def patch_ordered_x11_input(src):
+    marker = "fly-terminal-ordered-x11-input-v3"
+    if marker in src:
+        return src, False
+    src = src.replace('"--delay", "1"', '"--delay", "12"')
+    start = src.index('        elif msg_type == "kd":', src.index('    async def on_message('))
+    end = src.index('        elif msg_type in ["m", "m2"]:', start)
+    src = src[:start] + '\n'.join([
+        '        elif msg_type in ("kd", "ku", "kr"):',
+        '            # ' + marker,
+        '            keysym = int(toks[1]) if msg_type != "kr" else None',
+        '            self.keyboard_queue.put_nowait((msg_type, keysym))',
+        '',
+    ]) + src[end:]
+    anchor = '                    keysym = data if msg_type in ("kd", "ku") else None'
+    ordered = '''                    if not self.is_wayland:
+                        if msg_type in ("text", "co_end"):
+                            unicode_buffer.append(data)
+                        elif msg_type == "kd":
+                            char = None
+                            if not (self.active_modifiers & self.ACTION_MODIFIER_KEYSYMS):
+                                char = _fly_terminal_keysym_to_cyrillic_text(data)
+                                if char is None and (0x20 <= data <= 0xFF or (data & 0xFF000000) == 0x01000000):
+                                    try:
+                                        char = chr(data & 0x00FFFFFF)
+                                    except ValueError:
+                                        pass
+                            if char is not None:
+                                unicode_buffer.append(char)
+                                self.atomically_typed_keys.add(data)
+                            else:
+                                await flush_buffer()
+                                if data in self.MODIFIER_KEYSYMS:
+                                    self.active_modifiers.add(data)
+                                await self.send_x11_keypress(data, down=True)
+                        elif msg_type == "ku":
+                            if data in self.atomically_typed_keys:
+                                self.atomically_typed_keys.discard(data)
+                            else:
+                                await flush_buffer()
+                                if data in self.MODIFIER_KEYSYMS:
+                                    self.active_modifiers.discard(data)
+                                await self.send_x11_keypress(data, down=False)
+                        elif msg_type == "kr":
+                            await flush_buffer()
+                            await self.reset_keyboard()
+                        # Bound batching latency even during uninterrupted typing.
+                        if len(unicode_buffer) >= 16:
+                            await flush_buffer()
+                        continue
+
+'''
+    if anchor not in src:
+        raise RuntimeError("keyboard worker dispatch anchor not found")
+    src = src.replace(anchor, ordered + anchor, 1)
+    src = src.replace('timeout=0.05)', 'timeout=0.01)', 1)
+    return src, True
+
+
 def validate_source(path, src):
     tmp = path.with_suffix(path.suffix + ".validate")
     tmp.write_text(src)
@@ -385,6 +447,12 @@ def validate_source(path, src):
 def patch_file(path):
     src = path.read_text()
     original = src
+    if "fly-terminal-ordered-x11-input-v3" in src:
+        src = src.replace('"--delay", "1"', '"--delay", "12"')
+        validate_source(path, src)
+        path.write_text(src)
+        print(f"{path}: ordered input ready")
+        return True
 
     patchers = [
         patch_helpers,
@@ -396,6 +464,7 @@ def patch_file(path):
         patch_on_message_keydown,
         patch_on_message_keyup,
         patch_co_end,
+        patch_ordered_x11_input,
     ]
 
     changes = []
