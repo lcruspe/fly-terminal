@@ -109,3 +109,12 @@ Deploy the tracked `storage_paths.py`, `server.py`, `export_conversation.py` and
 Validated 2026-10-13: both mounted external volumes writable; six historic MP3 reports copied to both external disks, matching SHA-256 and ffprobe duration. Re-export created the MP3 under MacSSD with `mirrored_on_wd: true`, matching digest on WD. Simulated SSD removal selected WD for workdirs and existing MP3s, while simulated removal of both disks failed safely. Restarted services and confirmed unauthenticated HTTPS access remains HTTP 401. Always verify authenticated HTTP Range (206) with an actual authorized session before declaring end-to-end download verified.
 
 Old application-folder report backups (`reports/audio.pre-ssd-20261013`) and iCloud-managed Documents backups are not served. System `/tmp` should not be used for future independent transcript processing; use the external temporary workdir.
+
+### Live-stream end-to-end validation (2026-10-13)
+
+- Windows Mate capture in `voice` mode continued generating archival MP3s after the live publisher was attached; no second microphone was opened.
+- The original long-lived chunked HTTP uplink was discarded after repeated Windows `WinError 10053/10054`. Replaced by consecutive, short, acknowledged HTTP requests carrying one persistent MP3 encoder output. Live ingest requires `X-Ingest-Key`, a 32-hex source session, monotonically increasing packet sequence and length <= 65536 bytes.
+- On Mac mini `test_live_relay.py` passed 5/5 tests. Protected route returned HTTP 401 to unauthenticated requests. With an authorized session, HTTPS `/roomaudio/api/live/status` returned `online: true` and a bounded buffer of 262144 bytes.
+- Authenticated local `/live.mp3` returned HTTP 200 and a 100000-byte sample decoded as MP3, 8.329667 s. Public HTTPS gateway `/roomaudio/live.mp3` also returned HTTP 200 and live audio.
+- A 33-second real external HTTPS capture returned 396000 MP3 bytes in 33 reads. FFmpeg decoder returned code 0 and FFprobe reported 32.983 seconds. The longest wait between reads was 1.56 seconds. This verifies continuity through multiple former 15-second segment boundaries at the byte/decoder level. Subjective listening and iPhone Safari validation remain user-side checks.
+- After the final Mac server restart, relay unit tests passed 5/5 again and the authorized HTTPS status still reported `online: true`. Archive ASR worker was left running.
