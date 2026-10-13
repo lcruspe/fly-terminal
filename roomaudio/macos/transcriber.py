@@ -11,6 +11,7 @@ import re
 import sqlite3
 import subprocess
 import tempfile
+import storage_paths
 import secrets
 import time
 
@@ -127,7 +128,7 @@ def process(files, gid):
     files = sorted(files)
     stamp = dt.datetime.strptime(files[0].stem, "%Y%m%dT%H%M%S")
     stop = dt.datetime.strptime(files[-1].stem, "%Y%m%dT%H%M%S") + dt.timedelta(seconds=15)
-    with tempfile.TemporaryDirectory(prefix="ra-asr-") as folder:
+    with tempfile.TemporaryDirectory(prefix="ra-asr-", dir=str(storage_paths.work_dir("tmp"))) as folder:
         work = Path(folder)
         manifest = work / "input.txt"
         manifest.write_text("".join("file '" + str(p).replace("'", "'\\''") + "'\n" for p in files))
