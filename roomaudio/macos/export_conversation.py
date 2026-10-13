@@ -14,10 +14,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import storage_paths
 import py_compile
 
 APP = Path.home() / "Library" / "Application Support" / "RoomAudio"
-REPORTS = Path.home() / "Documents" / "RoomAudio-reports" / "audio"
+
 SEGMENT_RE = re.compile(r"^\d{8}T\d{6}\.mp3$")
 SLUG_RE = re.compile(r"^[a-z0-9_-]{1,80}$")
 FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
@@ -66,7 +67,7 @@ def main():
     ap.add_argument("--start", required=True, help="Local YYYY-MM-DDTHH:MM:SS")
     ap.add_argument("--end", required=True, help="Local YYYY-MM-DDTHH:MM:SS")
     ap.add_argument("--slug", required=True, help="Short safe Latin label for filename")
-    ap.add_argument("--output-dir", default=str(REPORTS))
+    ap.add_argument("--output-dir", default=None)
     args = ap.parse_args()
     start, end = (dt.datetime.fromisoformat(x) for x in (args.start, args.end))
     seconds = (end - start).total_seconds()
@@ -78,7 +79,7 @@ def main():
     archive = Path(cfg["archive"])
     if not archive.is_dir():
         ap.error("RoomAudio archive is unavailable")
-    out = Path(args.output_dir)
+    out = Path(args.output_dir) if args.output_dir else storage_paths.work_dir("reports/audio")
     out.mkdir(parents=True, exist_ok=True)
     out.chmod(0o700)
     # File naming matches RoomAudio's authenticated report-audio GET endpoint.
@@ -90,7 +91,7 @@ def main():
         ap.error("No source files within the requested interval")
     intervals = []
     failed = []
-    with tempfile.TemporaryDirectory(prefix="roomaudio-export-") as d:
+    with tempfile.TemporaryDirectory(prefix="roomaudio-export-", dir=str(storage_paths.work_dir("tmp"))) as d:
         raw = Path(d) / "timeline.pcm"
         with raw.open("wb+") as f:
             f.truncate(total_samples * BYTES_PER_SAMPLE)
@@ -125,8 +126,9 @@ def main():
         subprocess.run(cmd, check=True, capture_output=True, timeout=300)
         os.chmod(tmp_mp3, 0o600)
         os.replace(tmp_mp3, dest)
+    mirrored = storage_paths.mirror_report(dest)
     print(json.dumps({
-        "path": str(dest), "filename": name,
+        "path": str(dest), "filename": name, "mirrored_on_wd": mirrored,
         "url_path": "/roomaudio/api/reports/audio/" + name,
         "file_bytes": dest.stat().st_size,
         "duration_sec": seconds,
