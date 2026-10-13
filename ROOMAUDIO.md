@@ -46,7 +46,7 @@ Get-Content "$env:LOCALAPPDATA\RoomAudio\uploader.log" -Tail 20
 The recurring RoomAudio analysis task sends only semantically significant conversations. Each selected conversation must have **one downloadable MP3, one transcript and one analytical summary**. The source is the original archive audio, not speech regenerated from ASR text.
 
 - Deployed exporter: `~/Library/Application Support/RoomAudio/export_conversation.py` (tracked as `roomaudio/macos/export_conversation.py`).
-- Private output directory: `~/Documents/RoomAudio-reports/audio/` (`0700` directory, `0600` MP3).
+- Private output directory exposed to users: `~/Documents/RoomAudio-reports/audio/` (`0700` directory, `0600` MP3); on the Mac mini this is a directory symlink to the **actual** private storage `~/Library/Application Support/RoomAudio/reports/audio/` (also `0700`). The exporter and authenticated endpoint keep the same documented path/URL and resolve the same private directory; the original archive is unchanged.
 - Filename: `RoomAudio_YYYY-MM-DD_HHMM-HHMM_<ascii_slug>.mp3`.
 - Authenticated URL: `https://129-158-49-130.sslip.io/roomaudio/api/reports/audio/<filename>`. The Mac server checks its existing RoomAudio session or credentials *before* serving; report files do not accept URL media tokens.
 - Endpoint validates exact filename pattern, prevents symlink-based traversal, returns `audio/mpeg` with `Content-Disposition: attachment` and supports `Range` requests for resumable mobile downloads.
@@ -63,3 +63,11 @@ The exporter prints a machine-readable JSON object with the saved path, `url_pat
 Deployment: update changed Python sources from the repository into the Mac Application Support service directory (preserve local `config.json`), compile with `python3 -m py_compile`, restart the user launchd agent `com.kruspe.roomaudio`, and verify (a) an unauthorized GET returns HTTP 401, (b) authorized 0–127 byte `Range` returns HTTP 206 with attachment filename, (c) unexpected file names and traversal are rejected. Avoid restarting the unrelated ASR agent.
 
 The recurring task schedule uses Europe/Moscow: 00:00, 09:00 (entire night), 13:00, 17:00 and 21:00. The task should only send important conversations and must clearly report inability to access or attach audio.
+
+### macOS Documents file-provider issue (2026-10-13)
+
+The macOS `~/Documents` directory is managed by a file provider and can evict report MP3 contents, making them `compressed,dataless`. A name can then pass `stat()` and produce an HTTP 401 for unauthenticated requests, but an authorized download/read may fail with macOS `Resource deadlock avoided`. **A 401 alone is not proof that the MP3 payload can be read.**
+
+To keep the user-facing path and gateway URL stable without letting File Provider evict the payload, the entire `~/Documents/RoomAudio-reports/audio` directory was replaced with a symlink to the non-synced app-owned `~/Library/Application Support/RoomAudio/reports/audio`. All six pre-existing MP3 reports were regenerated from the untouched source archive into that real directory and validated through the symlink using `ffprobe`. The former iCloud-managed folder is retained under `~/Documents/RoomAudio-reports/audio.icloud-backup-20261013T132643` for recovery (do not accidentally serve it).
+
+When diagnosing a missing download, verify `report_path.resolve().parent == REPORT_AUDIO_DIR.resolve()`, `ffprobe` playback of the exact path, file mode `0600`, HTTP 401 when unauthenticated, and an authorized range GET with HTTP 206 if available. New exports written through the symlink remain outside iCloud-managed Documents. Transient ASR scratch WAVs should use OS temporary directories, **not `~/Documents`**, which may produce `Resource deadlock avoided` during automated reads. Avoid filling the system volume: on 2026-10-13 its free space was only about 1.8 GiB.
