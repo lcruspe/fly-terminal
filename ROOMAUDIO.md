@@ -19,7 +19,27 @@ RoomAudio is a separate service linked from the Fly Terminal gateway. This direc
 
 Uploader uses atomic capture-side rename from `.pending`, at least 2 seconds file-age guard, and a 1-second polling loop. Earlier settings were 45 seconds and 5 seconds, causing about a minute of artificial delivery delay. Failures retain data and retry. These changes have been applied on Mate on 2026-10-12.
 
-## Outstanding live-audio separation
+## Seamless live broadcast (2026-10-13)
+
+**Fixed the 15-second splice problem without touching archival semantics.**
+
+- The old `/live.mp3` concatenated independent archive segments on each 15-second boundary and the old HLS playlist referenced the same fragments. VAD could discard a segment entirely, so neither path was genuinely continuous. These archive endpoints remain useful only as fallback and for playback of historic records.
+- One WDM-KS microphone capture process still owns the microphone in both `continuous` and `voice` modes. Both `capture_ks.py` and `capture_voice.py` feed their already-produced 48kHz mono float PCM to `LivePublisher` using a **bounded non-blocking queue**. Archive writers continue to use their existing 15-second segment pipeline.
+- `roomaudio/windows/live_publisher.py` owns **one continuously running 96 kbps MP3 encoder** and publishes consecutive encoded byte ranges to `POST /ingest/live` every ~0.7s. Unlike the initial long-running chunked-HTTP attempt (which caused Windows WinError 10053/10054), the network uses short, acknowledged HTTP requests with source session ID, strictly monotonic packet sequence and existing `X-Ingest-Key`. On connection failure the encoder and session are restarted; stale queued PCM is discarded.
+- `roomaudio/macos/live_relay.py` accepts authenticated, length-checked packets and holds a bounded in-memory ring buffer. It rejects missing/out-of-order packets and replaces the decoder generation on new source sessions. Multiple listeners subscribe to `/live.mp3`; lagging listeners cannot accumulate an unbounded backlog. Audio is streamed directly as a single MP3 bitstream, not separate MP3 files. No extra recording or report files are stored.
+- The frontend `roomaudio/macos/index.html` defaults to **«Бесшовный эфир»**, uses `/api/live/status` and automatic reconnect on an interrupted stream. `HLS (резервный архивный)` remains available for clients that cannot decode a live MP3 HTTP response; **this HLS fallback still has 15-second archive boundaries and may stutter**. Do not describe fallback as seamless.
+- Capture `off` mode terminates the microphone and the live encoder; the server automatically considers a source stale after 8 seconds without bytes. No secondary microphone stream is opened. Session/auth and report export URLs are unaffected.
+
+### Verification
+
+1. Windows: `D:\Conda\python.exe -m py_compile capture_ks.py capture_voice.py live_publisher.py`.
+2. Mac: `python3 -m py_compile server.py live_relay.py`. Unit tests: reject oversized HTTP packet, nonsequential packet, expired source, new session resetting current listeners; verify ring bound and byte-exact concatenation.
+3. Restart Mac `com.kruspe.roomaudio` (leave independent ASR running); restart only the current Windows capture child so its manager relaunches it using new code. Confirm Mac sees an established LAN TCP connection from Mate, that archive files continue arriving, and the former long-lived HTTP error does not recur.
+4. In an authenticated RoomAudio browser, select **«Бесшовный эфир»**, verify `/api/live/status` reports online, `/live.mp3` plays normally, and listen continuously for several minutes across multiple former 15s boundaries. Toggle `continuous`↔`voice` and make sure recording archive/voice filtering still functions.
+5. Stop/restore the live sender or disconnect/reconnect LAN: the UI must reconnect without replaying stale source data. Confirm unauthenticated `/live.mp3` and `/api/live/status` return HTTP 401.
+6. Be explicit about remaining uncertainty: a successful TCP source connection and codec/relay unit tests **do not by themselves prove** uninterrupted playback on every browser. iOS Safari may require a future genuinely segmentable low-latency HLS rendition produced from this same continuous source (NOT the archive fragments).
+
+## Original live-audio separation plan (superseded by streaming encoder)
 
 **This is still an archive-upload architecture, not real-time streaming.** The web player on the Mac can encounter gaps whenever VAD rejects segments; a smaller upload delay cannot fix this.
 
