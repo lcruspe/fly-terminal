@@ -2222,7 +2222,10 @@ def gateway_service_statuses():
         gateway_headers["Authorization"] = f"Basic {encoded}"
 
     checks = {
-        "terminal": lambda: _gateway_http_probe(os.environ.get("TTYD_PORT", "7682")),
+        "terminal": lambda: _gateway_http_probe(
+            os.environ.get("TTYD_PORT", "7682"),
+            os.environ.get("TERMINAL_BASE_PATH", "/terminal").rstrip("/") + "/",
+        ),
         "native": lambda: (
             os.environ.get("FLY_NATIVE_BROWSER_ENABLED", "1") == "1"
             and _gateway_http_probe(os.environ.get("FLY_NATIVE_BROWSER_STREAMER_PORT", "5906"), websocket=True)

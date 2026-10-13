@@ -23,6 +23,17 @@ class GatewayStatusTests(unittest.TestCase):
         self.assertTrue(all(value == "up" for value in statuses.values()))
         self.assertEqual(probe.call_count, 6)
 
+    def test_terminal_probes_ttyd_base_path(self):
+        with patch.dict(module.os.environ, {"TERMINAL_BASE_PATH": "/terminal"}), patch.object(module, "_gateway_http_probe", return_value=True) as probe:
+            statuses = module.gateway_service_statuses()
+        self.assertEqual(statuses["terminal"], "up")
+        probe.assert_any_call(module.os.environ.get("TTYD_PORT", "7682"), "/terminal/")
+
+    def test_terminal_respects_custom_base_path(self):
+        with patch.dict(module.os.environ, {"TERMINAL_BASE_PATH": "/custom/"}), patch.object(module, "_gateway_http_probe", return_value=True) as probe:
+            module.gateway_service_statuses()
+        probe.assert_any_call(module.os.environ.get("TTYD_PORT", "7682"), "/custom/")
+
     def test_disabled_services_do_not_get_probed(self):
         with patch.dict(module.os.environ, {
             "FLY_NATIVE_BROWSER_ENABLED": "0",
