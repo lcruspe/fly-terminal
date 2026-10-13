@@ -15,6 +15,7 @@ import archive_cleanup
 import audio_quality
 import recording_settings
 import speech_index
+import storage_paths
 import subprocess
 import threading
 import time
@@ -38,7 +39,6 @@ SESSION_KEY = hmac.new(
 ).digest()
 SEGMENT_RE = re.compile(r"^(\d{8})T(\d{6})\.mp3$")
 DAY_RE = re.compile(r"^\d{8}$")
-REPORT_AUDIO_DIR = Path.home() / "Documents" / "RoomAudio-reports" / "audio"
 REPORT_AUDIO_RE = re.compile(r"^RoomAudio_20\d{2}-\d{2}-\d{2}_\d{4}-\d{4}_[a-z0-9_-]{1,80}\.mp3$")
 condition = threading.Condition()
 state = {"last_received": None, "last_name": None,
@@ -259,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(401, "Login required")
             # A browser session must only change modes from our own site.
             origin = self.headers.get("Origin", "")
-            if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net",
+            if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net", 
                                "http://127.0.0.1:8766", "http://localhost:8766",
                               "http://192.168.1.173:8766", "http://100.105.89.30:8766"):
                 return self.reply(403, "Invalid origin")
@@ -405,9 +405,9 @@ class Handler(BaseHTTPRequestHandler):
             name = path.removeprefix("/api/reports/audio/")
             if not REPORT_AUDIO_RE.fullmatch(name):
                 return self.reply(400, "Invalid audio report name")
-            report_file = REPORT_AUDIO_DIR / name
-            # Never follow a symlink outside the private reports directory.
-            if not report_file.is_file() or report_file.resolve().parent != REPORT_AUDIO_DIR.resolve():
+            # Resolve mounted external SSD first, then WD; never follow escape symlinks.
+            report_file = storage_paths.report_file(name)
+            if report_file is None:
                 return self.reply(404, "Report not found")
             return self.send_audio_sequence([report_file], name, disposition="attachment")
         if archive_api.archive_api(self, path, query, ROOT, BASE):
