@@ -1,0 +1,647 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#101729"><meta name="apple-mobile-web-app-title" content="RoomAudio"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2218%22%20fill%3D%22%235473ca%22/%3E%3Cpath%20d%3D%22M10%2032h8m5-12v24m7-32v40m7-31v22m7-12v13m7-13h5%22%20stroke%3D%22%23fff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E"><title>RoomAudio — Аудиозаписи</title>
+<style>
+:root{color-scheme:dark;--bg:#0d1422;--card:#162234;--field:#1c2b40;--stroke:#2d4059;--fg:#ebf3fd;--muted:#9baec6;--accent:#93adff;--blue:#567ae6;--green:#5fdbad}
+[data-theme=light]{color-scheme:light;--bg:#f2f5fa;--card:#fff;--field:#edf2f8;--stroke:#d4dfed;--fg:#1a2b43;--muted:#5b708b;--accent:#335bce;--blue:#4269d7;--green:#218668}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;letter-spacing:-.012em}button,input,select{color:inherit;font:inherit}button{cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}.wrap{max-width:1420px;margin:auto;padding:0 24px 150px}
+header{display:flex;align-items:center;min-height:78px;border-bottom:1px solid var(--stroke);gap:20px;margin-bottom:27px;flex-wrap:wrap}.brand{display:flex;align-items:center;gap:12px;min-width:208px}.logo{display:grid;place-items:center;width:43px;height:43px;border-radius:13px;background:linear-gradient(135deg,#476ee9,#a09af5);font-size:30px;color:white;font-weight:700}.brand strong{font-size:22px;letter-spacing:-.06em;display:block;line-height:1.1}.brand small{font-size:10px;text-transform:uppercase;font-weight:800;letter-spacing:.13em;color:var(--muted)}
+nav{display:flex;gap:3px;background:var(--field);border:1px solid var(--stroke);padding:4px;border-radius:12px}nav button{border:0;background:none;border-radius:9px;padding:10px 16px;color:var(--muted);font-weight:700;font-size:13px}nav button.active{background:var(--card);color:var(--fg);box-shadow:0 1px 5px #0002}.head-right{display:flex;align-items:center;gap:12px;margin-left:auto}.status{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#f3c27c;margin-right:7px}.dot.on{background:var(--green);box-shadow:0 0 0 4px #4fddaa1c}
+.iconbtn{border:1px solid var(--stroke);border-radius:10px;background:var(--field);height:37px;width:37px;font-size:20px}.signout{background:transparent;border:0;font-size:12px;color:var(--muted)}h1{font-size:clamp(27px,3.4vw,38px);letter-spacing:-.055em;line-height:1.1;margin:0}h2{font-size:16px;letter-spacing:-.025em;margin:0}.eyebrow{font-size:11px;color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:.14em;margin:0 0 8px}.lead{color:var(--muted);margin:9px 0 23px;font-size:13px}
+.card{border:1px solid var(--stroke);border-radius:17px;background:var(--card);padding:20px;box-shadow:0 15px 35px #0001}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.gap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.label{font-size:11px;color:var(--muted);font-weight:700}.preset{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 0}.preset button,.btn{border:1px solid var(--stroke);background:var(--field);border-radius:10px;padding:9px 12px;font-size:12px;font-weight:700}.preset button.active{background:#5c82ef30;border-color:var(--blue)}.btn.primary{background:var(--blue);color:white;border-color:var(--blue)}.btn:hover{border-color:var(--accent)}
+.range{display:flex;align-items:end;gap:11px;margin-top:18px;flex-wrap:wrap}.control{display:flex;flex-direction:column;gap:6px;flex:1;min-width:190px}.control label{font-size:11px;font-weight:700;color:var(--muted)}input[type=datetime-local],input[type=search],select{background:var(--field);border:1px solid var(--stroke);border-radius:10px;padding:9px 11px;font-size:13px;min-height:41px;max-width:100%}input[type=datetime-local]{width:100%}input[type=search]{width:100%}.hint{color:var(--muted);font-size:12px;line-height:1.6;margin:11px 0 0}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin:17px 0 21px}.stat span{color:var(--muted);display:block;font-size:11px;font-weight:650;margin-bottom:8px}.stat strong{font-size:22px;letter-spacing:-.06em;font-variant-numeric:tabular-nums}.stat{padding:16px 19px}
+.columns{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr);gap:17px}.stack{display:flex;flex-direction:column;gap:17px;min-width:0}.sectionhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}.pill{border:1px solid var(--stroke);padding:4px 9px;border-radius:20px;color:var(--muted);font-size:10px}
+.graph{border:1px solid #293c56;background:#101c2d;border-radius:11px;overflow:hidden}canvas{width:100%;height:105px;display:block;cursor:crosshair}.axis{display:flex;justify-content:space-between;color:var(--muted);font-size:10px;margin-top:8px}
+.records{display:flex;flex-direction:column;gap:5px;max-height:540px;overflow:auto}.record{width:100%;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:11px;text-align:left;border:1px solid transparent;border-radius:11px;padding:9px;background:none}.record:hover{background:var(--field)}.record.active{background:#5279e625;border-color:#5d82e988}.playicon{display:grid;place-items:center;width:35px;height:35px;border-radius:9px;color:var(--accent);background:var(--field)}.record.active .playicon{background:var(--blue);color:#fff}.recordtime{font-variant-numeric:tabular-nums;font-size:13px;font-weight:750}.recsub{font-size:11px;color:var(--muted);margin-top:3px}.size{color:var(--muted);font-size:11px}
+.empty{padding:28px;text-align:center;color:var(--muted);font-size:13px;border:1px dashed var(--stroke);border-radius:12px}.more{width:100%;border:1px dashed var(--stroke);border-radius:11px;padding:11px;margin-top:11px;background:none;color:var(--accent);font-size:12px}
+.spectro{background:#0d192b;border:1px solid #314866;border-radius:11px;overflow:hidden;position:relative;min-height:165px}.spectro img{display:block;width:100%;height:220px;object-fit:fill;cursor:crosshair}.specmessage{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:#8ea5c7;font-size:12px}.specmarker{position:absolute;top:0;bottom:0;width:2px;background:white;display:none;pointer-events:none}.freq{display:flex;justify-content:space-between;color:var(--muted);font-size:10px;margin:9px 0}.transcripts{max-height:480px;overflow:auto}.phrase{display:grid;grid-template-columns:65px minmax(0,1fr);gap:10px;border-bottom:1px solid var(--stroke);padding:12px 0;cursor:pointer}.phrase:hover span{color:var(--accent)}.phrase time{color:var(--accent);font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}.phrase span{font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.export{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.textcolumns{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(270px,1fr);gap:17px}.textcolumns .transcripts{max-height:72vh}
+.livebox{padding:27px}.livebox h2{font-size:25px}.livebox p{color:var(--muted);font-size:13px;max-width:590px}.livebox audio{display:block;width:100%;margin-top:24px}
+.player{position:fixed;left:50%;bottom:13px;transform:translateX(-50%);max-width:990px;width:calc(100% - 28px);padding:13px 17px;z-index:20;display:grid;grid-template-columns:minmax(135px,1fr) auto minmax(200px,1.3fr);gap:13px;align-items:center;background:color-mix(in srgb,var(--card) 96%,transparent);backdrop-filter:blur(18px);border:1px solid var(--stroke);border-radius:17px;box-shadow:0 16px 40px #0008}.player strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.player small{display:block;font-size:10px;color:var(--muted);margin-top:4px}.transport{display:flex;gap:8px;align-items:center}.transport button{height:37px;width:37px;border:0;background:var(--field);border-radius:10px}.transport button.big{background:var(--blue);color:white;width:45px;height:45px;font-size:20px}.seekline{display:flex;align-items:center;gap:8px}.seekline span{color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}input[type=range]{width:100%;accent-color:var(--blue)}.seekline select{padding:4px 7px;min-height:34px;font-size:11px}
+.toast{display:none;position:fixed;right:15px;top:15px;background:var(--field);padding:13px 17px;border:1px solid var(--stroke);border-radius:12px;z-index:30;max-width:350px;box-shadow:0 14px 35px #0005}.toast.show{display:block}[hidden]{display:none!important}
+@media(max-width:990px){.columns{grid-template-columns:minmax(0,1.3fr) minmax(275px,1fr)}.wrap{padding:0 16px 165px}}
+@media(max-width:780px){header{gap:10px;padding:12px 0}.brand{min-width:0}nav{order:3;width:100%}nav button{flex:1}.head-right{margin-left:auto}.signout{display:none}.columns,.textcolumns{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.player{grid-template-columns:1fr auto}.seekline{grid-column:1/-1;grid-row:2}.control{min-width:140px}}
+@media(max-width:470px){.wrap{padding:0 12px 180px}h1{font-size:29px}.card{padding:16px}.range{display:grid;grid-template-columns:1fr 1fr}.range .primary{grid-column:1/-1}.control{min-width:0}.preset button{padding:8px 10px}.status{font-size:10px}.stat{padding:13px}.stat strong{font-size:20px}.spectro img{height:180px}.player{bottom:6px;padding:10px 12px}.transport button{width:32px}.transport button.big{width:40px;height:40px}.record{padding:8px 5px}}
+
+.modepanel{margin-bottom:17px;background:linear-gradient(110deg,var(--card),color-mix(in srgb,var(--blue) 6%,var(--card)))}
+.modebuttons{display:flex;flex-wrap:wrap;gap:7px}
+.modebuttons button{border:1px solid var(--stroke);background:var(--field);border-radius:10px;padding:10px 14px;font-size:12px;font-weight:750}
+.modebuttons button.active{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 20%,var(--field));color:var(--fg)}
+.modebuttons button[data-record-mode=off].active{border-color:#d48976;background:#d4897618}
+@media(max-width:520px){.modebuttons{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.modebuttons button{padding:10px 5px;font-size:11px}}
+
+/* Voice Memos-style information hierarchy: library first, technical tools last. */
+:root{--bg:#0b101a;--card:#151e2d;--field:#1d2839;--stroke:#2a3748;--blue:#6e8feb;--accent:#b1c3ff;--muted:#9caec4;--fg:#f0f5fc}
+[data-theme=light]{--bg:#f5f7fb;--card:#fff;--field:#edf2f8;--stroke:#dce4ef;--blue:#496cda;--accent:#335bc4;--muted:#66778c;--fg:#18273b}
+body{background:var(--bg);font-size:14px}
+.wrap{max-width:1320px;padding-bottom:170px}
+header{position:sticky;top:0;z-index:15;padding:10px 0;min-height:74px;margin-bottom:24px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.brand{min-width:165px}.brand strong{font-size:20px;letter-spacing:-.04em}.brand small{font-size:9px}
+.logo{border-radius:50%;width:41px;height:41px;font-weight:500;font-size:27px;background:linear-gradient(160deg,#7b8fee,#5473ca)}
+.card{border-radius:18px;padding:19px;box-shadow:0 3px 20px #0000000a}
+h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-weight:780}
+.lead{margin:6px 0 19px;line-height:1.65;max-width:720px}
+.modepanel{margin-top:17px;background:var(--card)}
+.pipeline{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:13px 0 18px}
+.pipeline > div{min-width:0;padding:12px 16px;border:1px solid var(--stroke);border-radius:13px;background:var(--card)}
+.pipeline small{display:block;font-size:10px;font-weight:720;color:var(--muted);margin-bottom:3px}
+.pipeline strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:750}
+.pipeline span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.records{max-height:min(60vh,660px);gap:4px}
+.record{min-height:58px;border:1px solid transparent;transition:background .15s,border-color .15s;padding:10px 12px;border-radius:13px}
+.record:hover,.record:focus-visible{background:var(--field)}
+.record:focus-visible,.btn:focus-visible,nav button:focus-visible,.transport button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.record.active{background:color-mix(in srgb,var(--blue) 14%,var(--card));border-color:color-mix(in srgb,var(--blue) 55%,var(--stroke))}
+.record .playicon{border-radius:50%;height:38px;width:38px;background:var(--field)}
+.record .recsub{display:block}
+.record.session .playicon{color:var(--blue);font-size:17px}
+.record.session{grid-template-columns:44px minmax(0,1fr) auto;min-height:68px}
+.recordtime{font-size:14px;letter-spacing:-.018em}
+.recordviewbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:-3px 0 13px}
+.recordviewbar .segmented{display:inline-flex;background:var(--field);padding:3px;border-radius:10px;border:1px solid var(--stroke);gap:2px}
+.recordviewbar .segmented button{border:0;padding:8px 12px;background:transparent;border-radius:8px;font-size:12px;color:var(--muted);font-weight:750}
+.recordviewbar .segmented button.active{background:var(--card);box-shadow:0 1px 4px #0002;color:var(--fg)}
+.speechfilter{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;cursor:pointer}
+.speechfilter input{accent-color:var(--blue);width:15px;height:15px}
+.archive-tools{margin:20px 0 7px;padding:0;border:1px solid var(--stroke);border-radius:16px;background:var(--card)}
+.archive-tools > summary{cursor:pointer;padding:17px 20px;display:flex;gap:8px;justify-content:space-between;font-size:13px;font-weight:800}
+.archive-tools > summary::marker{color:var(--accent)}
+.archive-tools > summary small{font-size:11px;color:var(--muted);font-weight:500}
+.archive-tools[open] > summary{border-bottom:1px solid var(--stroke)}
+.archive-tools #cleanupCard{margin:0!important;border:0;border-radius:0;background:transparent;box-shadow:none}
+.archive-tools #cleanupCard h2{font-size:14px}
+.stats{margin:12px 0 20px}
+.stat{padding:15px 17px;box-shadow:none}.stat strong{font-size:22px}.stat span{margin-bottom:5px}
+.columns{grid-template-columns:minmax(0,1.18fr) minmax(340px,.9fr)}
+.sectionhead{margin-bottom:13px}
+.btn{transition:background .18s,border-color .18s,opacity .18s}
+.btn.primary{background:var(--blue);border-color:var(--blue)}
+.player{box-shadow:0 15px 55px #0009;border-radius:19px;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--stroke));background:color-mix(in srgb,var(--card) 96%,transparent)}
+.player .transport button.big{border-radius:50%;background:var(--blue)}
+.transcripts .empty{border:none;padding:20px}
+@media(max-width:780px){
+ header{position:sticky;gap:9px;margin-bottom:16px;padding:9px 0 12px}
+ nav{order:3}.brand{min-width:0}
+ .head-right{gap:8px}
+ .pipeline{gap:7px}.pipeline>div{padding:11px 9px}.pipeline strong{font-size:11px}.pipeline span{display:none}
+ .modepanel .row{align-items:start}
+ .columns,.textcolumns{grid-template-columns:1fr}
+ .player{grid-template-columns:minmax(0,1fr) auto;bottom:8px;gap:10px}
+ .player .seekline{grid-column:1/-1}
+ .stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+ .stat{padding:13px 9px}.stat span{font-size:10px}.stat strong{font-size:18px}
+}
+@media(max-width:480px){
+ .wrap{padding:0 12px 190px}
+ .brand strong{font-size:18px}.head-right .status{display:none}
+ .pipeline{grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0}
+ .pipeline>div{padding:9px 7px;border-radius:10px}
+ .pipeline strong{font-size:10px}
+ h1{font-size:30px}
+ .card{padding:15px}
+ .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .stat{padding:13px}.stat strong{font-size:19px}
+ .recordviewbar .segmented button{padding:8px 10px}
+ .record.session{padding:9px 5px;grid-template-columns:38px minmax(0,1fr) auto}
+ .record.session .size{font-size:10px}
+ .archive-tools>summary{padding:15px 13px;flex-wrap:wrap}
+}
+
+@media(max-width:780px){.signout{display:inline-flex!important;border:1px solid var(--stroke);border-radius:10px;min-height:37px;align-items:center;padding:7px 9px;background:var(--field);font-size:11px}.head-right{gap:6px}}
+@media(max-width:470px){.brand{min-width:0}.logo{width:36px;height:36px}.head-right .signout{padding:7px 8px}.head-right .iconbtn{height:36px;width:36px}}
+</style>
+</head><body><div class="wrap">
+<header><div class="brand"><div class="logo">≋</div><div><strong>RoomAudio</strong><small>Audio Intelligence</small></div></div>
+<nav><button data-tab="archive" class="active">Архив</button><button data-tab="texts">Расшифровки</button><button data-tab="live">Прямой эфир</button></nav>
+<div class="head-right"><span class="status"><i class="dot" id="dot"></i><span id="online">Проверка</span></span><button class="iconbtn" id="theme" aria-label="Переключить тему">◐</button><form action="/roomaudio/logout" method="post"><button class="signout">Выйти</button></form></div></header>
+<p class="eyebrow" id="eyebrow">Медиатека · Mate</p><h1 id="title">Аудиозаписи</h1><p class="lead" id="subtitle">Прослушивание, поиск речи и расшифровка в одном месте.</p>
+<div class="pipeline" id="pipeline" aria-label="Состояние обработки">
+ <div><small>01 · Микрофон</small><strong id="pipelineCapture">Проверяем</strong><span>Ноутбук Mate</span></div>
+ <div><small>02 · Передача</small><strong id="pipelineTransfer">Проверяем</strong><span>Mac mini · архив</span></div>
+ <div><small>03 · Расшифровка</small><strong id="pipelineAsr">Проверяем</strong><span>Whisper · локально</span></div>
+</div>
+<div class="card modepanel" id="recordingPanel">
+<div class="row">
+<div><div class="eyebrow" style="margin-bottom:5px">Захват звука · Mate</div><h2>Режим записи</h2><p class="hint" id="modeStatus">Получаем состояние микрофона…</p></div>
+<div class="modebuttons" role="group" aria-label="Режим захвата">
+<button data-record-mode="continuous" type="button">● Постоянно</button>
+<button data-record-mode="voice" type="button">〰 Только речь</button>
+<button data-record-mode="off" type="button">■ Выключено</button>
+</div>
+</div></div>
+<section id="archive-view">
+<div class="card"><div class="row"><div><div class="label">Быстрый выбор периода</div><div class="preset"><button data-preset="1" class="active">1 час</button><button data-preset="3">3 часа</button><button data-preset="day">Весь день</button><button data-preset="custom">Свой период</button></div></div><div class="gap"><button class="btn" id="prevDay">← День</button><button class="btn" id="nextDay">День →</button><button class="btn" id="refreshArchive">↻ Обновить</button></div></div>
+<div class="range"><div class="control"><label for="from">Начало</label><input type="datetime-local" id="from"></div><div class="control"><label for="to">Конец (не включительно)</label><input type="datetime-local" id="to"></div><button class="btn primary" id="apply">Показать записи →</button></div><p class="hint" id="rangeStatus">Загрузка архива…</p></div>
+
+<div class="stats"><div class="card stat"><span>Длительность</span><strong id="duration">—</strong></div><div class="card stat"><span>Фрагментов</span><strong id="count">—</strong></div><div class="card stat"><span>Фраз текста</span><strong id="phrases">—</strong></div><div class="card stat"><span>Размер архива</span><strong id="size">—</strong></div></div>
+<div class="columns">
+<div class="stack">
+<div class="card"><div class="sectionhead"><h2>Библиотека записей <span id="recordsCount" class="label"></span></h2><div class="gap"><select id="sort"><option value="asc">Сначала старые</option><option value="desc">Сначала новые</option></select><button id="playPeriod" class="btn primary">▶ Весь период</button><button id="nextSpeech" class="btn" title="Перейти к следующей речи">⏭ Следующая речь</button><button id="downloadPeriod" class="btn">↓ MP3</button></div></div><div class="recordviewbar">
+ <div class="segmented" role="group" aria-label="Группировка аудио">
+  <button type="button" data-record-view="sessions" class="active" aria-pressed="true">Сеансы</button>
+  <button type="button" data-record-view="segments" aria-pressed="false">По 15 секунд</button>
+ </div>
+ <label class="speechfilter" for="speechOnly"><input type="checkbox" id="speechOnly"> Только с речью</label>
+</div>
+<div id="records" class="records"><div class="empty">Загрузка записей…</div></div><button class="more" id="more" hidden>Показать ещё 80 записей ↓</button></div>
+<div class="card"><div class="sectionhead"><h2>Временная шкала</h2><span class="label">Выберите участок для прослушивания</span></div><div class="graph"><canvas id="timeline" aria-label="Временная шкала записей"></canvas></div><div class="axis"><span id="ax1">—</span><span id="ax2">—</span><span id="ax3">—</span></div><p class="hint">Синие участки означают наличие аудио. Пропуски остаются видимыми.</p></div>
+
+</div>
+<aside class="stack">
+<div class="card"><div class="sectionhead"><h2>Спектрограмма</h2><span class="pill">Анализ FFT · FFmpeg</span></div><div class="spectro" id="spectro"><img id="specImg" alt="Частотно-временная спектрограмма аудио" hidden><div class="specmessage" id="specMessage">Выберите 15-секундную запись для просмотра спектрограммы</div><div id="specMarker" class="specmarker"></div></div><div class="freq"><span>80 Гц — 7,8 кГц</span><span id="specTime">15 секунд</span></div><button id="downloadSegment" class="btn" style="margin-top:6px" disabled>↓ Скачать этот фрагмент</button><p class="hint">По горизонтали — время, по вертикали — частота. Цвет отображает интенсивность. Нажмите на изображение для перемотки.</p></div>
+<div class="card"><div class="sectionhead"><h2>Расшифровка периода</h2><button class="btn" id="toTexts">Весь текст ↗</button></div><div id="preview" class="transcripts"><div class="empty">Загрузка расшифровки…</div></div><div class="export"><button id="copy" class="btn">⧉ Копировать</button><button id="txt" class="btn">↓ TXT</button><button id="srt" class="btn">↓ SRT</button></div><p class="hint">Нажатие на текст переводит к соответствующему месту записи. Текст может содержать ошибки распознавания.</p></div></aside>
+</div>
+<details class="archive-tools" id="archiveTools"><summary>Очистка и управление архивом <small>Анализ тишины, корзина, восстановление</small></summary>
+<div class="card" id="cleanupCard" style="margin:17px 0 20px">
+ <div class="row"><div><h2>Очистка записей без голоса</h2><p class="hint">Аудио анализируется отдельно от Whisper. Сомнительные фрагменты сохраняются.</p></div><span class="pill">Восстановление из корзины</span></div>
+ <div class="range">
+   <div class="control"><label for="cleanupScope">Что проверить</label>
+     <select id="cleanupScope"><option value="period">Выбранный период</option><option value="all">За всё время</option></select>
+   </div>
+   <button class="btn primary" id="scanSilence">Проверить архив</button>
+ </div>
+ <p class="hint" id="cleanupProgress" aria-live="polite">Запустите анализ. До подтверждения файлы не изменяются.</p>
+ <div id="cleanupPreview" hidden style="padding:14px;border:1px solid var(--stroke);border-radius:12px;background:var(--field);margin-top:13px">
+   <div class="row"><div><strong id="cleanupCount">0</strong> без голоса · <strong id="cleanupSize">0 КБ</strong></div><span class="label" id="cleanupKept">0 сохранено</span></div>
+   <p class="hint" id="cleanupDetails"></p>
+   <details style="margin-top:12px"><summary style="cursor:pointer;font-size:12px;color:var(--accent)">Прослушать найденные фрагменты (первые 12)</summary>
+      <div id="cleanupSamples" style="display:flex;flex-wrap:wrap;gap:7px;margin:12px 0"></div>
+   </details>
+   <label style="display:flex;gap:9px;align-items:start;margin:15px 0;font-size:12px">
+    <input type="checkbox" id="cleanupConfirm" style="min-width:18px;min-height:18px;accent-color:var(--blue)">
+    Подтверждаю перенос найденных фрагментов в корзину. Аудио можно восстановить.
+   </label>
+   <button class="btn" id="applyCleanup" style="color:white;background:#b85250;border-color:#b85250" disabled>Переместить в корзину</button>
+ </div>
+ <div class="range" style="border-top:1px solid var(--stroke);padding-top:14px">
+  <div class="control"><label for="cleanupTrashList">Ранее очищенные фрагменты</label><select id="cleanupTrashList"><option value="">Корзина пуста</option></select></div>
+  <button class="btn" id="restoreCleanup" disabled>↶ Восстановить</button>
+  <button class="btn" id="purgeCleanup" disabled title="Безвозвратно удалить выбранную партию из корзины">Удалить навсегда</button>
+ </div>
+</div>
+</details></section>
+<section id="texts-view" hidden><div class="textcolumns"><div class="card"><div class="sectionhead"><h2>Все расшифровки периода</h2><span class="pill" id="textCount">0 фраз</span></div><p class="hint" id="textRange">Используется интервал, выбранный в архиве.</p><input type="search" id="search" placeholder="Поиск по словам и фразам…" style="margin:15px 0 12px"><div id="textList" class="transcripts"><div class="empty">Загрузка…</div></div><button class="more" id="moreText" hidden>Показать ещё</button></div><div class="stack"><div class="card"><h2>Экспорт расшифровки</h2><p class="hint">TXT с временными метками или SRT для видеоплееров. Выгружается только выбранный интервал.</p><div class="export"><button id="copy2" class="btn">⧉ Копировать</button><button id="txt2" class="btn">↓ TXT</button><button id="srt2" class="btn">↓ SRT</button></div></div><div class="card"><h2>Whisper large-v3-turbo</h2><p class="hint">Текст создаётся локально на Mac mini. Тихая речь и фоновый шум могут приводить к ошибкам или ложным фразам.</p><button id="backArchive" class="btn primary">К архиву →</button></div></div></div></section>
+<section id="live-view" hidden><div class="card livebox"><p class="eyebrow">Mate → Mac mini</p><h2>Прямой эфир</h2><p>Непрерывное кодирование без 15-секундных стыков. Работает и при записи архива только по голосу.</p><div class="export"><button id="mp3" class="btn primary">▶ Бесшовный эфир</button><button id="hls" class="btn">HLS (резервный архивный)</button><button id="stopLive" class="btn">■ Остановить</button></div><audio id="liveAudio" controls playsinline preload="none"></audio><p id="liveMsg" class="hint">Нажмите кнопку запуска.</p></div></section>
+</div>
+<div class="player"><div><strong id="playTitle">Выберите запись</strong><small id="playDescription">Отдельный фрагмент или весь период</small></div><div class="transport"><button id="minus15" title="Назад 15 секунд">↶</button><button id="play" class="big" title="Воспроизведение">▶</button><button id="plus15" title="Вперёд 15 секунд">↷</button><button id="nextVoice" title="Пропустить тишину: следующая речь" aria-label="Следующая речь">⏭</button></div><div class="seekline"><span id="current">00:00</span><input type="range" id="seek" min="0" max="1000" value="0"><span id="total">00:00</span><select id="speed" title="Скорость"><option value=".75">0.75×</option><option selected value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div><audio id="audio" playsinline preload="metadata" hidden></audio></div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $=id=>document.getElementById(id);
+const PFX=location.pathname.startsWith('/roomaudio')?'/roomaudio':'';
+const state={start:null,end:null,records:[],total:0,offset:0,sort:'asc',minutes:{},texts:[],selected:null,playing:null,blob:null,loading:false,textLimit:120,speech:[]};
+const grants=new Map(),audio=$('audio');let toastTimer;
+const z=n=>String(n).padStart(2,'0');
+const local=d=>d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'T'+z(d.getHours())+':'+z(d.getMinutes());
+const stamp=d=>d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'T'+z(d.getHours())+z(d.getMinutes())+z(d.getSeconds());
+const clock=x=>{const d=new Date(x);return z(d.getHours())+':'+z(d.getMinutes())+':'+z(d.getSeconds())};
+const day=x=>{const d=new Date(x);return z(d.getDate())+'.'+z(d.getMonth()+1)+'.'+d.getFullYear()};
+const time=s=>!Number.isFinite(s)?'—':(Math.floor(s/3600)?Math.floor(s/3600)+':':'')+z(Math.floor(s/60)%60)+':'+z(Math.floor(s%60));
+const bytes=n=>n>=1e9?(n/1e9).toFixed(2)+' ГБ':n>=1e6?(n/1e6).toFixed(1)+' МБ':Math.round(n/1024)+' КБ';
+const params=()=>{let p=new URLSearchParams();p.set('start',local(state.start));p.set('end',local(state.end));return p.toString()};
+const periodPath=()=>'/period/'+stamp(state.start)+'/'+stamp(state.end)+'.mp3';
+function notice(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3800)}
+async function api(path,wantBlob=false){const r=await fetch(PFX+path,{credentials:'same-origin',cache:'no-store'});if(!r.ok){if(r.status===401)notice('Сессия истекла — обновите страницу для входа');throw Error('HTTP '+r.status)}return wantBlob?r.blob():r.json()}
+async function media(path){const c=grants.get(path);if(c&&c.until>Date.now()+90000)return c.url;const d=await api('/api/media-token?path='+encodeURIComponent(path));const url=PFX+path+'?mt='+encodeURIComponent(d.token);grants.set(path,{url,until:Date.now()+(d.expires_in||7200)*1000});return url}
+function switchTab(which){for(let key of ['archive','texts','live'])$(key+'-view').hidden=key!==which;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===which));$('title').textContent=which==='archive'?'Аудиозаписи':which==='texts'?'Текстовый архив':'Прямой эфир';$('subtitle').textContent=which==='archive'?'Прослушивание, поиск речи и расшифровка в одном месте':which==='texts'?'Поиск по фразам, переход в звук и экспорт за период':'Звук с ноутбука в защищённом плеере';if(which==='archive')setTimeout(drawTimeline,40);window.scrollTo(0,0)}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('toTexts').onclick=()=>switchTab('texts');$('backArchive').onclick=()=>switchTab('archive');
+$('theme').onclick=()=>{document.body.dataset.theme=document.body.dataset.theme==='light'?'dark':'light';try{localStorage.setItem('ra-theme',document.body.dataset.theme)}catch(e){}drawTimeline()};
+try{document.body.dataset.theme=localStorage.getItem('ra-theme')||'dark'}catch(e){document.body.dataset.theme='dark'}
+function setPreset(p){document.querySelectorAll('[data-preset]').forEach(b=>b.classList.toggle('active',b.dataset.preset===p));if(p!=='custom'){let end=state.end||new Date();if(p==='day'){let a=new Date(end);a.setHours(0,0,0,0);state.start=a;state.end=new Date(a.getTime()+86400000)}else{state.start=new Date(end.getTime()-Number(p)*3600000);state.end=end}}$('from').value=local(state.start);$('to').value=local(state.end)}
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{setPreset(b.dataset.preset);if(b.dataset.preset!=='custom')load()});
+function shiftDate(n){let a=new Date(state.start),b=new Date(state.end);a.setDate(a.getDate()+n);b.setDate(b.getDate()+n);state.start=a;state.end=b;setPreset('custom');load()}
+$('prevDay').onclick=()=>shiftDate(-1);$('nextDay').onclick=()=>shiftDate(1);
+$('refreshArchive').onclick=async()=>{
+ const preset=document.querySelector('[data-preset].active')?.dataset.preset;
+ if(preset==='1'||preset==='3'){
+  const now=new Date();now.setSeconds(0,0);
+  let end=now;
+  try{
+   const recent=await api('/api/archive/latest');
+   if(recent.time){
+    const latest=new Date(recent.time);
+    if(Number.isFinite(+latest)&&now-latest>3600000){
+      end=new Date(Math.ceil((latest.getTime()+15000)/60000)*60000);
+    }
+   }
+  }catch(e){}
+  state.end=end;setPreset(preset);
+ }
+ load();
+};
+async function refreshSpeechMarkers(){
+ if(!state.start||state.loading)return;
+ try{
+  let result=await api('/api/archive/speech?'+params());
+  state.speech=result.items;
+  if(recordView.speechOnly)renderRecords();
+  $('nextSpeech').disabled=!state.speech.length;
+  $('nextVoice').disabled=!state.speech.length;
+ }catch(e){}
+}
+$('apply').onclick=()=>{let a=new Date($('from').value),b=new Date($('to').value);if(!isFinite(+a)||!isFinite(+b)||b-a<=0||b-a>86400000){notice('Выберите интервал длительностью не более 24 часов');return}state.start=a;state.end=b;setPreset('custom');load()};
+function primeRows(rows){for(const r of rows){if(!r.token)continue;let path='/segment/'+r.name.slice(0,8)+'/'+r.name;grants.set(path,{url:PFX+path+'?mt='+encodeURIComponent(r.token),until:Date.now()+7200000})}}
+async function load(){if(state.loading)return;state.loading=true;$('apply').disabled=true;$('rangeStatus').textContent='Загрузка записей и текста…';state.records=[];state.offset=0;state.selected=null;state.speech=[];$('downloadSegment').disabled=true;clearSpectrum();
+try{const p=params();const result=await Promise.all([api('/api/archive/records?'+p+'&sort='+state.sort+'&limit=80'),api('/api/archive/text?'+p),api('/api/archive/speech?'+p)]);const rec=result[0],text=result[1];state.speech=result[2].items;state.records=rec.items;primeRows(rec.items);state.offset=rec.items.length;state.total=rec.total;state.minutes=rec.minutes;state.texts=text.items;
+$('duration').textContent=rec.audio_seconds>=3600?(rec.audio_seconds/3600).toFixed(1)+' ч':Math.floor(rec.audio_seconds/60)+' мин';$('count').textContent=rec.total.toLocaleString('ru-RU');$('phrases').textContent=text.count.toLocaleString('ru-RU');$('size').textContent=bytes(rec.total_bytes);$('recordsCount').textContent='· '+rec.total;$('rangeStatus').textContent=day(state.start)+' '+clock(state.start)+' — '+day(state.end)+' '+clock(state.end)+(rec.total?' · найдено '+rec.total:' · записей не найдено');$('more').hidden=state.offset>=state.total;$('playPeriod').disabled=!rec.total;$('nextSpeech').disabled=!state.speech.length;$('nextVoice').disabled=!state.speech.length;
+renderRecords();renderTexts();drawTimeline();if(rec.total)media(periodPath()).catch(()=>{});
+}catch(e){$('rangeStatus').textContent='Ошибка загрузки: '+e.message;notice('Не удалось загрузить архив')}finally{state.loading=false;$('apply').disabled=false}}
+const recordView={mode:'sessions',speechOnly:false};
+function sessionGroups(records){
+ const rows=[...records].sort((a,b)=>new Date(a.time)-new Date(b.time));
+ const groups=[];let previousMs=0;
+ for(const record of rows){
+  const ms=new Date(record.time).getTime(),bucket=Math.floor(ms/120000);
+  let group=groups[groups.length-1];
+  if(!group||group.bucket!==bucket||ms-previousMs>45000){
+   group={bucket,records:[],bytes:0,start:ms,end:ms+15000};
+   groups.push(group);
+  }
+  group.records.push(record);group.bytes+=record.bytes||0;
+  group.end=ms+15000;previousMs=ms;
+ }
+ return state.sort==='desc'?groups.reverse():groups;
+}
+function renderRecords(){
+ const box=$('records');box.replaceChildren();
+ const voiced=new Set((state.speech||[]).map(entry=>entry.file));
+ if(recordView.mode==='sessions'){
+  const groups=sessionGroups(state.records).filter(group=>
+     !recordView.speechOnly||group.records.some(record=>voiced.has(record.name)));
+  if(!groups.length){
+   box.innerHTML='<div class="empty">Нет записей, соответствующих фильтру. Попробуйте отключить «Только с речью» или выбрать другой период.</div>';
+  }else for(const group of groups){
+   const first=group.records[0],start=new Date(group.start),end=new Date(group.end);
+   const count=group.records.filter(item=>voiced.has(item.name)).length;
+   const node=document.createElement('button');
+   node.type='button';
+   node.className='record session'+(state.selected?.name===first.name?' active':'');
+   node.dataset.name=first.name;
+   node.setAttribute('aria-label','Воспроизвести сеанс '+clock(start)+' длительностью '+time(group.records.length*15));
+   const play=document.createElement('span');play.className='playicon';play.textContent='▶';
+   const meta=document.createElement('span');
+   const title=document.createElement('span');title.className='recordtime';
+   title.textContent=clock(start)+' — '+clock(end);
+   const sub=document.createElement('span');sub.className='recsub';
+   sub.textContent=day(start)+' · '+time(group.records.length*15)+' · '+group.records.length+' фр.'+
+      (count?' · речь '+count:'');
+   meta.append(title,sub);
+   const size=document.createElement('span');size.className='size';size.textContent=bytes(group.bytes);
+   node.append(play,meta,size);
+   node.onclick=async()=>{
+     await selectRecord(first,false);
+     const path='/period/'+stamp(start)+'/'+stamp(end)+'.mp3';
+     await playAudio(path,'session',{time:first.time,label:clock(start).slice(0,5)});
+   };
+   box.append(node);
+  }
+ }else{
+  const records=recordView.speechOnly?state.records.filter(r=>voiced.has(r.name)):state.records;
+  if(!records.length){
+    box.innerHTML='<div class="empty">Нет фрагментов, соответствующих фильтру.</div>';
+  }else for(const r of records){
+   const node=document.createElement('button');
+   node.className='record'+(state.selected?.name===r.name?' active':'');
+   node.dataset.name=r.name;
+   const icon=document.createElement('span');icon.className='playicon';icon.textContent='▶';
+   const meta=document.createElement('span');
+   const first=document.createElement('span');first.className='recordtime';first.textContent=clock(r.time);
+   const sub=document.createElement('span');sub.className='recsub';
+   sub.textContent=day(r.time)+' · 15 с'+(voiced.has(r.name)?' · речь':'');
+   meta.append(first,sub);
+   const size=document.createElement('span');size.className='size';size.textContent=bytes(r.bytes);
+   node.append(icon,meta,size);
+   node.onclick=()=>selectRecord(r,true);box.append(node);
+  }
+ }
+ $('recordsCount').textContent='· загружено '+state.records.length+' из '+state.total;
+}
+document.querySelectorAll('[data-record-view]').forEach(button=>button.onclick=()=>{
+ recordView.mode=button.dataset.recordView;
+ document.querySelectorAll('[data-record-view]').forEach(item=>{
+  const active=item.dataset.recordView===recordView.mode;
+  item.classList.toggle('active',active);
+  item.setAttribute('aria-pressed',String(active));
+ });
+ renderRecords();
+});
+$('speechOnly').onchange=()=>{recordView.speechOnly=$('speechOnly').checked;renderRecords()};
+
+$('more').onclick=async()=>{try{const d=await api('/api/archive/records?'+params()+'&sort='+state.sort+'&limit=80&offset='+state.offset);primeRows(d.items);state.records.push(...d.items);state.offset+=d.items.length;renderRecords();$('more').hidden=state.offset>=state.total}catch(e){notice('Не удалось загрузить записи')}};
+$('sort').onchange=()=>{state.sort=$('sort').value;load()};
+function drawTimeline(){if(!state.start||!state.end||$('archive-view').hidden)return;const canvas=$('timeline'),w=canvas.clientWidth;if(!w)return;let dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=w*dpr;canvas.height=105*dpr;let c=canvas.getContext('2d');c.scale(dpr,dpr);c.fillStyle='#101d2f';c.fillRect(0,0,w,105);c.strokeStyle='#344963';for(let i=1;i<=3;i++){c.beginPath();c.moveTo(w*i/4,10);c.lineTo(w*i/4,95);c.stroke()}const span=state.end-state.start;for(const [t,count] of Object.entries(state.minutes)){let x=(new Date(t)-state.start)/span*w;if(x<0||x>w)continue;c.fillStyle=count>=3?'#96adff':'#4f75de';c.fillRect(x,13,Math.max(1.6,60000/span*w*.9),79)}$('ax1').textContent=clock(state.start).slice(0,5);$('ax2').textContent=clock(new Date((state.start.getTime()+state.end.getTime())/2)).slice(0,5);$('ax3').textContent=clock(state.end).slice(0,5)}
+window.addEventListener('resize',drawTimeline);
+$('timeline').onclick=e=>{if(!state.records.length)return;let box=$('timeline').getBoundingClientRect(),t=state.start.getTime()+Math.min(1,Math.max(0,(e.clientX-box.left)/box.width))*(state.end-state.start);let closest=state.records.reduce((x,y)=>Math.abs(new Date(y.time)-t)<Math.abs(new Date(x.time)-t)?y:x,state.records[0]);selectRecord(closest,true)};
+function clearSpectrum(){if(state.blob){URL.revokeObjectURL(state.blob);state.blob=null}$('specImg').hidden=true;$('specMessage').hidden=false;$('specMessage').textContent='Выберите фрагмент для спектрограммы'}
+async function selectRecord(rec,play=false,offset=0){state.selected=rec;$('downloadSegment').disabled=false;document.querySelectorAll('.record').forEach(el=>el.classList.toggle('active',el.dataset.name===rec.name));spectrum(rec);if(play)await playAudio('/segment/'+rec.name.slice(0,8)+'/'+rec.name,'segment',rec,offset)}
+async function spectrum(rec){let id=rec.name;$('specImg').hidden=true;$('specMessage').hidden=false;$('specMessage').textContent='Строим спектрограмму…';try{let r=await fetch(PFX+'/api/archive/spectrogram/'+id.replace('.mp3','.png'),{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error(r.status);let blob=await r.blob();if(state.selected?.name!==id)return;clearSpectrum();state.blob=URL.createObjectURL(blob);$('specImg').src=state.blob;$('specImg').hidden=false;$('specMessage').hidden=true;$('specTime').textContent=clock(rec.time)+' · 15 с'}catch(e){if(state.selected?.name===id)$('specMessage').textContent='Ошибка построения спектра'}}
+$('spectro').onclick=e=>{if(!state.selected||$('specImg').hidden)return;let rect=$('spectro').getBoundingClientRect(),sec=Math.max(0,Math.min(14.7,15*(e.clientX-rect.left)/rect.width));selectRecord(state.selected,true,sec)};
+function phrase(row){let el=document.createElement('div');el.className='phrase';el.tabIndex=0;const when=document.createElement('time');when.textContent=clock(row.time).slice(0,5);const text=document.createElement('span');text.textContent=row.text;el.append(when,text);el.onclick=()=>playAt(row.time);el.onkeydown=e=>{if(e.key==='Enter')playAt(row.time)};return el}
+function renderTexts(){let box=$('preview');box.replaceChildren();if(!state.texts.length)box.innerHTML='<div class="empty">Текст пока не готов либо речь не распознана</div>';else state.texts.slice(0,12).forEach(r=>box.append(phrase(r)));renderTextList()}
+function renderTextList(){let q=$('search').value.toLocaleLowerCase('ru-RU'),rows=q?state.texts.filter(r=>r.text.toLocaleLowerCase('ru-RU').includes(q)):state.texts;const area=$('textList');area.replaceChildren();if(!rows.length)area.innerHTML='<div class="empty">Нет подходящих фраз</div>';else rows.slice(0,state.textLimit).forEach(r=>area.append(phrase(r)));$('moreText').hidden=rows.length<=state.textLimit;$('textCount').textContent=rows.length+' фраз';$('textRange').textContent=day(state.start)+' '+clock(state.start)+' — '+day(state.end)+' '+clock(state.end)}
+$('search').oninput=()=>{state.textLimit=120;renderTextList()};$('moreText').onclick=()=>{state.textLimit+=120;renderTextList()};
+async function playAt(textTime){const point=new Date(textTime);let a=new Date(point.getTime()-30000),b=new Date(point.getTime()+30000);let path='/api/archive/records?start='+encodeURIComponent(local(a))+'&end='+encodeURIComponent(local(b))+'&sort=desc&limit=10';try{let data=await api(path);primeRows(data.items);let files=data.items.sort((x,y)=>new Date(x.time)-new Date(y.time));let file=files[0];for(const item of files){if(new Date(item.time)>point)break;file=item}if(!file)return notice('Нет аудио для этого времени');let off=Math.max(0,Math.min(14.8,(point-new Date(file.time))/1000));await selectRecord(file,true,off)}catch(e){notice('Не удалось перейти к записи')}}
+async function playAudio(path,mode,record=null,offset=0){const item={path,mode,record};state.playing=item;$('playTitle').textContent=mode==='period'?'Непрерывно · выбранный период':mode==='session'?'Сеанс · '+record.label:clock(record.time);$('playDescription').textContent=mode==='period'?'Все фрагменты выбранного периода':mode==='session'?'Прослушивание объединённого сеанса':day(record.time)+' · отдельный фрагмент';try{
+ const warm=grants.get(path);
+ if(warm&&warm.until>Date.now()+90000){
+  audio.src=warm.url;
+  audio.playbackRate=Number($('speed').value);
+  if(offset)audio.addEventListener('loadedmetadata',()=>{audio.currentTime=offset},{once:true});
+  const active=audio.play();
+  if(active&&active.catch)active.catch(()=>notice('Нажмите ▶ повторно'));
+  updatePlayer();return;
+ }
+ const url=await media(path);
+ if(state.playing!==item)return;
+ audio.src=url;audio.playbackRate=Number($('speed').value);
+ if(offset)audio.addEventListener('loadedmetadata',()=>{audio.currentTime=offset},{once:true});
+ await audio.play();
+}catch(e){notice('Нажмите ▶ повторно, если Safari остановил запуск')}
+updatePlayer()}
+$('playPeriod').onclick=()=>{if(state.total)playAudio(periodPath(),'period')};
+async function downloadMp3(path,name){
+ if(!path)return notice('Сначала выберите запись');
+ try{const url=await media(path);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();notice('Открыто сохранение MP3')}
+ catch(e){notice('Не удалось скачать аудио')}
+}
+$('downloadPeriod').onclick=()=>{if(state.total)downloadMp3(periodPath(),'RoomAudio-'+stamp(state.start)+'-'+stamp(state.end)+'.mp3')};
+$('downloadSegment').onclick=()=>{const r=state.selected;if(r)downloadMp3('/segment/'+r.name.slice(0,8)+'/'+r.name,'RoomAudio-'+r.name)};
+
+$('play').onclick=()=>{if(!audio.src){if(state.total)playAudio(periodPath(),'period');return}audio.paused?audio.play().catch(()=>notice('Повторите нажатие ▶')):audio.pause()};
+$('minus15').onclick=()=>{if(audio.src)audio.currentTime=Math.max(0,audio.currentTime-15)};$('plus15').onclick=()=>{if(audio.src&&Number.isFinite(audio.duration))audio.currentTime=Math.min(audio.duration,audio.currentTime+15)};
+$('seek').oninput=()=>{if(Number.isFinite(audio.duration)&&audio.duration>0)audio.currentTime=audio.duration*Number($('seek').value)/1000};
+$('speed').onchange=()=>audio.playbackRate=Number($('speed').value);
+function updatePlayer(){$('play').textContent=audio.paused?'▶':'Ⅱ';$('current').textContent=time(audio.currentTime||0);$('total').textContent=time(audio.duration);$('seek').value=Number.isFinite(audio.duration)&&audio.duration>0?Math.round(audio.currentTime/audio.duration*1000):0;const line=$('specMarker');if(state.playing?.mode==='segment'&&state.selected?.name===state.playing.record?.name){line.style.display='block';line.style.left=Math.min(99.5,audio.currentTime/15*100)+'%'}else line.style.display='none'}
+['playing','pause','timeupdate','loadedmetadata','durationchange','seeked'].forEach(ev=>audio.addEventListener(ev,updatePlayer));
+audio.onended=()=>{if(state.playing?.mode!=='segment'||state.sort!=='asc')return;const list=state.records.slice().sort((a,b)=>new Date(a.time)-new Date(b.time)),i=list.findIndex(x=>x.name===state.playing.record?.name);if(i>=0&&i<list.length-1)selectRecord(list[i+1],true)};
+async function exportText(ext){if(!state.start)return;try{const blob=await api('/api/archive/export?'+params()+'&format='+ext,true);let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='RoomAudio-'+stamp(state.start)+'-'+stamp(state.end)+'.'+ext;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),45000)}catch(e){notice('Не удалось экспортировать текст')}}
+async function copyText(){let text=state.texts.map(r=>'['+r.time.replace('T',' ')+'] '+r.text).join('\n');if(!text)return notice('Нет текста в выбранном периоде');try{await navigator.clipboard.writeText(text);notice('Текст скопирован')}catch(e){notice('Буфер обмена недоступен')}}
+$('copy').onclick=$('copy2').onclick=copyText;$('txt').onclick=$('txt2').onclick=()=>exportText('txt');$('srt').onclick=$('srt2').onclick=()=>exportText('srt');
+let liveDesired=null,liveReconnect=null,liveFailures=0;
+function stopLive(){
+ liveDesired=null;
+ clearTimeout(liveReconnect);liveReconnect=null;liveFailures=0;
+ const a=$('liveAudio');a.pause();a.removeAttribute('src');a.load();
+ $('liveMsg').textContent='Остановлено';
+}
+function reconnectLive(){
+ if(liveDesired!=='/live.mp3'||liveReconnect)return;
+ const delay=Math.min(12000,1000*Math.pow(1.7,Math.min(liveFailures++,5)));
+ $('liveMsg').textContent='Восстанавливаем соединение с эфиром…';
+ liveReconnect=setTimeout(()=>{
+   liveReconnect=null;
+   if(liveDesired==='/live.mp3')live('/live.mp3',true);
+ },delay);
+}
+async function live(path,reconnecting=false){
+ if(!reconnecting)stopLive();
+ liveDesired=path;
+ try{
+   if(path==='/live.mp3'){
+     const data=await api('/api/live/status');
+     if(liveDesired!==path)return;
+     if(!data.online){
+       $('liveMsg').textContent='Ожидание непрерывного потока от Mate…';
+       reconnectLive();return;
+     }
+   }else{
+     const recent=await api('/api/archive/latest');
+     if(liveDesired!==path)return;
+     if(!recent.time||Date.now()-new Date(recent.time).getTime()>120000){
+       $('liveMsg').textContent='Для резервного HLS пока нет свежих фрагментов.';
+       return;
+     }
+   }
+   const url=await media(path),a=$('liveAudio');
+   if(liveDesired!==path)return;
+   a.src=url;
+   await a.play();
+   if(liveDesired!==path)return;
+   liveFailures=0;
+   $('liveMsg').textContent=path==='/live.mp3'?'Бесшовный эфир подключён':'Резервный HLS из архивных сегментов';
+ }catch(e){
+   if(liveDesired!==path)return;
+   $('liveMsg').textContent='Нет соединения с эфиром.';
+   if(path==='/live.mp3')reconnectLive();
+ }
+}
+$('liveAudio').addEventListener('ended',reconnectLive);
+$('liveAudio').addEventListener('error',reconnectLive);
+$('mp3').onclick=()=>live('/live.mp3');
+$('hls').onclick=()=>live('/live.m3u8');
+$('stopLive').onclick=stopLive;
+async function status(){try{let s=await api('/api/status');$('online').textContent=s.mic_silent?'Микрофон без сигнала':(s.source_online?'Источник подключён':'Источник не отвечает');$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent);$('dot').title=s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
+
+// Remote recording configuration. "Requested" and "applied" state are never conflated.
+async function captureStatus(){
+ try{
+  const s=await api('/api/recording-mode');
+  document.querySelectorAll('[data-record-mode]').forEach(b=>{
+    b.classList.toggle('active',b.dataset.recordMode===s.mode);
+    b.setAttribute('aria-pressed',b.dataset.recordMode===s.mode?'true':'false');
+  });
+  const labels={continuous:'Постоянная запись',voice:'Только интервалы с речью',off:'Микрофон выключен'};
+  const applied=s.client_connected && s.active_mode===s.mode;
+  $('modeStatus').textContent=applied?(labels[s.mode]+' · Mate подтвердил') :
+    (s.client_connected?'Запрос: '+labels[s.mode]+' · Mate переключает режим…':
+     'Запрос: '+labels[s.mode]+' · Mate пока не подтвердил');
+  $('modeStatus').style.color=applied?'var(--green)':'var(--muted)';$('pipelineCapture').textContent=!s.client_connected?'Mate не отвечает':s.mode==='off'?'Запись выключена':applied?(s.mode==='voice'?'По голосу':'Постоянно'):'Переключение…';
+ }catch(e){$('modeStatus').textContent='Состояние режима временно недоступно';$('pipelineCapture').textContent='Нет данных'}
+}
+async function changeCaptureMode(mode){
+ const all=[...document.querySelectorAll('[data-record-mode]')];
+ all.forEach(b=>b.disabled=true);
+ $('modeStatus').textContent='Отправляем команду на Mate…';
+ try{
+  const response=await fetch(PFX+'/api/recording-mode',{
+   method:'POST',credentials:'same-origin',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({mode})
+  });
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  $('modeStatus').textContent='Режим сохранён. Ожидаем подтверждения ноутбука…';
+  all.forEach(b=>b.classList.toggle('active',b.dataset.recordMode===data.mode));
+  setTimeout(captureStatus,3800);
+ }catch(e){notice('Не удалось изменить режим записи');captureStatus()}
+ finally{all.forEach(b=>b.disabled=false)}
+}
+document.querySelectorAll('[data-record-mode]').forEach(b=>b.onclick=()=>changeCaptureMode(b.dataset.recordMode));
+function jumpToSpeech(){
+ if(!state.speech?.length){notice('В выбранном периоде пока нет отмеченных участков речи');return}
+ let upcoming;
+ if(state.playing?.mode==='period' && audio.src){
+   upcoming=state.speech.find(x=>x.position>audio.currentTime+.5);
+   if(upcoming){
+     audio.currentTime=upcoming.position;
+     audio.play().catch(()=>notice('Нажмите ▶ для продолжения'));
+     return;
+   }
+   notice('Дальше в этом периоде речь не отмечена');
+   return;
+ }
+ let from=state.start.getTime()-1000;
+ if(state.playing?.mode==='segment' && state.playing.record){
+   from=new Date(state.playing.record.time).getTime()+audio.currentTime*1000;
+ }else if(state.selected){
+   from=new Date(state.selected.time).getTime()-250;
+ }
+ upcoming=state.speech.find(x=>new Date(x.time).getTime()>from+250);
+ if(!upcoming){notice('Дальше в этом периоде речь не отмечена');return}
+ const record=state.records.find(r=>r.name===upcoming.file)||
+    {name:upcoming.file,time:upcoming.file.slice(0,4)+'-'+upcoming.file.slice(4,6)+'-'+upcoming.file.slice(6,8)+'T'+upcoming.file.slice(9,11)+':'+upcoming.file.slice(11,13)+':'+upcoming.file.slice(13,15),bytes:0};
+ selectRecord(record,true,upcoming.offset);
+}
+$('nextSpeech').onclick=$('nextVoice').onclick=jumpToSpeech;
+
+async function init(){
+ let now=new Date();now.setSeconds(0,0);state.end=now;
+ try{
+  const latest=await api('/api/archive/latest');
+  if(latest.time){
+    const end=new Date(latest.time);
+    if(Number.isFinite(+end)&&end<new Date(now.getTime()-3600000)){
+      state.end=new Date(Math.ceil((end.getTime()+15000)/60000)*60000);
+    }
+  }
+ }catch(e){}
+ setPreset('1');
+ await load();status();captureStatus();media('/live.m3u8').catch(()=>{});
+ setInterval(status,15000);setInterval(captureStatus,6000);setInterval(refreshSpeechMarkers,30000);
+}
+
+const cleanupState={job:null,preview:null,ticker:null,busy:false};
+async function cleanupAction(endpoint,payload){
+ const r=await fetch(PFX+'/api/archive/cleanup/'+endpoint,{
+   method:'POST',credentials:'same-origin',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ if(!r.ok)throw Error('HTTP '+r.status+' '+(await r.text()).slice(0,110));
+ return r.json();
+}
+function showCleanupProgress(r){
+ cleanupState.preview=r;
+ $('cleanupPreview').hidden=r.status!=='ready';
+ if(r.status==='scanning'){
+   $('cleanupProgress').textContent='Проверено '+r.scanned+' из '+r.total+' · без голоса '+r.counts.no_voice+' · неопределённых '+r.counts.uncertain;
+ }else if(r.status==='ready'){
+   $('cleanupProgress').textContent='Анализ завершён. Файлы не изменялись.';
+   $('cleanupCount').textContent=r.candidates;
+   $('cleanupSize').textContent=bytes(r.bytes);
+   $('cleanupKept').textContent='Сохранено: '+(r.counts.voice+r.counts.uncertain+r.counts.error);
+   $('cleanupDetails').textContent='Обработано '+r.scanned+
+     '. Речь: '+r.counts.voice+', спорные: '+r.counts.uncertain+
+     ', ошибки: '+r.counts.error+'. В корзину попадут только фрагменты, где детектор не обнаружил голос и уровень сигнала очень низкий.';
+   const samples=$('cleanupSamples');samples.replaceChildren();
+   for(const item of r.sample.slice(0,12)){
+     const btn=document.createElement('button');
+     btn.className='btn';
+     btn.type='button';
+     const when=item.name.slice(9,11)+':'+item.name.slice(11,13)+':'+item.name.slice(13,15);
+     btn.textContent='▶ '+item.day.slice(6,8)+'.'+item.day.slice(4,6)+' '+when;
+     btn.title='Прослушать кандидат на очистку (пиковый уровень '+item.peak_db+' дБ)';
+     btn.onclick=()=>{
+       const stamp=item.name.slice(0,4)+'-'+item.name.slice(4,6)+'-'+item.name.slice(6,8)+'T'+when;
+       selectRecord({name:item.name,time:stamp,bytes:item.bytes},true);
+     };
+     samples.append(btn);
+   }
+   $('cleanupConfirm').checked=false;
+   $('applyCleanup').disabled=true;
+ }else if(r.status==='error'){
+   $('cleanupProgress').textContent='Ошибка анализа: '+(r.error||'нет данных');
+ }
+}
+async function refreshCleanupTrash(){
+ try{
+  const r=await api('/api/archive/cleanup/trash');
+  const list=$('cleanupTrashList');
+  list.replaceChildren();
+  const batches=r.batches.filter(b=>b.files);
+  if(!batches.length){list.add(new Option('Корзина пуста',''));$('restoreCleanup').disabled=true;$('purgeCleanup').disabled=true;return}
+  for(const b of batches){
+   list.add(new Option(new Date(b.created_at*1000).toLocaleString('ru-RU')+' · '+b.files+' файлов · '+bytes(b.bytes),b.batch));
+  }
+  $('restoreCleanup').disabled=false;$('purgeCleanup').disabled=false;
+ }catch(e){$('restoreCleanup').disabled=true;$('purgeCleanup').disabled=true}
+}
+async function pollCleanup(){
+ try{
+  const r=await api('/api/archive/cleanup/status?job='+encodeURIComponent(cleanupState.job));
+  showCleanupProgress(r);
+  if(r.status!=='scanning'){
+   clearInterval(cleanupState.ticker);cleanupState.ticker=null;
+   $('scanSilence').disabled=false;$('cleanupScope').disabled=false;
+  }
+ }catch(e){
+  clearInterval(cleanupState.ticker);cleanupState.ticker=null;
+  $('cleanupProgress').textContent='Проверка прервалась: '+e.message;
+  $('scanSilence').disabled=false;$('cleanupScope').disabled=false;
+ }
+}
+$('scanSilence').onclick=async()=>{
+ if(cleanupState.busy)return;
+ cleanupState.busy=true;clearInterval(cleanupState.ticker);cleanupState.ticker=null;
+ cleanupState.job=null;cleanupState.preview=null;
+ $('cleanupPreview').hidden=true;$('scanSilence').disabled=true;$('cleanupScope').disabled=true;
+ $('cleanupProgress').textContent='Начинаем проверку…';
+ try{
+  const scope=$('cleanupScope').value,payload={scope};
+  if(scope==='period'){payload.start=local(state.start);payload.end=local(state.end)}
+  const r=await cleanupAction('scan',payload);
+  cleanupState.job=r.job;
+  await pollCleanup();
+  if(cleanupState.preview?.status==='scanning'){
+   cleanupState.ticker=setInterval(pollCleanup,1600);
+  }
+ }catch(e){
+  $('cleanupProgress').textContent='Ошибка запуска: '+e.message;
+  $('scanSilence').disabled=false;$('cleanupScope').disabled=false;
+ }finally{cleanupState.busy=false}
+};
+$('cleanupConfirm').onchange=()=>{
+ $('applyCleanup').disabled=!$('cleanupConfirm').checked||
+   cleanupState.preview?.status!=='ready'||!cleanupState.preview.candidates;
+};
+$('applyCleanup').onclick=async()=>{
+ if(!cleanupState.job||cleanupState.preview?.status!=='ready'||!$('cleanupConfirm').checked)return;
+ const count=cleanupState.preview.candidates;
+ if(!window.confirm('Переместить '+count+' записей ('+bytes(cleanupState.preview.bytes)+') в корзину? Это можно отменить восстановлением.'))return;
+ $('applyCleanup').disabled=true;$('cleanupProgress').textContent='Перемещаем файлы…';
+ try{
+  const r=await cleanupAction('apply',{job:cleanupState.job,expected_count:count,confirm:'MOVE_TO_TRASH'});
+  $('cleanupProgress').textContent='Перенесено '+r.moved+' записей ('+bytes(r.bytes)+'). Пропущено '+r.skipped+'.';
+  cleanupState.job=null;cleanupState.preview=null;$('cleanupPreview').hidden=true;
+  if(audio.src){audio.pause();audio.removeAttribute('src');audio.load();state.playing=null}
+  grants.clear();
+  await Promise.all([load(),refreshCleanupTrash()]);
+ }catch(e){$('cleanupProgress').textContent='Ошибка: '+e.message;notice('Не удалось очистить архив')}
+};
+$('cleanupTrashList').onchange=()=>{$('restoreCleanup').disabled=!$('cleanupTrashList').value;$('purgeCleanup').disabled=!$('cleanupTrashList').value};
+$('restoreCleanup').onclick=async()=>{
+ const batch=$('cleanupTrashList').value;
+ if(!batch||!window.confirm('Восстановить аудиофрагменты из выбранной партии?'))return;
+ $('restoreCleanup').disabled=true;
+ try{
+  const r=await cleanupAction('restore',{batch,confirm:'RESTORE'});
+  $('cleanupProgress').textContent='Восстановлено '+r.restored+' записей, пропущено '+r.skipped+'.';
+  await Promise.all([load(),refreshCleanupTrash()]);
+ }catch(e){notice('Ошибка восстановления: '+e.message)}
+ finally{await refreshCleanupTrash()}
+};
+$('purgeCleanup').onclick=async()=>{
+ const batch=$('cleanupTrashList').value;
+ if(!batch)return;
+ if(window.prompt('Файлы будут удалены НАВСЕГДА. Чтобы освободить место, введите УДАЛИТЬ:')!=='УДАЛИТЬ')return;
+ if(!window.confirm('Безвозвратно уничтожить выбранную партию корзины? Восстановление будет невозможно.'))return;
+ $('purgeCleanup').disabled=true;
+ try{
+  const result=await cleanupAction('purge',{batch,confirm:'DELETE_FOREVER'});
+  $('cleanupProgress').textContent='Безвозвратно удалено: '+result.deleted+' файлов, освобождено '+bytes(result.bytes)+'.';
+  await refreshCleanupTrash();
+ }catch(e){notice('Не удалось удалить из корзины: '+e.message)}
+};
+
+refreshCleanupTrash();
+
+init();
+
+</script>
+</body></html>
