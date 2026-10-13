@@ -136,26 +136,4 @@ class LiveHub:
             return chunks, chunks[-1][0] if chunks else after
 
 
-def chunked_mp3(reader):
-    """Decode one HTTP/1.1 chunked transfer; bound all input sizes."""
-    while True:
-        line = reader.readline(65)
-        if not line or len(line) >= 65 or not line.endswith(b"\r\n"):
-            raise ValueError("Malformed live upload")
-        try:
-            size = int(line[:-2].split(b";", 1)[0], 16)
-        except ValueError as exc:
-            raise ValueError("Bad live chunk length") from exc
-        if size > 65536 or size < 0:
-            raise ValueError("Live chunk too large")
-        if size == 0:
-            if reader.readline(3) != b"\r\n":
-                raise ValueError("Unsupported chunk trailers")
-            return
-        data = reader.read(size)
-        if len(data) != size or reader.read(2) != b"\r\n":
-            raise ValueError("Truncated live chunk")
-        yield data
-
-
 hub = LiveHub()
