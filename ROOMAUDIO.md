@@ -46,7 +46,7 @@ Get-Content "$env:LOCALAPPDATA\RoomAudio\uploader.log" -Tail 20
 The recurring RoomAudio analysis task sends only semantically significant conversations. Each selected conversation must have **one downloadable MP3, one transcript and one analytical summary**. The source is the original archive audio, not speech regenerated from ASR text.
 
 - Deployed exporter: `~/Library/Application Support/RoomAudio/export_conversation.py` (tracked as `roomaudio/macos/export_conversation.py`).
-- Private output directory exposed to users: `~/Documents/RoomAudio-reports/audio/` (`0700` directory, `0600` MP3); on the Mac mini this is a directory symlink to the **actual** private storage `~/Library/Application Support/RoomAudio/reports/audio/` (also `0700`). The exporter and authenticated endpoint keep the same documented path/URL and resolve the same private directory; the original archive is unchanged.
+- Private compatibility path: `~/Documents/RoomAudio-reports/audio/`. It is a symlink to the app-owned link, which points to external SSD storage. The authenticated API also searches WD directly if the SSD is absent.
 - Filename: `RoomAudio_YYYY-MM-DD_HHMM-HHMM_<ascii_slug>.mp3`.
 - Authenticated URL: `https://129-158-49-130.sslip.io/roomaudio/api/reports/audio/<filename>`. The Mac server checks its existing RoomAudio session or credentials *before* serving; report files do not accept URL media tokens.
 - Endpoint validates exact filename pattern, prevents symlink-based traversal, returns `audio/mpeg` with `Content-Disposition: attachment` and supports `Range` requests for resumable mobile downloads.
@@ -71,3 +71,21 @@ The macOS `~/Documents` directory is managed by a file provider and can evict re
 To keep the user-facing path and gateway URL stable without letting File Provider evict the payload, the entire `~/Documents/RoomAudio-reports/audio` directory was replaced with a symlink to the non-synced app-owned `~/Library/Application Support/RoomAudio/reports/audio`. All six pre-existing MP3 reports were regenerated from the untouched source archive into that real directory and validated through the symlink using `ffprobe`. The former iCloud-managed folder is retained under `~/Documents/RoomAudio-reports/audio.icloud-backup-20261013T132643` for recovery (do not accidentally serve it).
 
 When diagnosing a missing download, verify `report_path.resolve().parent == REPORT_AUDIO_DIR.resolve()`, `ffprobe` playback of the exact path, file mode `0600`, HTTP 401 when unauthenticated, and an authorized range GET with HTTP 206 if available. New exports written through the symlink remain outside iCloud-managed Documents. Transient ASR scratch WAVs should use OS temporary directories, **not `~/Documents`**, which may produce `Resource deadlock avoided` during automated reads. Avoid filling the system volume: on 2026-10-13 its free space was only about 1.8 GiB.
+
+### External SSD-first working storage (2026-10-13)
+
+For all **report MP3, export and ASR scratch files**, use `roomaudio/macos/storage_paths.py`. This selector never writes to a shadow mountpoint in `/Volumes`.
+
+1. **Preferred:** writable external APFS data volume `/Volumes/MacSSD — данные` (the space before the dash is **U+00A0**). `/Volumes/MacSSD` is read-only and MUST NOT be used.
+2. **Fallback:** `/Volumes/WD`, only if the preferred SSD data volume is absent or unwritable.
+3. If neither external volume is actually mounted and writable: fail explicitly, never default to the Mac system disk.
+4. MP3 reports: `<mount>/RoomAudio-work/reports/audio/`; transient ffmpeg and Whisper processing: `<mount>/RoomAudio-work/tmp/`.
+5. Exported MP3 reports are **atomically mirrored to WD** when WD is mounted, keeping secure URLs available without SSD. The authenticated server resolves the requested report dynamically against mounted SSD first, then WD, validates its real parent directory, and keeps existing authorization/Range handling.
+6. Historical `~/Documents/RoomAudio-reports/audio/` → app-owned `reports/audio` → external SSD report directory compatibility symlinks are retained. The links may be temporarily inaccessible while the SSD is detached, but the HTTP API independently searches WD and remains functional.
+7. Original recorder archive and Whisper model files remain on WD: moving them requires a separate archive-ingest migration. Small application sources/configuration, status and existing SQLite metadata remain in Application Support. **Large intermediate and report files** no longer use the internal disk.
+
+Deploy the tracked `storage_paths.py`, `server.py`, `export_conversation.py` and `transcriber.py` together to Mac Application Support, then restart launchd `com.kruspe.roomaudio` and `com.kruspe.roomaudio.asr`. Do not sync login credentials or original recordings to Git.
+
+Validated 2026-10-13: both mounted external volumes writable; six historic MP3 reports copied to both external disks, matching SHA-256 and ffprobe duration. Re-export created the MP3 under MacSSD with `mirrored_on_wd: true`, matching digest on WD. Simulated SSD removal selected WD for workdirs and existing MP3s, while simulated removal of both disks failed safely. Restarted services and confirmed unauthenticated HTTPS access remains HTTP 401. Always verify authenticated HTTP Range (206) with an actual authorized session before declaring end-to-end download verified.
+
+Old application-folder report backups (`reports/audio.pre-ssd-20261013`) and iCloud-managed Documents backups are not served. System `/tmp` should not be used for future independent transcript processing; use the external temporary workdir.
