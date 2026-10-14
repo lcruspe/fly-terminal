@@ -2176,17 +2176,17 @@
                   </div>
                 </section>
                 <section class="tools-panel" id="toolsPanelFiles" role="tabpanel" aria-labelledby="toolsTabFiles" data-tools-panel="files" hidden>
-                  <div class="settings-section-heading"><strong>Обмен файлами</strong><span>Клиент ↔ сервер · общая папка Documents</span></div>
+                  <div class="settings-section-heading"><strong>Обмен файлами</strong><span>Загрузка на сервер · скачанные файлы Chromium</span></div>
                   <div class="file-transfer-control">
                     <input type="file" id="documentsUploadInput" multiple hidden />
                     <button type="button" id="documentsDropZone" class="file-drop-zone"><strong>Перетащите файлы сюда</strong><span>или нажмите, чтобы выбрать на клиенте</span><small id="documentsUploadLimit">Загрузка в Documents сервера</small></button>
                     <div id="documentsTransferQueue" class="file-transfer-queue" aria-live="polite"></div>
                     <div class="file-tools-actions"><button type="button" id="documentsUploadBtn">Выбрать файлы</button><button type="button" id="documentsRefreshBtn">Обновить</button></div>
                     <div class="settings-action-status" id="documentsStatus" role="status"></div>
-                    <div class="file-tools-actions"><strong>Файлы сервера · Documents</strong><input type="search" id="documentsSearch" placeholder="Поиск файлов" aria-label="Поиск файлов сервера" /></div>
-                    <button type="button" id="documentsDeleteAllBtn">Удалить все файлы из Documents…</button>
+                    <div class="file-tools-actions"><select id="browserDownloadFolder" aria-label="Папка файлов фоллбэк браузера"><option value="/config/Downloads">Chromium · Downloads</option><option value="/config/Documents">Chromium · Documents</option></select><input type="search" id="documentsSearch" placeholder="Поиск файлов" aria-label="Поиск файлов сервера" /></div>
+                    <button type="button" id="documentsDeleteAllBtn">Удалить все файлы из выбранной папки…</button>
                     <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
-                    <button type="button" id="containerFileBrowseBtn">Скачать из Downloads Chromium…</button>
+                    <button type="button" id="containerFileBrowseBtn">Открыть каталоги Chromium…</button>
                     <div class="settings-action-status" id="containerFileStatus"></div>
                   </div>
                 </section>
@@ -4130,6 +4130,7 @@
         button.tabIndex = active ? 0 : -1;
       });
       toolsPanels.forEach(panel => panel.hidden = panel.dataset.toolsPanel !== section);
+      if (section === "files") loadDocumentFiles();
       positionFloatingMenu(toolsMenu);
     }
 
@@ -4552,7 +4553,10 @@
         });
         const payload = await response.json();
         if (!response.ok || !payload.ok) throw new Error(payload.message || "Не удалось удалить файлы");
-        if (container) await loadContainerDirectory(directory);
+        if (container) {
+          await loadContainerDirectory(directory);
+          await loadDocumentFiles();
+        }
         else await loadDocumentFiles({ announce: false });
         setStatus(payload.failed?.length ? "warn" : "ok", `Удалено: ${payload.deleted.length}${payload.failed?.length ? ` · не удалено: ${payload.failed.length}` : ""}`);
       } catch (error) { setStatus("danger", error.message); }
@@ -4589,14 +4593,14 @@
         download.className = "button document-file-download";
         download.textContent = "Скачать";
         download.title = `Скачать ${file.name}`;
-        download.href = documentDownloadUrl(file.name);
+        download.href = containerFileDownloadUrl(file.path);
         download.download = file.name;
         download.onclick = () => setDocumentsStatus("ok", `Скачивание: ${file.name}`);
 
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "Удалить";
-        remove.onclick = () => deleteExchangeFiles(false, file.name, "Documents", remove);
+        remove.onclick = () => deleteExchangeFiles(true, file.name, file.path.slice(0, file.path.lastIndexOf("/")), remove);
         const actions = document.createElement("div");
         actions.className = "file-delete-actions";
         actions.append(download, remove);
@@ -4609,19 +4613,24 @@
       if (!documentsFileList) return;
       if (announce) setDocumentsStatus("warn", "Обновляю список файлов...");
       try {
-        const response = await localApiFetch("/api/files/list");
+        const folder = document.getElementById("browserDownloadFolder").value;
+        if (!documentsMaxUploadBytes) {
+          const limits = await localApiFetch("/api/files/list", { cache: "no-store" }).then(response => response.json());
+          documentsMaxUploadBytes = Number(limits.maxUploadBytes) || null;
+        }
+        const response = await localApiFetch(`/api/container/files/list?path=${encodeURIComponent(folder)}`, { cache: "no-store" });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.ok) {
           throw new Error(payload.message || payload.details || payload.summary || "Не удалось получить список файлов");
         }
-        documentsMaxUploadBytes = Number(payload.maxUploadBytes) || null;
-        serverDocumentFiles = payload.files || [];
+        if (document.getElementById("browserDownloadFolder").value !== folder) return;
+        serverDocumentFiles = (payload.entries || []).filter(entry => entry.kind === "file")
+          .sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt) || a.name.localeCompare(b.name));
         filterDocumentFiles();
         document.getElementById("documentsUploadLimit").textContent = documentsMaxUploadBytes ? `До ${formatFileBytes(documentsMaxUploadBytes)} на файл · Documents сервера` : "Documents сервера";
         if (announce) {
-          const count = Array.isArray(payload.files) ? payload.files.length : 0;
-          const limit = documentsMaxUploadBytes ? ` · лимит ${formatFileBytes(documentsMaxUploadBytes)}` : "";
-          setDocumentsStatus("ok", `Documents: ${count} файл${count === 1 ? "" : "ов"}${limit}`);
+          const count = serverDocumentFiles.length;
+          setDocumentsStatus("ok", `Chromium · ${folder.split("/").pop()}: ${count} файлов`);
         }
       } catch (error) {
         renderDocumentFiles([]);
@@ -6401,8 +6410,9 @@
       dropZone.classList.toggle("drag-over", type === "dragenter" || type === "dragover");
       if (type === "drop") queueDocumentFiles(Array.from(event.dataTransfer.files || []));
     });
-    document.getElementById("documentsDeleteAllBtn").onclick = event => deleteExchangeFiles(false, null, "Documents", event.currentTarget);
+    document.getElementById("documentsDeleteAllBtn").onclick = event => deleteExchangeFiles(true, null, document.getElementById("browserDownloadFolder").value, event.currentTarget);
     document.getElementById("containerDeleteAllBtn").onclick = event => deleteExchangeFiles(true, null, containerFileCurrentPath, event.currentTarget);
+    document.getElementById("browserDownloadFolder").onchange = () => loadDocumentFiles();
     if (documentsRefreshBtn) documentsRefreshBtn.onclick = () => loadDocumentFiles();
     if (documentsFileList) loadDocumentFiles();
     document.querySelectorAll("[data-file-folder]").forEach(button => { button.onclick = () => loadContainerDirectory(button.dataset.fileFolder); });
