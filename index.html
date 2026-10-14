@@ -2183,7 +2183,7 @@
                     <div id="documentsTransferQueue" class="file-transfer-queue" aria-live="polite"></div>
                     <div class="file-tools-actions"><button type="button" id="documentsUploadBtn">Выбрать файлы</button><button type="button" id="documentsRefreshBtn">Обновить</button></div>
                     <div class="settings-action-status" id="documentsStatus" role="status"></div>
-                    <div class="file-tools-actions"><select id="browserDownloadFolder" aria-label="Папка файлов фоллбэк браузера"><option value="/config/Downloads">Chromium · Downloads</option><option value="/config/Documents">Chromium · Documents</option></select><input type="search" id="documentsSearch" placeholder="Поиск файлов" aria-label="Поиск файлов сервера" /></div>
+                    <div class="file-tools-actions"><select id="browserDownloadFolder" aria-label="Папка файлов фоллбэк браузера"><option value="/config/Documents">Chromium · Documents</option><option value="/config/Downloads">Chromium · Downloads</option></select><input type="search" id="documentsSearch" placeholder="Поиск файлов" aria-label="Поиск файлов сервера" /></div>
                     <button type="button" id="documentsDeleteAllBtn">Удалить все файлы из выбранной папки…</button>
                     <div class="document-file-list" id="documentsFileList" aria-live="polite"></div>
                     <button type="button" id="containerFileBrowseBtn">Открыть каталоги Chromium…</button>
@@ -4854,8 +4854,8 @@
       if (!containerFileDialog) return;
       if (!containerFileDialog.open) containerFileDialog.showModal();
       setContainerFileStatus("", "");
-      containerFileCurrentPath = "/config/Downloads";
-      await loadContainerDirectory("/config/Downloads");
+      containerFileCurrentPath = "/config/Documents";
+      await loadContainerDirectory("/config/Documents");
     }
 
     function closeContainerFileBrowser() {
