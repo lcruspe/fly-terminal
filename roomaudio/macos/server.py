@@ -217,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
         # Direct fallback is restricted to explicit LAN / Tailscale endpoints.
         # Reverse-proxied HTTPS retains Secure cookies and /roomaudio prefix.
         return self.headers.get("Host", "").lower() in (
-            "192.168.1.173:8766", "100.105.89.30:8766",
+            "192.168.1.173:8766", "kruspe-mac-mini.local:8766", "100.105.89.30:8766",
             "127.0.0.1:8766", "localhost:8766")
 
     def issue_cookie(self, value, max_age=SESSION_SECONDS):
@@ -270,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
             origin = self.headers.get("Origin", "")
             if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net",
                                "http://127.0.0.1:8766", "http://localhost:8766",
-                              "http://192.168.1.173:8766", "http://100.105.89.30:8766"):
+                              "http://192.168.1.173:8766", "http://kruspe-mac-mini.local:8766", "http://100.105.89.30:8766"):
                 return self.reply(403, "Invalid origin")
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.reply(415, "Expected JSON")
@@ -291,7 +291,7 @@ class Handler(BaseHTTPRequestHandler):
             origin = self.headers.get("Origin", "")
             if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net", 
                                "http://127.0.0.1:8766", "http://localhost:8766",
-                              "http://192.168.1.173:8766", "http://100.105.89.30:8766"):
+                              "http://192.168.1.173:8766", "http://kruspe-mac-mini.local:8766", "http://100.105.89.30:8766"):
                 return self.reply(403, "Invalid origin")
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.reply(415, "Expected JSON")
