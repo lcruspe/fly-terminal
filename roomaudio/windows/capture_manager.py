@@ -6,7 +6,11 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlencode
-from urllib.request import Request,urlopen
+from urllib.request import Request, build_opener, ProxyHandler
+
+# Direct LAN traffic must bypass machine-level HTTP_PROXY / VPN proxy.
+# Proxies may return HTTP 503 for local .local hostnames.
+DIRECT_HTTP = build_opener(ProxyHandler({}))
 
 ROOT=Path(__file__).resolve().parent
 CONF=json.loads((ROOT/"client.json").read_text(encoding="utf-8-sig"))
@@ -28,7 +32,7 @@ class Manager:
     def poll(self):
         uri=SERVER+"/client/recording-mode?"+urlencode({"active":self.active})
         req=Request(uri,headers={"X-Ingest-Key":CONF["ingest_key"]})
-        with urlopen(req,timeout=6) as response:
+        with DIRECT_HTTP.open(req,timeout=6) as response:
             doc=json.load(response)
         selected=doc.get("mode")
         if selected not in VALID:
