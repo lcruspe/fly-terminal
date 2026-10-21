@@ -8,7 +8,10 @@ import os
 import sys
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, ProxyHandler
+
+# A machine-wide proxy must never intercept direct RoomAudio LAN uploads.
+DIRECT_HTTP = build_opener(ProxyHandler({}))
 from speech_activity import detect_file, text_ranges
 
 HOME = Path(__file__).resolve().parent
@@ -55,7 +58,7 @@ def once():
                     "X-Speech-Ranges": voice_ranges,
                 }, method="POST"
             )
-            with urlopen(req, timeout=15) as response:
+            with DIRECT_HTTP.open(req, timeout=15) as response:
                 status = response.status
                 response.read()
             if status not in (200, 201):
