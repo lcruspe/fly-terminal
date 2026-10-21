@@ -446,14 +446,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/status":
             last = state["last_received"]
-            return self.json_reply({"online": bool(last and time.time()-last < 65),
+            capture = recording_settings.status()
+            audio_recent = bool(last and time.time() - last < 65)
+            ingest_recent = bool(state["last_source_seen"] and
+                                 time.time() - state["last_source_seen"] < 65)
+            source_connected = bool(capture["client_connected"] or ingest_recent)
+            return self.json_reply({"online": source_connected,
                 "last_received": dt.datetime.fromtimestamp(last).isoformat(timespec="seconds") if last else None,
                 "last_name": state["last_name"], "retention_days": CONFIG.get("retention_days", 30),
                 "archive_available": ROOT.is_dir(),
-                "source_online": bool(state["last_source_seen"] and time.time()-state["last_source_seen"] < 65),
+                "source_online": source_connected,
+                "audio_recent": audio_recent,
                 "mic_silent": bool(state["mic_silent"] and state["last_source_seen"] and time.time()-state["last_source_seen"] < 65),
                 "mean_db": state["mean_db"], "peak_db": state["peak_db"],
-                "capture": recording_settings.status(),
+                "capture": capture,
                 "archive_free_gb": round(shutil.disk_usage(ROOT).free / 1e9, 1) if ROOT.is_dir() else None,
                 "asr_model_ready": (Path(CONFIG.get("transcription_model",
                     "/Volumes/WD/RoomAudio/models/ggml-large-v3-turbo.bin")).is_file()),
