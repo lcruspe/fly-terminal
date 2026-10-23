@@ -2965,6 +2965,7 @@
         panelCollapsed: !!raw.panelCollapsed,
         density: ["comfortable", "compact"].includes(raw.density) ? raw.density : "comfortable",
         toolbarOrientation: ["horizontal", "vertical-left", "vertical-right"].includes(raw.toolbarOrientation) ? raw.toolbarOrientation : "horizontal",
+        browserBackend: ["native", "chromium"].includes(raw.browserBackend) ? raw.browserBackend : "",
         desktopMode: raw.desktopAutoResize === true ? "webrtc" : (["webrtc", "vnc"].includes(raw.desktopMode) ? raw.desktopMode : "webrtc"),
         desktopScaleMode: ["contain", "fill", "sync"].includes(raw.desktopScaleMode) ? raw.desktopScaleMode : "contain",
         desktopResolution: ["1280x720", "1600x900", "1920x1080", "2560x1440"].includes(raw.desktopResolution) ? raw.desktopResolution : "1920x1080",
@@ -3010,7 +3011,7 @@
         const response = await localApiFetch("/api/ui/preferences");
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
-        const persistedKeys = ["theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopScaleMode", "desktopResolution", "desktopAutoResize", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
+        const persistedKeys = ["browserBackend", "theme", "fontSize", "fontFamily", "windowTitle", "splitLayout", "panelCollapsed", "density", "toolbarOrientation", "desktopMode", "desktopScaleMode", "desktopResolution", "desktopAutoResize", "desktopFps", "mainResolutionPresets", "virtualResolutionPresets", "snippets"];
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
@@ -3212,7 +3213,7 @@
       }
     }
 
-    function buildBrowserUrl(backend = browserConfig.backend || "native") {
+    function buildBrowserUrl(backend = preferences.browserBackend || browserConfig.backend || "native") {
       if (backend === "chromium" && browserConfig.fallbackUrl) return browserConfig.fallbackUrl;
       if (backend === "native" && browserConfig.nativeUrl) return withClientRole(browserConfig.nativeUrl, "browser");
       const url = browserConfig.url || browserConfig.nativeUrl || browserConfig.fallbackUrl || "about:blank";
@@ -5417,7 +5418,7 @@
       return tab;
     }
 
-    function browserBackendState(backend = browserConfig.backend || "native") {
+    function browserBackendState(backend = preferences.browserBackend || browserConfig.backend || "native") {
       const fallbackAvailable = Boolean(browserConfig.fallbackUrl);
       const nativeAvailable = Boolean(browserConfig.nativeUrl);
       const normalized = backend === "chromium" && fallbackAvailable
@@ -5455,7 +5456,7 @@
       if (tab.autoBackendLabel) renderTabs();
     }
 
-    function addBrowserTab(label = "Browser", customLabel = null, subtext = null, backend = browserConfig.backend || "native") {
+    function addBrowserTab(label = "Browser", customLabel = null, subtext = null, backend = preferences.browserBackend || browserConfig.backend || "native") {
       const id = createId();
       const state = browserBackendState(backend);
       const browserUrl = state.url;
@@ -5503,6 +5504,8 @@
           event.stopPropagation();
           const next = tab.browserBackend === "native" ? "chromium" : "native";
           setBrowserTabBackend(tab, next, true);
+          preferences.browserBackend = tab.browserBackend;
+          savePreferences();
           setStatusText(next === "native" ? "Browser: нативный Chrome" : "Browser: Chromium fallback", 2200);
         };
       }

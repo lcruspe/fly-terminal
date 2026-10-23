@@ -59,7 +59,7 @@ When adding new menu functionality, classify it first: launchers go to Apps, dur
 
 ## Native Browser backend
 
-On direct macOS, the **Browser** action uses Native Chrome as the primary backend. Google Chrome runs with a dedicated profile on the BetterDisplay virtual display **Fly Browser**. Its display is captured by ScreenCaptureKit and encoded by VideoToolbox, then delivered through the dedicated `/native-browser-stream-ws` route.
+On direct macOS, the **Browser** action initially uses Native Chrome as the primary backend. Manually switching Native / Chromium fallback saves the choice in UI preferences (locally and on the server) for new tabs and future sessions. Automatic fallback after a native browser failure does not overwrite that choice. Google Chrome runs with a dedicated profile on the BetterDisplay virtual display **Fly Browser**. Its display is captured by ScreenCaptureKit and encoded by VideoToolbox, then delivered through the dedicated `/native-browser-stream-ws` route.
 
 The containerized Chromium backend remains available at `/browser/` as a fallback. Browser tabs expose a backend switch so the user can move between Native Chrome and Chromium without changing client proxy settings. If the Native Chrome stream reports a macOS screen-capture permission failure, the Browser tab switches to the Chromium fallback automatically when it is available.
 

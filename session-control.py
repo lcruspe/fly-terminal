@@ -2083,6 +2083,10 @@ def normalize_ui_preferences(payload):
     if split_layout in VALID_SPLIT_LAYOUTS:
         preferences["splitLayout"] = split_layout
 
+    browser_backend = str(payload.get("browserBackend") or "").strip().lower()
+    if browser_backend in {"native", "chromium"}:
+        preferences["browserBackend"] = browser_backend
+
     desktop_mode = str(payload.get("desktopMode") or "").strip().lower()
     if desktop_mode in VALID_DESKTOP_MODES:
         preferences["desktopMode"] = desktop_mode
