@@ -61,6 +61,18 @@ class DesktopCatalogTests(unittest.TestCase):
         result = self.read(preferences={"Preferences.lastSubscription": 1, "Preferences.lastServerGuid": "missing", "Preferences.lastServerName": "Same"})
         self.assertEqual(result["currentLocationId"], "")
 
+    def test_probe_targets_are_validated_and_only_available_on_private_backend_opt_in(self):
+        data = fixture()
+        data["map"]["1"]["serverMap"]["11"].update(host="private.example", port="443")
+        with patch.object(desktop, "_read_payload", return_value=data), patch.object(desktop, "PREFERENCES", Path("/missing.plist")):
+            public = desktop.catalog()
+            private = desktop.catalog(include_probe_targets=True)
+        self.assertNotIn("private.example", json.dumps(public))
+        location = next(loc for loc in private["subscriptions"][1]["locations"] if loc["_pingTarget"])
+        self.assertEqual(location["_pingTarget"], ("private.example", 443))
+        for host, port in (("example.test", "wrong"), ("example.test", 65536), ("bad host", 443), ("http://example.test", 443)):
+            self.assertIsNone(desktop._ping_target({"host": host, "port": port}))
+
     def test_refresh_reloads_the_database_instead_of_returning_previous_catalogue(self):
         first = fixture()
         second = copy.deepcopy(first)

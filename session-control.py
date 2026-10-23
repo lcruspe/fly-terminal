@@ -25,6 +25,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 from urllib.request import Request, urlopen
 import happ_desktop
+import happ_ping
 
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -106,11 +107,12 @@ HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK = threading.Lock()
 HAPP_AX_SOURCE = REPO_ROOT / "macos" / "happ-ax.swift"
 HAPP_AX_BINARY = Path.home() / "Library/Caches/FlyTerminal/happ-ax"
 HAPP_AX_BUILD_LOCK = threading.Lock()
+HAPP_PING_MEASUREMENTS = happ_ping.Measurements()
 
 
 def happ_ui_catalog():
     if happ_desktop.available():
-        return happ_desktop.catalog()
+        return happ_desktop.catalog(include_probe_targets=True)
     return happ_accessibility_catalog()
 
 
@@ -232,6 +234,8 @@ TOOL_ERROR_MESSAGES = {
     "happ_desktop_database_invalid": "Формат базы подписок Happ Desktop не поддерживается.",
     "happ_desktop_decryption_failed": "Не удалось проверить и расшифровать базу Happ Desktop.",
     "happ_desktop_control_unavailable": "Для подключения или переподключения выберите сервер в Happ Desktop.",
+    "happ_ping_unavailable": "Проверка пинга доступна для подписок Happ Desktop.",
+    "happ_ping_already_running": "Проверка пинга уже выполняется. Дождитесь её завершения.",
     "happ_disconnect_failed": "Не удалось отключить текущее VPN-соединение Happ.",
     "happ_disconnect_timeout": "Happ не успел отключить VPN-соединение за отведённое время.",
     "happ_connect_failed": "Не удалось запустить VPN-соединение Happ.",
@@ -2439,7 +2443,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                     "id": subscription["id"],
                     "label": subscription["label"],
                     "locations": [
-                        {"id": location["id"], "label": location["label"]}
+                        {"id": location["id"], "label": location["label"],
+                         "ping": HAPP_PING_MEASUREMENTS.latest(subscription["id"], location)}
                         for location in subscription["locations"]
                     ],
                 }
@@ -2456,6 +2461,7 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "source": catalog.get("source", "happ-plus"),
                 "canSwitch": catalog.get("canSwitch", True),
                 "canReconnect": catalog.get("canReconnect", True),
+                "canPing": catalog.get("canPing", False),
                 "selectionLabel": catalog.get("selectionLabel", "Сейчас"),
                 "notice": catalog.get("notice", ""),
             })
@@ -2496,6 +2502,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_happ_reconnect()
         elif self.path == "/api/vpn/happ/location":
             self._handle_happ_location()
+        elif self.path == "/api/vpn/happ/ping":
+            self._handle_happ_ping()
         else:
             send_json(self, 404, {"ok": False, "error": "not_found"})
 
@@ -3236,6 +3244,28 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         finally:
             log_file.close()
         send_json(self, 202, {"ok": True, "state": "running", "pid": process.pid, "summary": "Обновление запущено"})
+
+    def _handle_happ_ping(self):
+        payload, error = self._read_json_body()
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+        try:
+            catalog = happ_ui_catalog()
+            if not catalog.get("canPing"):
+                send_json(self, 409, {"ok": False, "error": "happ_ping_unavailable"})
+                return
+            subscription = next((sub for sub in catalog["subscriptions"]
+                                 if sub["id"] == payload.get("subscriptionId")), None)
+            if subscription is None:
+                send_json(self, 404, {"ok": False, "error": "happ_subscription_not_found"})
+                return
+            results = HAPP_PING_MEASUREMENTS.measure(subscription)
+            send_json(self, 200, {"ok": True, "method": "tcp", "results": results})
+        except happ_ping.PingBusyError:
+            send_json(self, 409, {"ok": False, "error": "happ_ping_already_running"})
+        except (HappAXError, happ_desktop.HappDesktopError) as exc:
+            send_json(self, 503, {"ok": False, "error": str(exc)})
 
     def _handle_happ_reconnect(self):
         if happ_desktop.available():

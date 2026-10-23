@@ -2,8 +2,8 @@
 
 The private format below was verified against macOS Desktop 4.5.4. Authentication
 must succeed before parsing any plaintext; future formats fail explicitly.
-Only names and opaque IDs leave this module. Subscription credentials and server
-configs are never written to disk or returned to the public API.
+Only names and opaque IDs are public. Optional probe targets are backend-only;
+subscription credentials and configs are never written to disk or sent to the UI.
 """
 import base64
 import functools
@@ -185,7 +185,22 @@ def _opaque_id(*parts):
     return "desktop-" + hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:24]
 
 
-def catalog():
+def _ping_target(server):
+    host = server.get("host")
+    port = server.get("port")
+    if not isinstance(host, str) or not host or len(host) > 253 or any(c.isspace() for c in host):
+        return None
+    host = host.strip("[]")  # IPv6 literals may include brackets in imported configs.
+    if not host or "/" in host or "\x00" in host or isinstance(port, bool):
+        return None
+    try:
+        port = int(port)
+    except (ValueError, TypeError):
+        return None
+    return (host, port) if 1 <= port <= 65535 else None
+
+
+def catalog(include_probe_targets=False):
     payload = _read_payload()
     try:
         preferences = plistlib.loads(PREFERENCES.read_bytes())
@@ -198,7 +213,7 @@ def catalog():
     selected_guid = preferences.get("Preferences.lastServerGuid", "")
     result = {"subscriptions": [], "current": "", "currentSubscription": "",
               "currentSubscriptionId": "", "currentLocationId": "", "source": "happ-desktop",
-              "canSwitch": False, "canReconnect": False, "selectionLabel": "Выбрано в Happ",
+              "canSwitch": False, "canReconnect": False, "canPing": True, "selectionLabel": "Выбрано в Happ",
               "notice": "Для подключения выберите сервер в Happ Desktop."}
     for sub_key, subscription in _ordered_entries(payload["map"], payload.get("order", [])):
         if not isinstance(subscription, dict):
@@ -209,6 +224,8 @@ def catalog():
                 raise HappDesktopError("happ_desktop_database_invalid")
             guid = server.get("guid") or server_key
             location = {"id": _opaque_id(sub_key, guid), "label": str(server.get("name") or "Локация Happ")}
+            if include_probe_targets:
+                location["_pingTarget"] = _ping_target(server)
             sub["locations"].append(location)
             if sub_key == selected_sub and (guid == selected_guid if selected_guid else server_key == selected_server):
                 result.update(current=location["label"], currentSubscription=sub["label"],

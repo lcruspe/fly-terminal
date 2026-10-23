@@ -2165,8 +2165,10 @@
                   <select id="happLocation" aria-label="Локация Happ"><option value="">Сначала выберите подписку</option></select>
                   <div class="settings-action-status" id="happLocationStatus"></div>
                   <div class="settings-action-status" id="happCatalogNotice"></div>
+                  <div class="settings-action-status" id="happPingStatus" aria-live="polite"></div>
                   <div class="vpn-action-row">
                     <button type="button" id="refreshHappSubscriptions">Обновить список</button>
+                    <button type="button" id="pingHapp" disabled title="TCP-пинг всех локаций выбранной подписки с сервера Fly Terminal. Результаты видны 3 минуты.">Проверить пинг</button>
                     <button type="button" id="reconnectHapp" title="Отключить и снова подключить активную конфигурацию Happ Plus через macOS scutil"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>Переподключить</button>
                     <div class="settings-action-status" id="happStatus"></div>
                   </div>
@@ -2861,6 +2863,8 @@
     const happLocationSelect = document.getElementById("happLocation");
     const happLocationStatus = document.getElementById("happLocationStatus");
     const happCatalogNotice = document.getElementById("happCatalogNotice");
+    const pingHappBtn = document.getElementById("pingHapp");
+    const happPingStatus = document.getElementById("happPingStatus");
 
     // State
     let tabs = []; // { id, type, sessionId, label, customLabel, active, wrapper }
@@ -2878,6 +2882,9 @@
     let browserAppsError = "";
     let happSubscriptionsLoading = false;
     let happSubscriptions = [];
+    let happPingRunning = false;
+    let happPingResults = new Map();
+    let happPingExpiryTimer = null;
     let happCatalogState = { currentSubscriptionId: "", currentLocationId: "", current: "", currentSubscription: "" };
     let bootRecoveryAttempted = false;
     let fullscreenTabId = null;
@@ -4874,6 +4881,61 @@
       }
     }
 
+    function happPingKey(subscriptionId, locationId) {
+      return `${subscriptionId}:${locationId}`;
+    }
+
+    function happLocationLabel(subscriptionId, location) {
+      const result = happPingResults.get(happPingKey(subscriptionId, location.id));
+      if (!result || result.deadline <= performance.now()) return location.label;
+      const suffix = result.status === "ok"
+        ? (result.rttMs < 1 ? "<1 мс" : `${Math.round(result.rttMs)} мс`)
+        : ({ timeout: "тайм-аут", unreachable: "недоступен", unsupported: "нет TCP-адреса" }[result.status]);
+      return suffix ? `${location.label} · ${suffix}` : location.label;
+    }
+
+    function scheduleHappPingExpiry() {
+      clearTimeout(happPingExpiryTimer);
+      happPingExpiryTimer = null;
+      const now = performance.now();
+      for (const [key, result] of happPingResults) {
+        if (result.deadline <= now) happPingResults.delete(key);
+      }
+      if (!happPingResults.size) {
+        if (!happPingRunning && happPingStatus) happPingStatus.textContent = "";
+        return;
+      }
+      const next = Math.min(...Array.from(happPingResults.values(), result => result.deadline));
+      happPingExpiryTimer = setTimeout(refreshHappPingExpiry, Math.max(1, Math.ceil(next - now)));
+    }
+
+    function refreshHappPingExpiry() {
+      if (!happPingResults.size) return;
+      renderHappLocationOptions(happSubscriptionSelect?.value || "", happLocationSelect?.value || "");
+      scheduleHappPingExpiry();
+    }
+
+    function acceptHappPingResults(results, replace = false) {
+      if (replace) happPingResults.clear();
+      for (const result of results) {
+        const remaining = Number(result.expiresInMs);
+        if (!Number.isFinite(remaining) || remaining <= 0) continue;
+        if (!["ok", "timeout", "unreachable", "unsupported"].includes(result.status)) continue;
+        if (result.status === "ok" && (!Number.isFinite(result.rttMs) || result.rttMs < 0)) continue;
+        happPingResults.set(happPingKey(result.subscriptionId, result.locationId), {
+          ...result, deadline: performance.now() + Math.min(remaining, 180000)
+        });
+      }
+      scheduleHappPingExpiry();
+    }
+
+    function updateHappPingButton() {
+      if (!pingHappBtn) return;
+      const subscription = happSubscriptions.find(item => item.id === happSubscriptionSelect?.value);
+      pingHappBtn.disabled = happPingRunning || happSubscriptionsLoading || !happCatalogState.canPing || !subscription?.locations?.length;
+      pingHappBtn.textContent = happPingRunning ? "Проверяю пинг…" : "Проверить пинг";
+    }
+
     function renderHappLocationOptions(subscriptionId, preferredLocationId = "") {
       if (!happLocationSelect) return;
       happLocationSelect.innerHTML = "";
@@ -4892,7 +4954,7 @@
       }
 
       happLocationSelect.appendChild(new Option("Выберите локацию…", ""));
-      locations.forEach(location => happLocationSelect.appendChild(new Option(location.label, location.id)));
+      locations.forEach(location => happLocationSelect.appendChild(new Option(happLocationLabel(subscriptionId, location), location.id)));
       happLocationSelect.disabled = false;
       if (preferredLocationId && locations.some(location => location.id === preferredLocationId)) {
         happLocationSelect.value = preferredLocationId;
@@ -4913,10 +4975,11 @@
     }
 
     async function loadHappSubscriptions(forceRefresh = false) {
-      if (!happSubscriptionSelect || !happLocationSelect || happSubscriptionsLoading) return;
+      if (!happSubscriptionSelect || !happLocationSelect || happSubscriptionsLoading || happPingRunning) return;
       const previousSubscriptionId = happSubscriptionSelect.value;
       const previousLocationId = happLocationSelect.value;
       happSubscriptionsLoading = true;
+      updateHappPingButton();
       happSubscriptionSelect.disabled = true;
       happLocationSelect.disabled = true;
       if (refreshHappSubscriptionsBtn) {
@@ -4939,10 +5002,15 @@
           currentSubscription: payload.currentSubscription || "",
           canSwitch: payload.canSwitch !== false,
           canReconnect: payload.canReconnect !== false,
+          canPing: payload.canPing === true,
           selectionLabel: payload.selectionLabel || "Сейчас"
         };
         if (happCatalogNotice) happCatalogNotice.textContent = payload.notice || "";
         if (reconnectHappBtn) reconnectHappBtn.disabled = !happCatalogState.canReconnect;
+        acceptHappPingResults(happSubscriptions.flatMap(subscription =>
+          (subscription.locations || []).filter(location => location.ping).map(location => ({
+            ...location.ping, subscriptionId: subscription.id, locationId: location.id
+          }))), true);
 
         happSubscriptionSelect.innerHTML = "";
         if (!happSubscriptions.length) {
@@ -4976,6 +5044,7 @@
         happLocationStatus.textContent = `Ошибка: ${error.message || error}`;
       } finally {
         happSubscriptionsLoading = false;
+        updateHappPingButton();
         if (refreshHappSubscriptionsBtn) {
           refreshHappSubscriptionsBtn.disabled = false;
           refreshHappSubscriptionsBtn.textContent = "Обновить список";
@@ -4990,6 +5059,34 @@
         : "";
       renderHappLocationOptions(subscriptionId, preferredLocationId);
       updateHappCatalogStatus(subscriptionId);
+      updateHappPingButton();
+    }
+
+    async function measureHappPing() {
+      const subscriptionId = happSubscriptionSelect?.value || "";
+      if (happPingRunning || happSubscriptionsLoading || !subscriptionId || !happCatalogState.canPing) return;
+      happPingRunning = true;
+      updateHappPingButton();
+      if (refreshHappSubscriptionsBtn) refreshHappSubscriptionsBtn.disabled = true;
+      if (happPingStatus) happPingStatus.textContent = "Проверяю TCP-пинг локаций выбранной подписки…";
+      try {
+        const response = await localApiFetch("/api/vpn/happ/ping", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscriptionId })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) throw new Error(payload.message || "Не удалось проверить пинг");
+        const results = Array.isArray(payload.results) ? payload.results : [];
+        acceptHappPingResults(results);
+        renderHappLocationOptions(happSubscriptionSelect.value, happLocationSelect.value);
+        if (happPingStatus) happPingStatus.textContent = `TCP-пинг проверен: ${results.length} локаций. Результаты видны 3 минуты.`;
+      } catch (error) {
+        if (happPingStatus) happPingStatus.textContent = `Ошибка: ${error.message || error}`;
+      } finally {
+        happPingRunning = false;
+        updateHappPingButton();
+        if (refreshHappSubscriptionsBtn) refreshHappSubscriptionsBtn.disabled = false;
+      }
     }
 
     async function confirmHappLocationAfterReconnect(subscriptionId, locationId) {
@@ -6435,6 +6532,11 @@
     if (refreshHappSubscriptionsBtn) {
       refreshHappSubscriptionsBtn.onclick = () => loadHappSubscriptions(true);
     }
+    if (pingHappBtn) pingHappBtn.onclick = measureHappPing;
+    window.addEventListener("focus", refreshHappPingExpiry);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshHappPingExpiry();
+    });
     if (happSubscriptionSelect && happLocationSelect) {
       happSubscriptionSelect.onchange = handleHappSubscriptionChange;
       happLocationSelect.onchange = switchHappLocation;
