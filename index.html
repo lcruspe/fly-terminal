@@ -1777,11 +1777,6 @@
       gap: 6px;
     }
 
-    .snippet-rename-input {
-      min-width: 0;
-      width: 100%;
-    }
-
     .overflow-menu {
       flex: 0 0 auto;
     }
@@ -2290,7 +2285,8 @@
         <label>Текст<textarea id="snippetContent" maxlength="4000" required spellcheck="false"></textarea></label>
         <div class="snippet-editor-actions">
           <span class="settings-action-status" id="snippetEditorStatus" aria-live="polite"></span>
-          <button type="submit">Добавить сниппет</button>
+          <button type="button" id="cancelSnippetEdit" hidden>Отмена</button>
+          <button type="submit" id="saveSnippet">Добавить сниппет</button>
         </div>
       </form>
       <div class="snippet-editor-list" id="snippetEditorList"></div>
@@ -2869,6 +2865,7 @@
     let activeTabId = null;
     let viewMode = 'tabs'; // 'tabs' or 'split'
     let preferences = readPreferences();
+    let editingSnippetId = null;
     let persistPreferencesTimer = null;
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "", nativeUrl: "", fallbackUrl: "", backend: "" };
@@ -3916,21 +3913,22 @@
         label.title = snippet.content;
         const actions = document.createElement("div");
         actions.className = "snippet-editor-item-actions";
-        const renameButton = document.createElement("button");
-        renameButton.type = "button";
-        renameButton.textContent = "Переименовать";
-        renameButton.onclick = () => beginSnippetRename(row, snippet);
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.textContent = "Редактировать";
+        editButton.onclick = () => beginSnippetEdit(snippet);
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.textContent = "Удалить";
         removeButton.onclick = () => {
+          if (editingSnippetId === snippet.id) resetSnippetEditor();
           preferences.snippets = preferences.snippets.filter(item => item.id !== snippet.id);
           savePreferences();
           renderSnippetsMenu();
           renderSnippetEditorList();
           snippetEditorStatus.textContent = "Сниппет удалён";
         };
-        actions.append(renameButton, removeButton);
+        actions.append(editButton, removeButton);
         row.append(label, actions);
         snippetEditorList.appendChild(row);
       });
@@ -3942,66 +3940,35 @@
       }
     }
 
-    function beginSnippetRename(row, snippet) {
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "snippet-rename-input";
-      input.maxLength = 80;
-      input.required = true;
-      input.autocomplete = "off";
-      input.value = snippet.name;
-      input.setAttribute("aria-label", `Новое название для ${snippet.name}`);
+    function resetSnippetEditor() {
+      editingSnippetId = null;
+      snippetEditorForm.reset();
+      document.getElementById("saveSnippet").textContent = "Добавить сниппет";
+      document.getElementById("cancelSnippetEdit").hidden = true;
+      snippetEditorStatus.textContent = "";
+    }
 
-      const actions = document.createElement("div");
-      actions.className = "snippet-editor-item-actions";
-      const saveButton = document.createElement("button");
-      saveButton.type = "button";
-      saveButton.textContent = "Сохранить";
-      const cancelButton = document.createElement("button");
-      cancelButton.type = "button";
-      cancelButton.textContent = "Отмена";
-
-      const saveRename = () => {
-        const name = input.value.trim();
-        if (!name) {
-          input.focus();
-          return;
-        }
-        snippet.name = name;
-        savePreferences();
-        renderSnippetsMenu();
-        renderSnippetEditorList();
-        snippetEditorStatus.textContent = "Сниппет переименован";
-      };
-      saveButton.onclick = saveRename;
-      cancelButton.onclick = renderSnippetEditorList;
-      input.onkeydown = event => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          saveRename();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          renderSnippetEditorList();
-        }
-      };
-
-      actions.append(saveButton, cancelButton);
-      row.replaceChildren(input, actions);
-      input.focus();
-      input.select();
+    function beginSnippetEdit(snippet) {
+      editingSnippetId = snippet.id;
+      snippetNameInput.value = snippet.name;
+      snippetContentInput.value = snippet.content;
+      document.getElementById("saveSnippet").textContent = "Сохранить изменения";
+      document.getElementById("cancelSnippetEdit").hidden = false;
+      snippetEditorStatus.textContent = `Редактирование: ${snippet.name}`;
+      snippetNameInput.focus();
     }
 
     function openSnippetEditor() {
       closeAppsMenu();
+      resetSnippetEditor();
       renderSnippetEditorList();
-      snippetEditorStatus.textContent = "";
       if (!snippetEditorDialog.open) snippetEditorDialog.showModal();
       setTimeout(() => snippetNameInput.focus(), 0);
     }
 
     function closeSnippetEditor() {
       if (snippetEditorDialog?.open) snippetEditorDialog.close();
-      snippetEditorForm?.reset();
+      resetSnippetEditor();
     }
 
     function bindAppsMenu() {
@@ -4070,6 +4037,11 @@
       touchMenuMedia.addEventListener?.("change", closeAllMenus);
 
       document.getElementById("closeSnippetEditor").onclick = closeSnippetEditor;
+      snippetEditorDialog.addEventListener("close", resetSnippetEditor);
+      document.getElementById("cancelSnippetEdit").onclick = () => {
+        resetSnippetEditor();
+        snippetNameInput.focus();
+      };
       snippetEditorDialog.addEventListener("click", event => {
         if (event.target === snippetEditorDialog) closeSnippetEditor();
       });
@@ -4078,13 +4050,21 @@
         const name = snippetNameInput.value.trim();
         const content = snippetContentInput.value;
         if (!name || !content.trim()) return;
-        preferences.snippets.push({ id: createId(), name, content });
-        preferences.snippets = preferences.snippets.slice(-50);
+        const editing = editingSnippetId !== null;
+        if (editing) {
+          const snippet = preferences.snippets.find(item => item.id === editingSnippetId);
+          if (!snippet) return;
+          snippet.name = name;
+          snippet.content = content;
+        } else {
+          preferences.snippets.push({ id: createId(), name, content });
+          preferences.snippets = preferences.snippets.slice(-50);
+        }
         savePreferences();
         renderSnippetsMenu();
         renderSnippetEditorList();
-        snippetEditorForm.reset();
-        snippetEditorStatus.textContent = "Сниппет добавлен";
+        resetSnippetEditor();
+        snippetEditorStatus.textContent = editing ? "Изменения сохранены" : "Сниппет добавлен";
         snippetNameInput.focus();
       };
       renderSnippetsMenu();
