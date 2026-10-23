@@ -127,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        if self.close_connection:
+            self.send_header("Connection", "close")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -284,7 +286,10 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeError, json.JSONDecodeError):
                 return self.reply(400, "Invalid payload")
             return archive_cleanup.api_post(self,path,payload,ROOT)
-        if path == "/api/recording-mode":
+        if path in ("/api/recording-mode", "/api/recovery"):
+            # Rejected requests may still have unread bodies. Do not let a
+            # proxy reuse that connection and parse the body as another method.
+            self.close_connection = True
             if not self.authorized():
                 return self.reply(401, "Login required")
             # A browser session must only change modes from our own site.
@@ -300,6 +305,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not 1 <= length <= 256:
                     return self.reply(413, "Invalid payload")
                 payload = json.loads(self.rfile.read(length))
+                if path == "/api/recovery":
+                    if not isinstance(payload,dict) or payload:
+                        return self.reply(400, "Expected empty object")
+                    token,created=recording_settings.request_recovery()
+                    if created:
+                        live_relay.hub.reset()
+                    return self.json_reply({"recovery_id":token,"capture":recording_settings.status()})
                 requested = payload["mode"]
                 if not isinstance(requested,str) or requested not in recording_settings.VALID:
                     return self.reply(400, "Unknown recording mode")
@@ -411,7 +423,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(403, "Invalid client key")
             active = query.get("active", ["starting"])[0]
             speech = query.get("speech", ["0"])[0] == "1"
-            recording_settings.heartbeat(active,speech)
+            recording_settings.heartbeat(active,speech,query.get("recovery_ack",[""])[0])
             return self.json_reply(recording_settings.status())
         if path == "/" and not self.authorized():
             return self.login_page()

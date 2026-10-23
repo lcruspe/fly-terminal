@@ -39,6 +39,17 @@ class LiveHub:
                 self.active = False
                 self.lock.notify_all()
 
+    def reset(self):
+        """Drop stale audio and disconnect listeners until a fresh source arrives."""
+        with self.lock:
+            self.generation += 1
+            self.active = False
+            self.history.clear()
+            self.total = 0
+            self.source_session = None
+            self.source_sequence = -1
+            self.lock.notify_all()
+
     def publish(self, generation, chunk):
         if not chunk or len(chunk) > 65536:
             return False

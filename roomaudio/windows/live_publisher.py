@@ -11,7 +11,7 @@ import secrets
 import subprocess
 import threading
 import time
-from urllib.parse import urlsplit
+from client_transport import ClientTransport
 
 
 class LivePublisher:
@@ -77,10 +77,7 @@ class LivePublisher:
                 pass
 
     def _loop(self):
-        target = urlsplit(self.config["server"].rstrip("/") + "/ingest/live")
-        if target.scheme not in ("http", "https") or not target.hostname:
-            logging.error("Invalid RoomAudio live endpoint")
-            return
+        transport = ClientTransport(self.config)
         delay = 1.0
         while not self.stop_event.is_set():
             cmd = [self.config["ffmpeg_path"], "-hide_banner", "-nostdin",
@@ -88,7 +85,6 @@ class LivePublisher:
                    "-ac", "1", "-i", "pipe:0", "-vn", "-c:a", "libmp3lame",
                    "-b:a", "96k", "-f", "mp3", "pipe:1"]
             proc = None
-            connection = None
             writer = None
             try:
                 proc = subprocess.Popen(
@@ -99,11 +95,6 @@ class LivePublisher:
                 writer = threading.Thread(target=self._write_pcm, args=(proc,),
                                           name="roomaudio-live-encoder", daemon=True)
                 writer.start()
-                connection_cls = (http.client.HTTPSConnection
-                                  if target.scheme == "https"
-                                  else http.client.HTTPConnection)
-                connection = connection_cls(target.hostname, target.port, timeout=8)
-                path = target.path or "/ingest/live"
                 session = secrets.token_hex(16)
                 sequence = 0
                 while not self.stop_event.is_set():
@@ -112,16 +103,16 @@ class LivePublisher:
                     block = proc.stdout.read(8192)
                     if not block:
                         raise OSError("Live encoder exited")
-                    connection.request(
-                        "POST", path, body=block,
+                    response = transport.open(
+                        "/ingest/live", method="POST", data=block, timeout=4,
                         headers={"Content-Type": "audio/mpeg",
                                  "X-Ingest-Key": self.config["ingest_key"],
                                  "X-Live-Stream": session,
                                  "X-Live-Sequence": str(sequence)})
-                    response = connection.getresponse()
-                    response.read()
-                    if response.status != 200:
-                        raise OSError("Live upload HTTP %s" % response.status)
+                    with response:
+                        response.read()
+                        if response.status != 200:
+                            raise OSError("Live upload HTTP %s" % response.status)
                     sequence += 1
                 delay = 1.0
             except (OSError, http.client.HTTPException) as error:
@@ -129,11 +120,6 @@ class LivePublisher:
                     logging.warning("Live MP3 upload reconnect: %s", error)
             finally:
                 self._terminate_encoder()
-                if connection:
-                    try:
-                        connection.close()
-                    except OSError:
-                        pass
                 if writer:
                     writer.join(timeout=2)
                 if proc:

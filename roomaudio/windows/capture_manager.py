@@ -6,15 +6,11 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlencode
-from urllib.request import Request, build_opener, ProxyHandler
-
-# Direct LAN traffic must bypass machine-level HTTP_PROXY / VPN proxy.
-# Proxies may return HTTP 503 for local .local hostnames.
-DIRECT_HTTP = build_opener(ProxyHandler({}))
+from client_transport import ClientTransport
 
 ROOT=Path(__file__).resolve().parent
 CONF=json.loads((ROOT/"client.json").read_text(encoding="utf-8-sig"))
-SERVER=CONF["server"].rstrip("/")
+TRANSPORT=ClientTransport(CONF)
 PYTHON=sys.executable
 LOG=ROOT/"capture-manager.log"
 logging.basicConfig(filename=str(LOG),level=logging.INFO,
@@ -28,17 +24,17 @@ class Manager:
         self.last_ok=0.0
         self.last_start=0.0
         self.child_output=None
+        self.recovery_id=None
 
     def poll(self):
-        uri=SERVER+"/client/recording-mode?"+urlencode({"active":self.active})
-        req=Request(uri,headers={"X-Ingest-Key":CONF["ingest_key"]})
-        with DIRECT_HTTP.open(req,timeout=6) as response:
+        uri="/client/recording-mode?"+urlencode({"active":self.active, "recovery_ack":self.recovery_id or ""})
+        with TRANSPORT.open(uri,headers={"X-Ingest-Key":CONF["ingest_key"]},timeout=4) as response:
             doc=json.load(response)
         selected=doc.get("mode")
         if selected not in VALID:
             raise ValueError("Unknown mode from server")
         self.last_ok=time.monotonic()
-        return selected
+        return selected, doc.get("recovery_id")
 
     def stop(self):
         proc=self.proc
@@ -78,9 +74,10 @@ class Manager:
         print("RoomAudio capture manager online",flush=True)
         while True:
             try:
-                requested=self.poll()
-                if requested!=self.active:
+                requested,recovery_id=self.poll()
+                if requested!=self.active or recovery_id!=self.recovery_id:
                     self.start(requested)
+                    self.recovery_id=recovery_id
                 elif self.proc is not None and self.proc.poll() is not None:
                     self.stop()
                     self.active="starting"

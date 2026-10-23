@@ -180,7 +180,7 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
 </div>
 </details></section>
 <section id="texts-view" hidden><div class="textcolumns"><div class="card"><div class="sectionhead"><h2>Все расшифровки периода</h2><span class="pill" id="textCount">0 фраз</span></div><p class="hint" id="textRange">Используется интервал, выбранный в архиве.</p><input type="search" id="search" placeholder="Поиск по словам и фразам…" style="margin:15px 0 12px"><div id="textList" class="transcripts"><div class="empty">Загрузка…</div></div><button class="more" id="moreText" hidden>Показать ещё</button></div><div class="stack"><div class="card"><h2>Экспорт расшифровки</h2><p class="hint">TXT с временными метками или SRT для видеоплееров. Выгружается только выбранный интервал.</p><div class="export"><button id="copy2" class="btn">⧉ Копировать</button><button id="txt2" class="btn">↓ TXT</button><button id="srt2" class="btn">↓ SRT</button></div></div><div class="card"><h2>Whisper large-v3-turbo</h2><p class="hint">Текст создаётся локально на Mac mini. Тихая речь и фоновый шум могут приводить к ошибкам или ложным фразам.</p><button id="backArchive" class="btn primary">К архиву →</button></div></div></div></section>
-<section id="live-view" hidden><div class="card livebox"><p class="eyebrow">Mate → Mac mini</p><h2>Прямой эфир</h2><p>Непрерывное кодирование без 15-секундных стыков. Работает и при записи архива только по голосу.</p><div class="export"><button id="mp3" class="btn primary">▶ Бесшовный эфир</button><button id="hls" class="btn">HLS (резервный архивный)</button><button id="stopLive" class="btn">■ Остановить</button></div><audio id="liveAudio" controls playsinline preload="none"></audio><p id="liveMsg" class="hint">Нажмите кнопку запуска.</p></div></section>
+<section id="live-view" hidden><div class="card livebox"><p class="eyebrow">Mate → Mac mini</p><h2>Прямой эфир</h2><p>Непрерывное кодирование без 15-секундных стыков. Работает и при записи архива только по голосу.</p><div class="export"><button id="mp3" class="btn primary">▶ Бесшовный эфир</button><button id="hls" class="btn">HLS (резервный архивный)</button><button id="stopLive" class="btn">■ Остановить</button><button type="button" id="recoverLive" class="btn">↻ Восстановить тракт</button></div><audio id="liveAudio" controls playsinline preload="none"></audio><p id="recoveryMsg" class="hint" role="status" aria-live="polite"></p><p id="liveMsg" class="hint">Нажмите кнопку запуска.</p></div></section>
 </div>
 <div class="player"><div><strong id="playTitle">Выберите запись</strong><small id="playDescription">Отдельный фрагмент или весь период</small></div><div class="transport"><button id="minus15" title="Назад 15 секунд">↶</button><button id="play" class="big" title="Воспроизведение">▶</button><button id="plus15" title="Вперёд 15 секунд">↷</button><button id="nextVoice" title="Пропустить тишину: следующая речь" aria-label="Следующая речь">⏭</button></div><div class="seekline"><span id="current">00:00</span><input type="range" id="seek" min="0" max="1000" value="0"><span id="total">00:00</span><select id="speed" title="Скорость"><option value=".75">0.75×</option><option selected value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div><audio id="audio" playsinline preload="metadata" hidden></audio></div>
 <div class="toast" id="toast" role="status"></div>
@@ -199,7 +199,7 @@ const bytes=n=>n>=1e9?(n/1e9).toFixed(2)+' ГБ':n>=1e6?(n/1e6).toFixed(1)+' М�
 const params=()=>{let p=new URLSearchParams();p.set('start',local(state.start));p.set('end',local(state.end));return p.toString()};
 const periodPath=()=>'/period/'+stamp(state.start)+'/'+stamp(state.end)+'.mp3';
 function notice(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3800)}
-async function api(path,wantBlob=false){const r=await fetch(PFX+path,{credentials:'same-origin',cache:'no-store'});if(!r.ok){if(r.status===401)notice('Сессия истекла — обновите страницу для входа');throw Error('HTTP '+r.status)}return wantBlob?r.blob():r.json()}
+async function api(path,wantBlob=false,timeout=0){const r=await fetch(PFX+path,{signal:timeout?AbortSignal.timeout(timeout):undefined,credentials:'same-origin',cache:'no-store'});if(!r.ok){if(r.status===401)notice('Сессия истекла — обновите страницу для входа');throw Error('HTTP '+r.status)}return wantBlob?r.blob():r.json()}
 async function media(path){const c=grants.get(path);if(c&&c.until>Date.now()+90000)return c.url;const d=await api('/api/media-token?path='+encodeURIComponent(path));const url=PFX+path+'?mt='+encodeURIComponent(d.token);grants.set(path,{url,until:Date.now()+(d.expires_in||7200)*1000});return url}
 function switchTab(which){for(let key of ['archive','texts','live'])$(key+'-view').hidden=key!==which;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===which));$('title').textContent=which==='archive'?'Аудиозаписи':which==='texts'?'Текстовый архив':'Прямой эфир';$('subtitle').textContent=which==='archive'?'Прослушивание, поиск речи и расшифровка в одном месте':which==='texts'?'Поиск по фразам, переход в звук и экспорт за период':'Звук с ноутбука в защищённом плеере';if(which==='archive')setTimeout(drawTimeline,40);window.scrollTo(0,0)}
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('toTexts').onclick=()=>switchTab('texts');$('backArchive').onclick=()=>switchTab('archive');
@@ -428,6 +428,38 @@ $('liveAudio').addEventListener('error',reconnectLive);
 $('mp3').onclick=()=>live('/live.mp3');
 $('hls').onclick=()=>live('/live.m3u8');
 $('stopLive').onclick=stopLive;
+async function recoverLivePipeline(){
+ const button=$('recoverLive'),msg=$('recoveryMsg');
+ button.disabled=true;
+ const desired=liveDesired;
+ msg.textContent='Отправляем команду восстановления на Mate…';
+ try{
+  const response=await fetch(PFX+'/api/recovery',{
+   method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(12000)
+  });
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const request=await response.json(),deadline=Date.now()+60000;
+  while(Date.now()<deadline){
+   const [capture,stream]=await Promise.all([api('/api/recording-mode',false,8000),api('/api/live/status',false,8000)]);
+   if(capture.recovery_id!==request.recovery_id){msg.textContent='Запущено новое восстановление из другой вкладки.';return}
+   const confirmed=capture.client_connected&&capture.recovery_ack===request.recovery_id&&capture.active_mode===capture.mode;
+   if(confirmed&&capture.mode==='off'){
+    msg.textContent='Mate подтвердил восстановление. Запись остаётся выключенной.';return;
+   }
+   if(confirmed&&stream.online){
+    msg.textContent='Тракт восстановлен: Mate подтвердил захват, свежий поток поступает.';
+    if(desired&&liveDesired===desired)await live(desired);
+    status();captureStatus();return;
+   }
+   msg.textContent=!capture.client_connected?'Mate недоступен. Команда сохранена, ожидаем подключения…':!confirmed?'Mate подключён. Перезапускаем захват и передачу…':'Захват перезапущен. Ожидаем свежий аудиопоток…';
+   await new Promise(resolve=>setTimeout(resolve,2000));
+  }
+  msg.textContent='Восстановление пока не подтверждено. Проверьте питание и сеть Mate; команда сохранена и будет выполнена при подключении.';
+ }catch(e){msg.textContent='Не удалось проверить восстановление. Проверьте связь с сервером и повторите попытку.'}
+ finally{button.disabled=false}
+}
+$('recoverLive').onclick=recoverLivePipeline;
+
 async function status(){try{let s=await api('/api/status');const cap=s.capture||{};const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
 
 // Remote recording configuration. "Requested" and "applied" state are never conflated.

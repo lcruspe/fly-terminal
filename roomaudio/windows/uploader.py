@@ -8,16 +8,13 @@ import os
 import sys
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, build_opener, ProxyHandler
-
-# A machine-wide proxy must never intercept direct RoomAudio LAN uploads.
-DIRECT_HTTP = build_opener(ProxyHandler({}))
+from client_transport import ClientTransport
 from speech_activity import detect_file, text_ranges
 
 HOME = Path(__file__).resolve().parent
 CONF = json.loads((HOME / "client.json").read_text(encoding="utf-8-sig"))
 BUFFER = Path(CONF["buffer"])
-SERVER = CONF["server"].rstrip("/")
+TRANSPORT = ClientTransport(CONF)
 KEY = CONF["ingest_key"]
 BUFFER.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -48,17 +45,17 @@ def once():
             after = p.stat()
             if (after.st_size, after.st_mtime_ns) != before:
                 continue
-            req = Request(
-                SERVER + "/ingest/" + p.name,
+            response = TRANSPORT.open(
+                "/ingest/" + p.name,
                 data=data,
                 headers={
                     "X-Ingest-Key": KEY,
                     "X-SHA256": hashlib.sha256(data).hexdigest(),
                     "Content-Type": "audio/mpeg",
                     "X-Speech-Ranges": voice_ranges,
-                }, method="POST"
+                }, method="POST", timeout=15
             )
-            with DIRECT_HTTP.open(req, timeout=15) as response:
+            with response:
                 status = response.status
                 response.read()
             if status not in (200, 201):
