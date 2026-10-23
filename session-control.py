@@ -24,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 from urllib.request import Request, urlopen
+import happ_desktop
 
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -105,6 +106,12 @@ HAPP_SUBSCRIPTION_REFRESH_CACHE_LOCK = threading.Lock()
 HAPP_AX_SOURCE = REPO_ROOT / "macos" / "happ-ax.swift"
 HAPP_AX_BINARY = Path.home() / "Library/Caches/FlyTerminal/happ-ax"
 HAPP_AX_BUILD_LOCK = threading.Lock()
+
+
+def happ_ui_catalog():
+    if happ_desktop.available():
+        return happ_desktop.catalog()
+    return happ_accessibility_catalog()
 
 
 class HappAXError(Exception):
@@ -219,6 +226,12 @@ TOOL_ERROR_MESSAGES = {
     "ui_preferences_write_failed": "Не удалось сохранить настройки интерфейса.",
     "reconnect_already_running": "Переподключение Happ уже выполняется.",
     "happ_service_unavailable": "Системная служба Happ недоступна. Убедитесь, что Happ Plus установлен и запущен.",
+    "happ_desktop_unsupported_version": "Эта версия Happ Desktop пока не поддерживается для чтения подписок.",
+    "happ_desktop_reader_build_failed": "Не удалось собрать модуль чтения Happ Desktop. Проверьте установку Command Line Tools.",
+    "happ_desktop_read_failed": "Не удалось прочитать базу подписок Happ Desktop. Повторите обновление списка.",
+    "happ_desktop_database_invalid": "Формат базы подписок Happ Desktop не поддерживается.",
+    "happ_desktop_decryption_failed": "Не удалось проверить и расшифровать базу Happ Desktop.",
+    "happ_desktop_control_unavailable": "Для подключения или переподключения выберите сервер в Happ Desktop.",
     "happ_disconnect_failed": "Не удалось отключить текущее VPN-соединение Happ.",
     "happ_disconnect_timeout": "Happ не успел отключить VPN-соединение за отведённое время.",
     "happ_connect_failed": "Не удалось запустить VPN-соединение Happ.",
@@ -2393,6 +2406,10 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/vpn/happ/status":
+            if happ_desktop.available():
+                send_json(self, 200, {"ok": True, "service": "Happ Desktop", "state": "Управляется в Happ Desktop",
+                                      "canReconnect": False})
+                return
             state, error = happ_vpn_status()
             payload = {
                 "ok": not error,
@@ -2413,8 +2430,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
 
         if urlsplit(self.path).path in {"/api/vpn/happ/locations", "/api/vpn/happ/subscriptions"}:
             try:
-                catalog = happ_accessibility_catalog()
-            except HappAXError as exc:
+                catalog = happ_ui_catalog()
+            except (HappAXError, happ_desktop.HappDesktopError) as exc:
                 send_json(self, 503, {"ok": False, "error": str(exc)})
                 return
             public_subscriptions = [
@@ -2436,6 +2453,11 @@ class SessionControlHandler(BaseHTTPRequestHandler):
                 "currentLocationId": catalog["currentLocationId"],
                 "subscriptions": public_subscriptions,
                 "configured": bool(public_subscriptions),
+                "source": catalog.get("source", "happ-plus"),
+                "canSwitch": catalog.get("canSwitch", True),
+                "canReconnect": catalog.get("canReconnect", True),
+                "selectionLabel": catalog.get("selectionLabel", "Сейчас"),
+                "notice": catalog.get("notice", ""),
             })
             return
 
@@ -3216,6 +3238,9 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         send_json(self, 202, {"ok": True, "state": "running", "pid": process.pid, "summary": "Обновление запущено"})
 
     def _handle_happ_reconnect(self):
+        if happ_desktop.available():
+            send_json(self, 409, {"ok": False, "error": "happ_desktop_control_unavailable"})
+            return
         if not HAPP_RECONNECT_LOCK.acquire(blocking=False):
             send_json(self, 409, {"ok": False, "error": "reconnect_already_running"})
             return
@@ -3285,6 +3310,9 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             HAPP_RECONNECT_LOCK.release()
 
     def _handle_happ_location(self):
+        if happ_desktop.available():
+            send_json(self, 409, {"ok": False, "error": "happ_desktop_control_unavailable"})
+            return
         payload, error = self._read_json_body()
         if error:
             send_json(self, 400, {"ok": False, "error": error})

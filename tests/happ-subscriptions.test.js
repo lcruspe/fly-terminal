@@ -8,15 +8,15 @@ function setup(fetch) {
   function select() {
     return { value: '', disabled: false, options: [], set innerHTML(value) { this.options = []; this.value = ''; }, appendChild(option) { this.options.push(option); } };
   }
-  const subscription = select(), location = select(), button = {}, status = {};
+  const subscription = select(), location = select(), button = {}, status = {}, notice = {}, reconnect = {};
   const context = vm.createContext({ happSubscriptionSelect: subscription, happLocationSelect: location,
-    refreshHappSubscriptionsBtn: button, happLocationStatus: status, localApiFetch: fetch,
+    refreshHappSubscriptionsBtn: button, happLocationStatus: status, happCatalogNotice: notice, reconnectHappBtn: reconnect, localApiFetch: fetch,
     Option: function(text, value) { this.text = text; this.value = value; } });
   vm.runInContext(`let happSubscriptionsLoading = false; let happSubscriptions = [];
     let happCatalogState = {};
-    ${source.slice(source.indexOf('    function renderHappLocationOptions('), source.indexOf('    function handleHappSubscriptionChange('))}
-    this.load = loadHappSubscriptions;`, context);
-  return { context, subscription, location, button, status };
+    ${source.slice(source.indexOf('    function renderHappLocationOptions('), source.indexOf('    async function refreshHappStatus('))}
+    this.load = loadHappSubscriptions; this.switchLocation = switchHappLocation;`, context);
+  return { context, subscription, location, button, status, notice, reconnect };
 }
 const payload = { ok: true, currentSubscriptionId: 'a', currentLocationId: 'a1',
   subscriptions: [ { id: 'a', label: 'A', locations: [{ id: 'a1', label: 'DE' }] },
@@ -58,4 +58,19 @@ test('concurrent refresh clicks issue only one request', async () => {
   assert.equal(calls, 1);
   resolve(response); await first;
   assert.equal(ui.button.disabled, false);
+});
+
+
+test('Desktop catalogue remains browsable while legacy VPN actions are disabled', async () => {
+  let calls = 0;
+  const desktopPayload = { ...payload, canSwitch: false, canReconnect: false,
+    notice: 'Для подключения выберите сервер в Happ Desktop.' };
+  const ui = setup(async () => { calls++; return { ok: true, json: async () => desktopPayload }; });
+  await ui.context.load(true);
+  assert.equal(ui.location.disabled, false);
+  assert.equal(ui.reconnect.disabled, true);
+  assert.match(ui.notice.textContent, /Happ Desktop/);
+  ui.location.value = 'a1';
+  await ui.context.switchLocation();
+  assert.equal(calls, 1);
 });
