@@ -1,4 +1,4 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#101729"><meta name="apple-mobile-web-app-title" content="RoomAudio"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2218%22%20fill%3D%22%235473ca%22/%3E%3Cpath%20d%3D%22M10%2032h8m5-12v24m7-32v40m7-31v22m7-12v13m7-13h5%22%20stroke%3D%22%23fff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E"><title>RoomAudio — Аудиозаписи</title>
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#101729"><meta name="apple-mobile-web-app-title" content="RoomAudio"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2218%22%20fill%3D%22%235473ca%22/%3E%3Cpath%20d%3D%22M10%2032h8m5-12v24m7-32v40m7-31v22m7-12v13m7-13h5%22%20stroke%3D%22%23fff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E"><title>RoomAudio — Эфир</title>
 <style>
 :root{color-scheme:dark;--bg:#0d1422;--card:#162234;--field:#1c2b40;--stroke:#2d4059;--fg:#ebf3fd;--muted:#9baec6;--accent:#93adff;--blue:#567ae6;--green:#5fdbad}
 [data-theme=light]{color-scheme:light;--bg:#f2f5fa;--card:#fff;--field:#edf2f8;--stroke:#d4dfed;--fg:#1a2b43;--muted:#5b708b;--accent:#335bce;--blue:#4269d7;--green:#218668}
@@ -108,48 +108,40 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
 
 @media(max-width:780px){.signout{display:inline-flex!important;border:1px solid var(--stroke);border-radius:10px;min-height:37px;align-items:center;padding:7px 9px;background:var(--field);font-size:11px}.head-right{gap:6px}}
 @media(max-width:470px){.brand{min-width:0}.logo{width:36px;height:36px}.head-right .signout{padding:7px 8px}.head-right .iconbtn{height:36px;width:36px}}
+
+/* Room Audio: listening first, one archive workspace. */
+.wrap{max-width:1180px;padding-bottom:145px}header{margin-bottom:28px}.brand small{display:none}.head-right .status{display:none}
+.card{box-shadow:none;border-radius:14px}.lead{margin-bottom:24px}h1{font-size:34px}.livebox{max-width:800px;padding:28px}.livebox h2{font-size:24px}.livebox .primary{padding:14px 32px;font-size:16px}.livebox #sourceMessage{font-size:15px;line-height:1.6;max-width:650px}.livebox audio{margin-top:20px}.livebox #lastSeen{font-size:12px}.livebox .export{margin-top:22px}.livebox .eyebrow{margin-bottom:6px}
+#live-view{margin-bottom:32px}#captureSummary{margin:14px 0}.archive-tools{background:transparent;border-radius:12px;margin:12px 0}.archive-tools>summary{padding:16px;display:list-item;margin-left:20px}.archive-tools>summary small{margin-left:12px}.tools-content{padding:20px}.modebuttons{margin-top:16px}.pipeline{margin:0 0 24px}.pipeline>div{border:0;background:var(--field)}
+.archive-range{border-bottom:1px solid var(--stroke);padding-bottom:22px;margin-bottom:22px}.archive-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);align-items:start}.records{max-height:58vh;margin-top:12px}.transcripts{max-height:58vh}.speechfilter{margin-bottom:8px}.export-menu{position:relative;align-self:flex-end}.export-menu>summary{list-style:revert;cursor:pointer;min-height:41px;display:list-item;margin-left:15px}.export-menu[open]{flex-basis:100%}.export-menu[open]>summary{width:fit-content}.export-menu .export{margin-bottom:8px}.stats{border-top:1px solid var(--stroke);margin:24px 0 0;padding-top:15px}.stat{padding:8px}.stat strong{font-size:17px}.phrase:focus-visible,summary:focus-visible,canvas:focus-visible,input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.phrase{border-radius:4px}.modebuttons button{min-height:44px}.hint:empty{display:none}
+@media(max-width:780px){.wrap{padding:0 16px 170px}header{margin-bottom:22px}.archive-workspace{grid-template-columns:1fr}.livebox{padding:22px}.livebox .export .btn{min-height:44px}.head-right{gap:8px}.archive-tools>summary small{display:block;margin:5px 0 0}.records,.transcripts{max-height:45vh}.range{gap:12px}.pipeline{grid-template-columns:1fr}.pipeline span{display:block}.livebox h2{font-size:22px}h1{font-size:30px}}
+@media(max-width:470px){.wrap{padding:0 12px 180px}.brand strong{font-size:18px}.logo{width:32px;height:32px}.range{display:flex}.control{min-width:100%;width:100%}.range .primary{width:100%}.export-menu{width:100%}.export-menu>summary{margin-left:16px}.sectionhead select{max-width:100%}.tools-content{padding:15px}.livebox .primary{width:100%}.livebox .export{display:flex}.livebox .export .btn{flex:1}.livebox .row{align-items:flex-start}.livebox .pill{white-space:normal}.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head><body><div class="wrap">
 <header><div class="brand"><div class="logo">≋</div><div><strong>RoomAudio</strong><small>Audio Intelligence</small></div></div>
-<nav><button data-tab="archive" class="active">Архив</button><button data-tab="texts">Расшифровки</button><button data-tab="live">Прямой эфир</button></nav>
+<nav aria-label="Основные разделы"><button data-tab="live" class="active" aria-pressed="true">Эфир</button><button data-tab="archive" aria-pressed="false">Архив</button></nav>
 <div class="head-right"><span class="status"><i class="dot" id="dot"></i><span id="online">Проверка</span></span><button class="iconbtn" id="theme" aria-label="Переключить тему">◐</button><form action="/roomaudio/logout" method="post"><button class="signout">Выйти</button></form></div></header>
-<p class="eyebrow" id="eyebrow">Медиатека · Mate</p><h1 id="title">Аудиозаписи</h1><p class="lead" id="subtitle">Прослушивание, поиск речи и расшифровка в одном месте.</p>
-<div class="pipeline" id="pipeline" aria-label="Состояние обработки">
- <div><small>01 · Микрофон</small><strong id="pipelineCapture">Проверяем</strong><span>Ноутбук Mate</span></div>
- <div><small>02 · Передача</small><strong id="pipelineTransfer">Проверяем</strong><span>Mac mini · архив</span></div>
- <div><small>03 · Расшифровка</small><strong id="pipelineAsr">Проверяем</strong><span>Whisper · локально</span></div>
+<p class="eyebrow" id="eyebrow">Mate · Room Audio</p><h1 id="title">Прямой эфир</h1><p class="lead" id="subtitle">Слушайте происходящее сейчас.</p>
+<section id="live-view" aria-label="Прямой эфир">
+<div class="livebox card">
+<div class="row"><div><p class="eyebrow">Источник</p><h2>Ноутбук Mate</h2></div><span class="pill" id="liveConnection">Проверяем соединение…</span></div>
+<p id="sourceMessage" role="status">Получаем состояние источника…</p><p class="hint" id="lastSeen">Последняя связь: проверяем…</p>
+<div class="export"><button id="mp3" class="btn primary">Слушать</button><button id="stopLive" class="btn" hidden>Остановить</button><button type="button" id="recoverLive" class="btn" hidden>Восстановить соединение</button></div>
+<audio id="liveAudio" controls playsinline preload="none" hidden aria-label="Плеер прямого эфира"></audio><p id="liveMsg" class="hint" role="status" aria-live="polite">Звук начнётся после нажатия «Слушать».</p><p id="recoveryMsg" class="hint" role="status" aria-live="polite"></p>
 </div>
-<div class="card modepanel" id="recordingPanel">
-<div class="row">
-<div><div class="eyebrow" style="margin-bottom:5px">Захват звука · Mate</div><h2>Режим записи</h2><p class="hint" id="modeStatus">Получаем состояние микрофона…</p></div>
-<div class="modebuttons" role="group" aria-label="Режим захвата">
-<button data-record-mode="continuous" type="button">● Постоянно</button>
-<button data-record-mode="voice" type="button">〰 Только речь</button>
-<button data-record-mode="off" type="button">■ Выключено</button>
-</div>
-</div></div>
-<section id="archive-view">
-<div class="card"><div class="row"><div><div class="label">Быстрый выбор периода</div><div class="preset"><button data-preset="1" class="active">1 час</button><button data-preset="3">3 часа</button><button data-preset="day">Весь день</button><button data-preset="custom">Свой период</button></div></div><div class="gap"><button class="btn" id="prevDay">← День</button><button class="btn" id="nextDay">День →</button><button class="btn" id="refreshArchive">↻ Обновить</button></div></div>
-<div class="range"><div class="control"><label for="from">Начало</label><input type="datetime-local" id="from"></div><div class="control"><label for="to">Конец (не включительно)</label><input type="datetime-local" id="to"></div><button class="btn primary" id="apply">Показать записи →</button></div><p class="hint" id="rangeStatus">Загрузка архива…</p></div>
-
-<div class="stats"><div class="card stat"><span>Длительность</span><strong id="duration">—</strong></div><div class="card stat"><span>Фрагментов</span><strong id="count">—</strong></div><div class="card stat"><span>Фраз текста</span><strong id="phrases">—</strong></div><div class="card stat"><span>Размер архива</span><strong id="size">—</strong></div></div>
-<div class="columns">
-<div class="stack">
-<div class="card"><div class="sectionhead"><h2>Библиотека записей <span id="recordsCount" class="label"></span></h2><div class="gap"><select id="sort"><option value="asc">Сначала старые</option><option value="desc">Сначала новые</option></select><button id="playPeriod" class="btn primary">▶ Весь период</button><button id="nextSpeech" class="btn" title="Перейти к следующей речи">⏭ Следующая речь</button><button id="downloadPeriod" class="btn">↓ MP3</button></div></div><div class="recordviewbar">
- <div class="segmented" role="group" aria-label="Группировка аудио">
-  <button type="button" data-record-view="sessions" class="active" aria-pressed="true">Сеансы</button>
-  <button type="button" data-record-view="segments" aria-pressed="false">По 15 секунд</button>
- </div>
- <label class="speechfilter" for="speechOnly"><input type="checkbox" id="speechOnly"> Только с речью</label>
-</div>
-<div id="records" class="records"><div class="empty">Загрузка записей…</div></div><button class="more" id="more" hidden>Показать ещё 80 записей ↓</button></div>
-<div class="card"><div class="sectionhead"><h2>Временная шкала</h2><span class="label">Выберите участок для прослушивания</span></div><div class="graph"><canvas id="timeline" aria-label="Временная шкала записей"></canvas></div><div class="axis"><span id="ax1">—</span><span id="ax2">—</span><span id="ax3">—</span></div><p class="hint">Синие участки означают наличие аудио. Пропуски остаются видимыми.</p></div>
-
-</div>
-<aside class="stack">
-<div class="card"><div class="sectionhead"><h2>Спектрограмма</h2><span class="pill">Анализ FFT · FFmpeg</span></div><div class="spectro" id="spectro"><img id="specImg" alt="Частотно-временная спектрограмма аудио" hidden><div class="specmessage" id="specMessage">Выберите 15-секундную запись для просмотра спектрограммы</div><div id="specMarker" class="specmarker"></div></div><div class="freq"><span>80 Гц — 7,8 кГц</span><span id="specTime">15 секунд</span></div><button id="downloadSegment" class="btn" style="margin-top:6px" disabled>↓ Скачать этот фрагмент</button><p class="hint">По горизонтали — время, по вертикали — частота. Цвет отображает интенсивность. Нажмите на изображение для перемотки.</p></div>
-<div class="card"><div class="sectionhead"><h2>Расшифровка периода</h2><button class="btn" id="toTexts">Весь текст ↗</button></div><div id="preview" class="transcripts"><div class="empty">Загрузка расшифровки…</div></div><div class="export"><button id="copy" class="btn">⧉ Копировать</button><button id="txt" class="btn">↓ TXT</button><button id="srt" class="btn">↓ SRT</button></div><p class="hint">Нажатие на текст переводит к соответствующему месту записи. Текст может содержать ошибки распознавания.</p></div></aside>
-</div>
+<p class="hint" id="captureSummary">Получаем режим записи…</p>
+</section>
+<section id="archive-view" hidden aria-label="Архив записей">
+<div class="archive-range"><div class="row"><div class="preset"><button data-preset="1" class="active">1 час</button><button data-preset="3">3 часа</button><button data-preset="day">Весь день</button><button data-preset="custom">Свой период</button></div><div class="gap"><button class="btn" id="prevDay" aria-label="Предыдущий день">← День</button><button class="btn" id="nextDay" aria-label="Следующий день">День →</button><button class="btn" id="refreshArchive">Обновить</button></div></div>
+<div class="range"><div class="control"><label for="from">Начало периода</label><input type="datetime-local" id="from"></div><div class="control"><label for="to">Конец периода</label><input type="datetime-local" id="to"></div><button class="btn primary" id="apply">Показать</button></div><p class="hint" id="rangeStatus">Загрузка архива…</p>
+<div class="range"><div class="control"><label for="search">Поиск по тексту выбранного периода</label><input type="search" id="search" placeholder="Слова или фраза…"></div><details class="export-menu"><summary class="btn">Экспорт периода</summary><div class="export"><button id="downloadPeriod" class="btn">Аудио MP3</button><button id="copy" class="btn">Копировать текст</button><button id="txt" class="btn">TXT</button><button id="srt" class="btn">SRT</button></div><p class="hint">Аудио и полный текст выбранного периода, независимо от поиска.</p></details></div></div>
+<div class="columns archive-workspace"><div class="stack"><div class="card"><div class="sectionhead"><h2>Записи <span id="recordsCount" class="label"></span></h2><div class="gap"><select id="sort" aria-label="Порядок записей"><option value="asc">Сначала старые</option><option value="desc">Сначала новые</option></select><button id="playPeriod" class="btn">Слушать весь период</button></div></div><label class="speechfilter" for="speechOnly"><input type="checkbox" id="speechOnly"> Только с речью</label><div id="records" class="records"><div class="empty">Загрузка записей…</div></div><button class="more" id="more" hidden>Показать ещё 80 записей</button></div></div>
+<aside class="stack"><div class="card"><div class="sectionhead"><h2 id="textHeading">Текст периода</h2><button class="btn" id="showPeriodText" hidden>Весь период</button><span class="label" id="textCount">0 фраз</span></div><p class="hint" id="textRange"></p><div id="textList" class="transcripts"><div class="empty">Загрузка…</div></div><button class="more" id="moreText" hidden>Показать ещё</button><p class="hint">Выберите фразу, чтобы слушать с этого места. Текст может содержать ошибки распознавания.</p></div></aside></div>
+<details class="archive-tools" id="analysisTools"><summary>Подробности аудио <small>Шкала, спектрограмма и фрагменты</small></summary><div class="tools-content">
+<div class="recordviewbar"><div class="segmented" role="group" aria-label="Группировка аудио"><button type="button" data-record-view="sessions" class="active" aria-pressed="true">Сеансы</button><button type="button" data-record-view="segments" aria-pressed="false">По 15 секунд</button></div></div>
+<div class="sectionhead"><h2>Временная шкала</h2><span class="label">Клавиши ← → выбирают фрагмент, Enter запускает звук</span></div><div class="graph"><canvas id="timeline" tabindex="0" role="slider" aria-label="Выбор записи на временной шкале" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div><div class="axis"><span id="ax1">—</span><span id="ax2">—</span><span id="ax3">—</span></div><p class="hint">Синие участки — доступное аудио, пропуски — отсутствие записи.</p>
+<h2 style="margin:24px 0 12px">Спектрограмма выбранного фрагмента</h2><div class="spectro" id="spectro"><img id="specImg" alt="Частотно-временная спектрограмма аудио" hidden><div class="specmessage" id="specMessage">Выберите запись</div><div id="specMarker" class="specmarker"></div></div><div class="freq"><span>80 Гц — 7,8 кГц</span><span id="specTime">15 секунд</span></div><button id="downloadSegment" class="btn" disabled>Скачать фрагмент MP3</button><p class="hint">Нажмите на спектрограмму для перемотки. Для управления клавиатурой используйте плеер. Анализ: FFT · FFmpeg.</p>
+<div class="stats"><div class="stat"><span>Длительность</span><strong id="duration">—</strong></div><div class="stat"><span>Фрагментов</span><strong id="count">—</strong></div><div class="stat"><span>Фраз текста</span><strong id="phrases">—</strong></div><div class="stat"><span>Размер</span><strong id="size">—</strong></div></div><p class="hint">Распознавание: Whisper large-v3-turbo, локально на Mac mini.</p></div></details>
 <details class="archive-tools" id="archiveTools"><summary>Очистка и управление архивом <small>Анализ тишины, корзина, восстановление</small></summary>
 <div class="card" id="cleanupCard" style="margin:17px 0 20px">
  <div class="row"><div><h2>Очистка записей без голоса</h2><p class="hint">Аудио анализируется отдельно от Whisper. Сомнительные фрагменты сохраняются.</p></div><span class="pill">Восстановление из корзины</span></div>
@@ -179,10 +171,10 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
  </div>
 </div>
 </details></section>
-<section id="texts-view" hidden><div class="textcolumns"><div class="card"><div class="sectionhead"><h2>Все расшифровки периода</h2><span class="pill" id="textCount">0 фраз</span></div><p class="hint" id="textRange">Используется интервал, выбранный в архиве.</p><input type="search" id="search" placeholder="Поиск по словам и фразам…" style="margin:15px 0 12px"><div id="textList" class="transcripts"><div class="empty">Загрузка…</div></div><button class="more" id="moreText" hidden>Показать ещё</button></div><div class="stack"><div class="card"><h2>Экспорт расшифровки</h2><p class="hint">TXT с временными метками или SRT для видеоплееров. Выгружается только выбранный интервал.</p><div class="export"><button id="copy2" class="btn">⧉ Копировать</button><button id="txt2" class="btn">↓ TXT</button><button id="srt2" class="btn">↓ SRT</button></div></div><div class="card"><h2>Whisper large-v3-turbo</h2><p class="hint">Текст создаётся локально на Mac mini. Тихая речь и фоновый шум могут приводить к ошибкам или ложным фразам.</p><button id="backArchive" class="btn primary">К архиву →</button></div></div></div></section>
-<section id="live-view" hidden><div class="card livebox"><p class="eyebrow">Mate → Mac mini</p><h2>Прямой эфир</h2><p>Непрерывное кодирование без 15-секундных стыков. Работает и при записи архива только по голосу.</p><div class="export"><button id="mp3" class="btn primary">▶ Бесшовный эфир</button><button id="hls" class="btn">HLS (резервный архивный)</button><button id="stopLive" class="btn">■ Остановить</button><button type="button" id="recoverLive" class="btn">↻ Восстановить тракт</button></div><audio id="liveAudio" controls playsinline preload="none"></audio><p id="recoveryMsg" class="hint" role="status" aria-live="polite"></p><p id="liveMsg" class="hint">Нажмите кнопку запуска.</p></div></section>
+<details class="archive-tools" id="sourceSettings"><summary>Настройки источника <small>Режим записи</small></summary><div class="tools-content" id="recordingPanel"><h2>Что сохранять в архив</h2><p class="hint" id="modeStatus">Получаем состояние микрофона…</p><div class="modebuttons" role="group" aria-label="Режим захвата"><button data-record-mode="continuous" type="button">Постоянно</button><button data-record-mode="voice" type="button">Только речь</button><button data-record-mode="off" type="button">Выключено</button></div><p class="hint">«Выключено» отключает микрофон и эфир. В режиме «Только речь» эфир остаётся непрерывным, а архив сохраняет речь.</p></div></details>
+<details class="archive-tools" id="connectionDetails"><summary>Подробности соединения <small>Диагностика и резервный архивный поток</small></summary><div class="tools-content"><div class="pipeline" id="pipeline" aria-label="Состояние обработки"><div><small>Микрофон</small><strong id="pipelineCapture">Проверяем</strong><span>Ноутбук Mate</span></div><div><small>Передача</small><strong id="pipelineTransfer">Проверяем</strong><span>Mac mini · архив</span></div><div><small>Расшифровка</small><strong id="pipelineAsr">Проверяем</strong><span>Whisper · локально</span></div></div><h2>Резервное прослушивание</h2><p class="hint">HLS собирается из свежих архивных фрагментов. Возможны задержка и пропуски тишины: это не непрерывный прямой эфир.</p><button id="hls" class="btn">Слушать архивный поток HLS</button></div></details>
 </div>
-<div class="player"><div><strong id="playTitle">Выберите запись</strong><small id="playDescription">Отдельный фрагмент или весь период</small></div><div class="transport"><button id="minus15" title="Назад 15 секунд">↶</button><button id="play" class="big" title="Воспроизведение">▶</button><button id="plus15" title="Вперёд 15 секунд">↷</button><button id="nextVoice" title="Пропустить тишину: следующая речь" aria-label="Следующая речь">⏭</button></div><div class="seekline"><span id="current">00:00</span><input type="range" id="seek" min="0" max="1000" value="0"><span id="total">00:00</span><select id="speed" title="Скорость"><option value=".75">0.75×</option><option selected value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div><audio id="audio" playsinline preload="metadata" hidden></audio></div>
+<div class="player" id="archivePlayer" hidden role="region" aria-label="Плеер архива"><div><strong id="playTitle">Выберите запись</strong><small id="playDescription">Отдельный фрагмент или весь период</small></div><div class="transport"><button id="minus15" title="Назад 15 секунд">↶</button><button id="play" class="big" title="Воспроизведение">▶</button><button id="plus15" title="Вперёд 15 секунд">↷</button><button id="nextVoice" title="Пропустить тишину: следующая речь" aria-label="Следующая речь">⏭</button></div><div class="seekline"><span id="current">00:00</span><input type="range" id="seek" aria-label="Позиция воспроизведения" min="0" max="1000" value="0"><span id="total">00:00</span><select id="speed" title="Скорость"><option value=".75">0.75×</option><option selected value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div><audio id="audio" playsinline preload="metadata" hidden></audio></div>
 <div class="toast" id="toast" role="status"></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -201,8 +193,24 @@ const periodPath=()=>'/period/'+stamp(state.start)+'/'+stamp(state.end)+'.mp3';
 function notice(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3800)}
 async function api(path,wantBlob=false,timeout=0){const r=await fetch(PFX+path,{signal:timeout?AbortSignal.timeout(timeout):undefined,credentials:'same-origin',cache:'no-store'});if(!r.ok){if(r.status===401)notice('Сессия истекла — обновите страницу для входа');throw Error('HTTP '+r.status)}return wantBlob?r.blob():r.json()}
 async function media(path){const c=grants.get(path);if(c&&c.until>Date.now()+90000)return c.url;const d=await api('/api/media-token?path='+encodeURIComponent(path));const url=PFX+path+'?mt='+encodeURIComponent(d.token);grants.set(path,{url,until:Date.now()+(d.expires_in||7200)*1000});return url}
-function switchTab(which){for(let key of ['archive','texts','live'])$(key+'-view').hidden=key!==which;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===which));$('title').textContent=which==='archive'?'Аудиозаписи':which==='texts'?'Текстовый архив':'Прямой эфир';$('subtitle').textContent=which==='archive'?'Прослушивание, поиск речи и расшифровка в одном месте':which==='texts'?'Поиск по фразам, переход в звук и экспорт за период':'Звук с ноутбука в защищённом плеере';if(which==='archive')setTimeout(drawTimeline,40);window.scrollTo(0,0)}
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('toTexts').onclick=()=>switchTab('texts');$('backArchive').onclick=()=>switchTab('archive');
+function switchTab(which){
+ which=which==='live'?'live':'archive';
+ state.tab=which;
+ for(const key of ['archive','live'])$(key+'-view').hidden=key!==which;
+ $('archivePlayer').hidden=which!=='archive'||!state.playing;
+ document.querySelectorAll('[data-tab]').forEach(b=>{const active=b.dataset.tab===which;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
+ $('title').textContent=which==='archive'?'Архив':'Прямой эфир';
+ $('subtitle').textContent=which==='archive'?'Записи и текст за выбранный период.':'Слушайте происходящее сейчас.';
+ document.title='RoomAudio — '+(which==='live'?'Эфир':'Архив');
+ // Switching context must never leave a hidden player sounding.
+ if(which==='live'){
+  state.playing=null;audio.pause();audio.removeAttribute('src');audio.load();
+ }else stopLive();
+ if(which==='archive')setTimeout(drawTimeline,40);
+ window.scrollTo(0,0);
+}
+ document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+ $('analysisTools').ontoggle=()=>{if($('analysisTools').open){drawTimeline();if(state.selected)spectrum(state.selected)}};
 $('theme').onclick=()=>{document.body.dataset.theme=document.body.dataset.theme==='light'?'dark':'light';try{localStorage.setItem('ra-theme',document.body.dataset.theme)}catch(e){}drawTimeline()};
 try{document.body.dataset.theme=localStorage.getItem('ra-theme')||'dark'}catch(e){document.body.dataset.theme='dark'}
 function setPreset(p){document.querySelectorAll('[data-preset]').forEach(b=>b.classList.toggle('active',b.dataset.preset===p));if(p!=='custom'){let end=state.end||new Date();if(p==='day'){let a=new Date(end);a.setHours(0,0,0,0);state.start=a;state.end=new Date(a.getTime()+86400000)}else{state.start=new Date(end.getTime()-Number(p)*3600000);state.end=end}}$('from').value=local(state.start);$('to').value=local(state.end)}
@@ -233,17 +241,17 @@ async function refreshSpeechMarkers(){
   let result=await api('/api/archive/speech?'+params());
   state.speech=result.items;
   if(recordView.speechOnly)renderRecords();
-  $('nextSpeech').disabled=!state.speech.length;
+
   $('nextVoice').disabled=!state.speech.length;
  }catch(e){}
 }
 $('apply').onclick=()=>{let a=new Date($('from').value),b=new Date($('to').value);if(!isFinite(+a)||!isFinite(+b)||b-a<=0||b-a>86400000){notice('Выберите интервал длительностью не более 24 часов');return}state.start=a;state.end=b;setPreset('custom');load()};
 function primeRows(rows){for(const r of rows){if(!r.token)continue;let path='/segment/'+r.name.slice(0,8)+'/'+r.name;grants.set(path,{url:PFX+path+'?mt='+encodeURIComponent(r.token),until:Date.now()+7200000})}}
-async function load(){if(state.loading)return;state.loading=true;$('apply').disabled=true;$('rangeStatus').textContent='Загрузка записей и текста…';state.records=[];state.offset=0;state.selected=null;state.speech=[];$('downloadSegment').disabled=true;clearSpectrum();
+async function load(){if(state.loading)return;state.loading=true;$('apply').disabled=true;$('rangeStatus').textContent='Загрузка записей и текста…';audio.pause();audio.removeAttribute('src');audio.load();state.playing=null;$('archivePlayer').hidden=true;state.records=[];state.total=0;state.minutes={};state.texts=[];state.offset=0;state.selected=null;state.textWindow=null;state.speech=[];state.textLimit=120;$('downloadSegment').disabled=true;clearSpectrum();
 try{const p=params();const result=await Promise.all([api('/api/archive/records?'+p+'&sort='+state.sort+'&limit=80'),api('/api/archive/text?'+p),api('/api/archive/speech?'+p)]);const rec=result[0],text=result[1];state.speech=result[2].items;state.records=rec.items;primeRows(rec.items);state.offset=rec.items.length;state.total=rec.total;state.minutes=rec.minutes;state.texts=text.items;
-$('duration').textContent=rec.audio_seconds>=3600?(rec.audio_seconds/3600).toFixed(1)+' ч':Math.floor(rec.audio_seconds/60)+' мин';$('count').textContent=rec.total.toLocaleString('ru-RU');$('phrases').textContent=text.count.toLocaleString('ru-RU');$('size').textContent=bytes(rec.total_bytes);$('recordsCount').textContent='· '+rec.total;$('rangeStatus').textContent=day(state.start)+' '+clock(state.start)+' — '+day(state.end)+' '+clock(state.end)+(rec.total?' · найдено '+rec.total:' · записей не найдено');$('more').hidden=state.offset>=state.total;$('playPeriod').disabled=!rec.total;$('nextSpeech').disabled=!state.speech.length;$('nextVoice').disabled=!state.speech.length;
-renderRecords();renderTexts();drawTimeline();if(rec.total)media(periodPath()).catch(()=>{});
-}catch(e){$('rangeStatus').textContent='Ошибка загрузки: '+e.message;notice('Не удалось загрузить архив')}finally{state.loading=false;$('apply').disabled=false}}
+$('duration').textContent=rec.audio_seconds>=3600?(rec.audio_seconds/3600).toFixed(1)+' ч':Math.floor(rec.audio_seconds/60)+' мин';$('count').textContent=rec.total.toLocaleString('ru-RU');$('phrases').textContent=text.count.toLocaleString('ru-RU');$('size').textContent=bytes(rec.total_bytes);$('recordsCount').textContent='· '+rec.total;$('rangeStatus').textContent=day(state.start)+' '+clock(state.start)+' — '+day(state.end)+' '+clock(state.end)+(rec.total?' · найдено '+rec.total:' · записей не найдено');$('more').hidden=state.offset>=state.total;$('playPeriod').disabled=!rec.total;$('nextVoice').disabled=!state.speech.length;
+renderRecords();renderTexts();drawTimeline();updateTimelineA11y();if(rec.total)media(periodPath()).catch(()=>{});
+}catch(e){$('rangeStatus').textContent='Ошибка загрузки: '+e.message;renderRecords();renderTexts();updateTimelineA11y();notice('Не удалось загрузить архив')}finally{state.loading=false;$('apply').disabled=false}}
 const recordView={mode:'sessions',speechOnly:false};
 function sessionGroups(records){
  const rows=[...records].sort((a,b)=>new Date(a.time)-new Date(b.time));
@@ -288,6 +296,7 @@ function renderRecords(){
    node.append(play,meta,size);
    node.onclick=async()=>{
      await selectRecord(first,false);
+     state.textWindow={start:group.start,end:group.end};renderTextList();$('textList').scrollTop=0;
      const path='/period/'+stamp(start)+'/'+stamp(end)+'.mp3';
      await playAudio(path,'session',{time:first.time,label:clock(start).slice(0,5)});
    };
@@ -325,21 +334,52 @@ document.querySelectorAll('[data-record-view]').forEach(button=>button.onclick=(
 });
 $('speechOnly').onchange=()=>{recordView.speechOnly=$('speechOnly').checked;renderRecords()};
 
-$('more').onclick=async()=>{try{const d=await api('/api/archive/records?'+params()+'&sort='+state.sort+'&limit=80&offset='+state.offset);primeRows(d.items);state.records.push(...d.items);state.offset+=d.items.length;renderRecords();$('more').hidden=state.offset>=state.total}catch(e){notice('Не удалось загрузить записи')}};
+$('more').onclick=async()=>{try{const d=await api('/api/archive/records?'+params()+'&sort='+state.sort+'&limit=80&offset='+state.offset);primeRows(d.items);state.records.push(...d.items);state.offset+=d.items.length;renderRecords();$('more').hidden=state.offset>=state.total;updateTimelineA11y()}catch(e){notice('Не удалось загрузить записи')}};
 $('sort').onchange=()=>{state.sort=$('sort').value;load()};
 function drawTimeline(){if(!state.start||!state.end||$('archive-view').hidden)return;const canvas=$('timeline'),w=canvas.clientWidth;if(!w)return;let dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=w*dpr;canvas.height=105*dpr;let c=canvas.getContext('2d');c.scale(dpr,dpr);c.fillStyle='#101d2f';c.fillRect(0,0,w,105);c.strokeStyle='#344963';for(let i=1;i<=3;i++){c.beginPath();c.moveTo(w*i/4,10);c.lineTo(w*i/4,95);c.stroke()}const span=state.end-state.start;for(const [t,count] of Object.entries(state.minutes)){let x=(new Date(t)-state.start)/span*w;if(x<0||x>w)continue;c.fillStyle=count>=3?'#96adff':'#4f75de';c.fillRect(x,13,Math.max(1.6,60000/span*w*.9),79)}$('ax1').textContent=clock(state.start).slice(0,5);$('ax2').textContent=clock(new Date((state.start.getTime()+state.end.getTime())/2)).slice(0,5);$('ax3').textContent=clock(state.end).slice(0,5)}
 window.addEventListener('resize',drawTimeline);
-$('timeline').onclick=e=>{if(!state.records.length)return;let box=$('timeline').getBoundingClientRect(),t=state.start.getTime()+Math.min(1,Math.max(0,(e.clientX-box.left)/box.width))*(state.end-state.start);let closest=state.records.reduce((x,y)=>Math.abs(new Date(y.time)-t)<Math.abs(new Date(x.time)-t)?y:x,state.records[0]);selectRecord(closest,true)};
+$('timeline').onclick=e=>{if(!state.records.length)return;let box=$('timeline').getBoundingClientRect(),t=state.start.getTime()+Math.min(1,Math.max(0,(e.clientX-box.left)/box.width))*(state.end-state.start);let closest=state.records.reduce((x,y)=>Math.abs(new Date(y.time)-t)<Math.abs(new Date(x.time)-t)?y:x,state.records[0]);updateTimelineA11y(closest);selectRecord(closest,true)};
+let timelineIndex=0;
+function updateTimelineA11y(selected){
+ const rows=[...state.records].sort((a,b)=>new Date(a.time)-new Date(b.time));
+ timelineIndex=selected?Math.max(0,rows.findIndex(row=>row.name===selected.name)):0;
+ $('timeline').setAttribute('aria-valuemax',String(Math.max(0,rows.length-1)));
+ $('timeline').setAttribute('aria-valuenow',String(timelineIndex));
+ $('timeline').setAttribute('aria-valuetext',rows.length?clock(rows[timelineIndex].time):'Записей нет');
+}
+$('timeline').onkeydown=e=>{
+ if(!['ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(e.key)||!state.records.length)return;
+ e.preventDefault();
+ const rows=[...state.records].sort((a,b)=>new Date(a.time)-new Date(b.time));
+ if(e.key==='Home')timelineIndex=0;else if(e.key==='End')timelineIndex=rows.length-1;
+ else if(e.key==='ArrowLeft')timelineIndex=Math.max(0,timelineIndex-1);else if(e.key==='ArrowRight')timelineIndex=Math.min(rows.length-1,timelineIndex+1);
+ timelineIndex=Math.min(timelineIndex,rows.length-1);
+ updateTimelineA11y(rows[timelineIndex]);
+ selectRecord(rows[timelineIndex],e.key==='Enter'||e.key===' ');
+};
 function clearSpectrum(){if(state.blob){URL.revokeObjectURL(state.blob);state.blob=null}$('specImg').hidden=true;$('specMessage').hidden=false;$('specMessage').textContent='Выберите фрагмент для спектрограммы'}
-async function selectRecord(rec,play=false,offset=0){state.selected=rec;$('downloadSegment').disabled=false;document.querySelectorAll('.record').forEach(el=>el.classList.toggle('active',el.dataset.name===rec.name));spectrum(rec);if(play)await playAudio('/segment/'+rec.name.slice(0,8)+'/'+rec.name,'segment',rec,offset)}
+async function selectRecord(rec,play=false,offset=0){state.selected=rec;$('downloadSegment').disabled=false;document.querySelectorAll('.record').forEach(el=>el.classList.toggle('active',el.dataset.name===rec.name));state.textWindow={start:new Date(rec.time).getTime(),end:new Date(rec.time).getTime()+15000};renderTextList();$('textList').scrollTop=0;if($('analysisTools').open)spectrum(rec);if(play)await playAudio('/segment/'+rec.name.slice(0,8)+'/'+rec.name,'segment',rec,offset)}
 async function spectrum(rec){let id=rec.name;$('specImg').hidden=true;$('specMessage').hidden=false;$('specMessage').textContent='Строим спектрограмму…';try{let r=await fetch(PFX+'/api/archive/spectrogram/'+id.replace('.mp3','.png'),{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error(r.status);let blob=await r.blob();if(state.selected?.name!==id)return;clearSpectrum();state.blob=URL.createObjectURL(blob);$('specImg').src=state.blob;$('specImg').hidden=false;$('specMessage').hidden=true;$('specTime').textContent=clock(rec.time)+' · 15 с'}catch(e){if(state.selected?.name===id)$('specMessage').textContent='Ошибка построения спектра'}}
 $('spectro').onclick=e=>{if(!state.selected||$('specImg').hidden)return;let rect=$('spectro').getBoundingClientRect(),sec=Math.max(0,Math.min(14.7,15*(e.clientX-rect.left)/rect.width));selectRecord(state.selected,true,sec)};
-function phrase(row){let el=document.createElement('div');el.className='phrase';el.tabIndex=0;const when=document.createElement('time');when.textContent=clock(row.time).slice(0,5);const text=document.createElement('span');text.textContent=row.text;el.append(when,text);el.onclick=()=>playAt(row.time);el.onkeydown=e=>{if(e.key==='Enter')playAt(row.time)};return el}
-function renderTexts(){let box=$('preview');box.replaceChildren();if(!state.texts.length)box.innerHTML='<div class="empty">Текст пока не готов либо речь не распознана</div>';else state.texts.slice(0,12).forEach(r=>box.append(phrase(r)));renderTextList()}
-function renderTextList(){let q=$('search').value.toLocaleLowerCase('ru-RU'),rows=q?state.texts.filter(r=>r.text.toLocaleLowerCase('ru-RU').includes(q)):state.texts;const area=$('textList');area.replaceChildren();if(!rows.length)area.innerHTML='<div class="empty">Нет подходящих фраз</div>';else rows.slice(0,state.textLimit).forEach(r=>area.append(phrase(r)));$('moreText').hidden=rows.length<=state.textLimit;$('textCount').textContent=rows.length+' фраз';$('textRange').textContent=day(state.start)+' '+clock(state.start)+' — '+day(state.end)+' '+clock(state.end)}
+function phrase(row){let el=document.createElement('div');el.className='phrase';el.tabIndex=0;el.setAttribute('role','button');const when=document.createElement('time');when.textContent=clock(row.time).slice(0,5);const text=document.createElement('span');text.textContent=row.text;el.append(when,text);el.onclick=()=>playAt(row.time);el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();playAt(row.time)}};return el}
+function renderTexts(){renderTextList()}
+function renderTextList(){
+ const q=$('search').value.trim().toLocaleLowerCase('ru-RU');
+ const scope=!q&&state.textWindow;
+ const rows=state.texts.filter(r=>(!scope||(new Date(r.time)>=scope.start&&new Date(r.time)<scope.end))&&(!q||r.text.toLocaleLowerCase('ru-RU').includes(q)));
+ const area=$('textList');area.replaceChildren();
+ if(!rows.length)area.innerHTML='<div class="empty">'+(q?'Совпадений в выбранном периоде нет':scope?'В этой записи нет распознанного текста':'Текст пока не готов либо речь не распознана')+'</div>';
+ else rows.slice(0,state.textLimit).forEach(r=>area.append(phrase(r)));
+ $('moreText').hidden=rows.length<=state.textLimit;
+ $('textCount').textContent=rows.length+' фраз';
+ $('textHeading').textContent=q?'Результаты поиска':scope?'Текст выбранной записи':'Текст периода';
+ $('showPeriodText').hidden=!state.textWindow;
+ $('textRange').textContent=scope?clock(scope.start)+' — '+clock(scope.end):day(state.start)+' '+clock(state.start)+' — '+day(state.end)+' '+clock(state.end);
+}
+$('showPeriodText').onclick=()=>{state.textWindow=null;state.textLimit=120;renderTextList()};
 $('search').oninput=()=>{state.textLimit=120;renderTextList()};$('moreText').onclick=()=>{state.textLimit+=120;renderTextList()};
 async function playAt(textTime){const point=new Date(textTime);let a=new Date(point.getTime()-30000),b=new Date(point.getTime()+30000);let path='/api/archive/records?start='+encodeURIComponent(local(a))+'&end='+encodeURIComponent(local(b))+'&sort=desc&limit=10';try{let data=await api(path);primeRows(data.items);let files=data.items.sort((x,y)=>new Date(x.time)-new Date(y.time));let file=files[0];for(const item of files){if(new Date(item.time)>point)break;file=item}if(!file)return notice('Нет аудио для этого времени');let off=Math.max(0,Math.min(14.8,(point-new Date(file.time))/1000));await selectRecord(file,true,off)}catch(e){notice('Не удалось перейти к записи')}}
-async function playAudio(path,mode,record=null,offset=0){const item={path,mode,record};state.playing=item;$('playTitle').textContent=mode==='period'?'Непрерывно · выбранный период':mode==='session'?'Сеанс · '+record.label:clock(record.time);$('playDescription').textContent=mode==='period'?'Все фрагменты выбранного периода':mode==='session'?'Прослушивание объединённого сеанса':day(record.time)+' · отдельный фрагмент';try{
+async function playAudio(path,mode,record=null,offset=0){const item={path,mode,record};state.playing=item;if(state.tab==='archive')$('archivePlayer').hidden=false;$('playTitle').textContent=mode==='period'?'Непрерывно · выбранный период':mode==='session'?'Сеанс · '+record.label:clock(record.time);$('playDescription').textContent=mode==='period'?'Все фрагменты выбранного периода':mode==='session'?'Прослушивание объединённого сеанса':day(record.time)+' · отдельный фрагмент';try{
  const warm=grants.get(path);
  if(warm&&warm.until>Date.now()+90000){
   audio.src=warm.url;
@@ -356,7 +396,7 @@ async function playAudio(path,mode,record=null,offset=0){const item={path,mode,r
  await audio.play();
 }catch(e){notice('Нажмите ▶ повторно, если Safari остановил запуск')}
 updatePlayer()}
-$('playPeriod').onclick=()=>{if(state.total)playAudio(periodPath(),'period')};
+$('playPeriod').onclick=()=>{if(state.total){state.textWindow=null;renderTextList();playAudio(periodPath(),'period')}};
 async function downloadMp3(path,name){
  if(!path)return notice('Сначала выберите запись');
  try{const url=await media(path);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();notice('Открыто сохранение MP3')}
@@ -374,12 +414,13 @@ function updatePlayer(){$('play').textContent=audio.paused?'▶':'Ⅱ';$('curren
 audio.onended=()=>{if(state.playing?.mode!=='segment'||state.sort!=='asc')return;const list=state.records.slice().sort((a,b)=>new Date(a.time)-new Date(b.time)),i=list.findIndex(x=>x.name===state.playing.record?.name);if(i>=0&&i<list.length-1)selectRecord(list[i+1],true)};
 async function exportText(ext){if(!state.start)return;try{const blob=await api('/api/archive/export?'+params()+'&format='+ext,true);let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='RoomAudio-'+stamp(state.start)+'-'+stamp(state.end)+'.'+ext;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),45000)}catch(e){notice('Не удалось экспортировать текст')}}
 async function copyText(){let text=state.texts.map(r=>'['+r.time.replace('T',' ')+'] '+r.text).join('\n');if(!text)return notice('Нет текста в выбранном периоде');try{await navigator.clipboard.writeText(text);notice('Текст скопирован')}catch(e){notice('Буфер обмена недоступен')}}
-$('copy').onclick=$('copy2').onclick=copyText;$('txt').onclick=$('txt2').onclick=()=>exportText('txt');$('srt').onclick=$('srt2').onclick=()=>exportText('srt');
+$('copy').onclick=copyText;$('txt').onclick=()=>exportText('txt');$('srt').onclick=()=>exportText('srt');
 let liveDesired=null,liveReconnect=null,liveFailures=0;
 function stopLive(){
  liveDesired=null;
  clearTimeout(liveReconnect);liveReconnect=null;liveFailures=0;
- const a=$('liveAudio');a.pause();a.removeAttribute('src');a.load();
+ const a=$('liveAudio');a.pause();a.removeAttribute('src');a.load();a.hidden=true;
+ $('mp3').disabled=false;$('mp3').hidden=false;$('stopLive').hidden=true;
  $('liveMsg').textContent='Остановлено';
 }
 function reconnectLive(){
@@ -394,6 +435,8 @@ function reconnectLive(){
 async function live(path,reconnecting=false){
  if(!reconnecting)stopLive();
  liveDesired=path;
+ audio.pause();if(state.tab!=='live')switchTab('live');
+ $('mp3').hidden=true;$('stopLive').hidden=false;
  try{
    if(path==='/live.mp3'){
      const data=await api('/api/live/status');
@@ -406,13 +449,13 @@ async function live(path,reconnecting=false){
      const recent=await api('/api/archive/latest');
      if(liveDesired!==path)return;
      if(!recent.time||Date.now()-new Date(recent.time).getTime()>120000){
-       $('liveMsg').textContent='Для резервного HLS пока нет свежих фрагментов.';
+       stopLive();$('liveMsg').textContent='Для резервного HLS пока нет свежих фрагментов.';
        return;
      }
    }
    const url=await media(path),a=$('liveAudio');
    if(liveDesired!==path)return;
-   a.src=url;
+   a.src=url;a.hidden=false;
    await a.play();
    if(liveDesired!==path)return;
    liveFailures=0;
@@ -420,10 +463,12 @@ async function live(path,reconnecting=false){
  }catch(e){
    if(liveDesired!==path)return;
    $('liveMsg').textContent='Нет соединения с эфиром.';
-   if(path==='/live.mp3')reconnectLive();
+   if(path==='/live.mp3')reconnectLive();else{stopLive();$('liveMsg').textContent='Не удалось запустить резервный архивный поток.'}
  }
 }
 $('liveAudio').addEventListener('ended',reconnectLive);
+$('liveAudio').addEventListener('playing',()=>{if(liveDesired)$('liveMsg').textContent=liveDesired==='/live.mp3'?'Слушаете прямой эфир':'Слушаете архивный поток с задержкой'});
+$('liveAudio').addEventListener('pause',()=>{if(liveDesired)$('liveMsg').textContent='Прослушивание на паузе'});
 $('liveAudio').addEventListener('error',reconnectLive);
 $('mp3').onclick=()=>live('/live.mp3');
 $('hls').onclick=()=>live('/live.m3u8');
@@ -447,8 +492,9 @@ async function recoverLivePipeline(){
     msg.textContent='Mate подтвердил восстановление. Запись остаётся выключенной.';return;
    }
    if(confirmed&&stream.online){
-    msg.textContent='Тракт восстановлен: Mate подтвердил захват, свежий поток поступает.';
+    msg.textContent='Mate подтвердил захват, сервер получает свежий поток.';
     if(desired&&liveDesired===desired)await live(desired);
+    msg.textContent+=!$('liveAudio').paused&&$('liveAudio').currentTime>0?' Воспроизведение подтверждено.':' Нажмите «Слушать» для проверки воспроизведения.';
     status();captureStatus();return;
    }
    msg.textContent=!capture.client_connected?'Mate недоступен. Команда сохранена, ожидаем подключения…':!confirmed?'Mate подключён. Перезапускаем захват и передачу…':'Захват перезапущен. Ожидаем свежий аудиопоток…';
@@ -460,7 +506,12 @@ async function recoverLivePipeline(){
 }
 $('recoverLive').onclick=recoverLivePipeline;
 
-async function status(){try{let s=await api('/api/status');const cap=s.capture||{};const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
+async function status(){try{let s=await api('/api/status');const cap=s.capture||{};
+ const stream=await api('/api/live/status');
+ $('liveConnection').textContent=stream.online?'Эфир доступен':cap.client_connected?'Mate на связи':'Источник недоступен';
+ $('sourceMessage').textContent=stream.online?'Можно слушать непрерывный звук с Mate.':cap.client_connected&&cap.mode==='off'?'Микрофон выключен. Измените режим в настройках источника.':cap.client_connected?'Mate подключён, но свежий эфир не поступает. Попробуйте восстановить соединение.':'Нет связи с Mate. Проверьте питание и сеть ноутбука или отправьте команду восстановления.';
+ $('recoverLive').hidden=!!stream.online;
+ const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('liveConnection').textContent='Сервер недоступен';$('sourceMessage').textContent='Не удалось получить состояние источника. Проверьте соединение и повторите попытку.';$('recoverLive').hidden=false;$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
 
 // Remote recording configuration. "Requested" and "applied" state are never conflated.
 async function captureStatus(){
@@ -475,8 +526,10 @@ async function captureStatus(){
   $('modeStatus').textContent=applied?(labels[s.mode]+' · Mate подтвердил') :
     (s.client_connected?'Запрос: '+labels[s.mode]+' · Mate переключает режим…':
      'Запрос: '+labels[s.mode]+' · Mate пока не подтвердил');
+  $('captureSummary').textContent='Архив: '+$('modeStatus').textContent;
+  $('lastSeen').textContent=s.client_last_seen?'Последняя связь: '+new Date(s.client_last_seen*1000).toLocaleString('ru-RU'):'Последняя связь: после запуска сервера подключений не было';
   $('modeStatus').style.color=applied?'var(--green)':'var(--muted)';$('pipelineCapture').textContent=!s.client_connected?'Mate не отвечает':s.mode==='off'?'Запись выключена':applied?(s.mode==='voice'?'По голосу':'Постоянно'):'Переключение…';
- }catch(e){$('modeStatus').textContent='Состояние режима временно недоступно';$('pipelineCapture').textContent='Нет данных'}
+ }catch(e){$('captureSummary').textContent='Режим записи временно недоступен';$('lastSeen').textContent='Последняя связь: не удалось проверить';$('modeStatus').textContent='Состояние режима временно недоступно';$('pipelineCapture').textContent='Нет данных'}
 }
 async function changeCaptureMode(mode){
  const all=[...document.querySelectorAll('[data-record-mode]')];
@@ -522,9 +575,10 @@ function jumpToSpeech(){
     {name:upcoming.file,time:upcoming.file.slice(0,4)+'-'+upcoming.file.slice(4,6)+'-'+upcoming.file.slice(6,8)+'T'+upcoming.file.slice(9,11)+':'+upcoming.file.slice(11,13)+':'+upcoming.file.slice(13,15),bytes:0};
  selectRecord(record,true,upcoming.offset);
 }
-$('nextSpeech').onclick=$('nextVoice').onclick=jumpToSpeech;
+$('nextVoice').onclick=jumpToSpeech;
 
 async function init(){
+ status();captureStatus();media('/live.mp3').catch(()=>{}); // Pre-warm token, never start audio before a user gesture.
  let now=new Date();now.setSeconds(0,0);state.end=now;
  try{
   const latest=await api('/api/archive/latest');
@@ -536,7 +590,7 @@ async function init(){
   }
  }catch(e){}
  setPreset('1');
- await load();status();captureStatus();media('/live.m3u8').catch(()=>{});
+ await load();
  setInterval(status,15000);setInterval(captureStatus,6000);setInterval(refreshSpeechMarkers,30000);
 }
 
@@ -673,6 +727,7 @@ $('purgeCleanup').onclick=async()=>{
 
 refreshCleanupTrash();
 
+switchTab('live');
 init();
 
 </script>
