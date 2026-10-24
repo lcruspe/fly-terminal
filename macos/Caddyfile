@@ -56,6 +56,13 @@
 		reverse_proxy 127.0.0.1:8787
 	}
 
+	# Service controls are available only to the primary administrator.
+	handle /gateway-control/* {
+		@gatewayControlDenied expression `{http.auth.user.id} != "{$CADDY_BASIC_AUTH_USER}"`
+		respond @gatewayControlDenied "Forbidden" 403
+		reverse_proxy 127.0.0.1:{$FLY_GATEWAY_CONTROL_PORT:7684}
+	}
+
 	handle @gatewayStatus {
 		rewrite * /api/gateway/status
 		reverse_proxy 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}

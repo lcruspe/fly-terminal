@@ -603,6 +603,8 @@ if [ "${FLY_ORACLE_RELAY_ENABLED:-0}" = "1" ]; then
   kickstart_agent "${ORACLE_RELAY_LABEL}" "${ORACLE_RELAY_PLIST}"
 fi
 
+"${SCRIPT_DIR}/install-gateway-control.sh"
+
 # Старый прямой порт Remote Browser больше не используется: Browser живёт внутри :8443.
 tailscale funnel --https=9443 off >/dev/null 2>&1 || true
 

@@ -48,3 +48,7 @@ chmod 600 "${ENV_FILE}"
 launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.ttyd"
 launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.caddy"
 launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.browser" 2>/dev/null || true
+
+if launchctl print "gui/${UID_VALUE}/ai.kruspe.fly-terminal.gateway-control" >/dev/null 2>&1; then
+  launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.gateway-control"
+fi

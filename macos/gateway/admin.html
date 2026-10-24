@@ -8,36 +8,55 @@
   <link rel="stylesheet" href="/gateway.css">
 </head>
 <body>
-  <main>
-    <section class="services">
-      <a class="service" data-health="terminal" data-port="8443" href="#">
-        <strong>Fly Terminal</strong>
-        <span class="port">:8443</span>
-      </a>
-      <a class="service" data-health="native" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#">
-        <strong>Browser Native</strong>
-        <span class="port">:8443 · native</span>
-      </a>
-      <a class="service" data-health="fallback" data-port="8443" data-path="/browser/" href="#">
-        <strong>Browser Fallback</strong>
-        <span class="port">:8443/browser/</span>
-      </a>
-      <a class="service" data-health="roomaudio" href="/roomaudio/">
-        <strong>RoomAudio</strong>
-        <span class="port">/roomaudio/ · Аудиоархив</span>
-      </a>
-      <a class="service" data-health="yt" href="/yt-transcriber/">
-        <strong>YT Transcript</strong>
-        <span class="port">/yt-transcriber/</span>
-      </a>
-      <a class="service" data-health="spruthub" data-port="10000" href="#">
-        <strong>Sprut.Hub</strong>
-        <span class="port">:10000</span>
-      </a>
-      <a class="service" href="http://192.168.1.115/">
-        <strong>OpenWrt</strong>
-        <span class="port">192.168.1.115 · Роутер / Amnezia VPN</span>
-      </a>
+  <main data-dashboard data-view="tiles">
+    <header class="catalog-header">
+      <div><h1>Сервисы</h1><p>Терминал, браузеры и управление подключениями.</p></div>
+      <div class="view-switch" role="group" aria-label="Вид сервисов">
+        <button type="button" data-view-mode="tiles" aria-pressed="true">Плитки</button>
+        <button type="button" data-view-mode="compact" aria-pressed="false">Компактно</button>
+        <button type="button" data-view-mode="list" aria-pressed="false">Список</button>
+      </div>
+    </header>
+    <p class="catalog-message" role="status" aria-live="polite"></p>
+    <section class="services" aria-label="Каталог сервисов">
+      <article class="service" data-service="terminal">
+        <div class="service-heading"><a class="service-main" data-port="8443" href="#"><strong>Fly Terminal</strong></a><span data-health="terminal"></span></div>
+        <p class="service-description">Терминал Mac с отдельными рабочими сессиями. Работает постоянно.</p>
+        <details data-details-key="terminal"><summary>Действия</summary><div class="service-actions">
+          <a class="action-link" data-port="8443" href="#">Открыть терминал</a>
+          <p class="action-hint">Остановка и перезапуск терминала отключены.</p>
+        </div></details>
+      </article>
+      <article class="service" data-service="browser">
+        <div class="service-heading"><a class="service-main" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#"><strong>Браузер</strong></a></div>
+        <p class="service-description">Native — Chrome на Mac. Fallback — Chromium в отдельном контейнере.</p>
+        <div class="variant-status"><span data-health="native">Native</span><span data-health="fallback">Fallback</span></div>
+        <details data-details-key="browser"><summary>Действия</summary><div class="service-actions">
+          <section class="action-group"><h2>Native</h2><a class="action-link" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#">Открыть Native</a><div data-controls="native"></div></section>
+          <section class="action-group"><h2>Fallback</h2><a class="action-link" data-port="8443" data-path="/browser/" href="#">Открыть Fallback</a><div data-controls="fallback"></div></section>
+        </div></details>
+      </article>
+      <article class="service" data-service="roomaudio">
+        <div class="service-heading"><a class="service-main" href="/roomaudio/"><strong>RoomAudio</strong></a><span data-health="roomaudio"></span></div>
+        <p class="service-description">Аудиоархив и прослушивание трансляции. Управление сервером на Mac.</p>
+        <details data-details-key="roomaudio"><summary>Действия</summary><div class="service-actions"><a class="action-link" href="/roomaudio/">Открыть аудиоархив</a><div data-controls="roomaudio"></div><p class="action-hint">Перезапуск сервера прерывает прослушивание. Связь с источником аудио проверяется в RoomAudio.</p></div></details>
+      </article>
+      <article class="service" data-service="yt">
+        <div class="service-heading"><a class="service-main" href="/yt-transcriber/"><strong>YT Transcript</strong></a><span data-health="yt"></span></div>
+        <p class="service-description">Расшифровка видео и работа с текстом. Остановка прерывает обработку.</p>
+        <details data-details-key="yt"><summary>Действия</summary><div class="service-actions"><a class="action-link" href="/yt-transcriber/">Открыть расшифровки</a><div data-controls="yt"></div></div></details>
+      </article>
+      <article class="service" data-service="spruthub">
+        <div class="service-heading"><a class="service-main" data-port="10000" href="#"><strong>Sprut.Hub</strong></a><span data-health="spruthub"></span></div>
+        <p class="service-description">Доступ к умному дому. Кнопки управляют подключением с Mac, сам хаб остаётся включён.</p>
+        <details data-details-key="spruthub"><summary>Действия</summary><div class="service-actions"><a class="action-link" data-port="10000" href="#">Открыть хаб</a><div data-controls="spruthub"></div></div></details>
+      </article>
+      <article class="service" data-service="openwrt">
+        <div class="service-heading"><a class="service-main" href="http://192.168.1.115/"><strong>OpenWrt</strong></a><span data-health="openwrt"></span></div>
+        <p class="service-description">Роутер и Amnezia VPN: локации и исключения. Ссылки LuCI доступны в локальной сети.</p>
+        <p class="router-status"></p>
+        <details data-details-key="openwrt"><summary>Действия</summary><div class="service-actions"><a class="action-link" href="http://192.168.1.115/">Панель роутера</a><a class="action-link" href="http://192.168.1.115/cgi-bin/luci/admin/services/amnezia-locations">Amnezia VPN</a><div data-controls="openwrt"></div><p class="action-hint">Отключение VPN переводит интернет на прямое соединение. Сам роутер не выключается.</p></div></details>
+      </article>
     </section>
   </main>
   <script src="/gateway.js"></script>

@@ -126,9 +126,12 @@ class Updater:
     def restart_stack(self):
         uid = subprocess.check_output(["id", "-u"], text=True).strip()
         domain = f"gui/{uid}"
+        installer = REPO_ROOT / "macos/install-gateway-control.sh"
+        if installer.is_file():
+            self.run("install-gateway-control", ["/bin/zsh", str(installer)], timeout=30)
         for label in LABELS:
             self.run(f"restart-{label}", ["launchctl", "kickstart", "-k", f"{domain}/{label}"], timeout=30)
-        for port in (8080, 8081, 7682, 7683):
+        for port in (8080, 8081, 7682, 7683, 7684):
             deadline = time.monotonic() + 30
             while True:
                 probe = subprocess.run(

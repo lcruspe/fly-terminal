@@ -79,3 +79,53 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
 @media (prefers-reduced-motion: reduce) {
   .service-health[data-state="checking"] { animation: none; }
 }
+
+/* Service catalogue. Preserve the restricted Sprut.Hub page above. */
+[data-dashboard] { width: min(1120px, 100%); }
+.catalog-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+.catalog-header h1 { font-size:30px; }
+.view-switch { display:flex; gap:4px; padding:4px; border:1px solid #2a3440; border-radius:12px; background:#13181e; }
+[data-dashboard] button, .action-link { font:inherit; border:1px solid #364453; border-radius:8px; padding:8px 12px; background:#1b2530; color:#e8edf2; cursor:pointer; text-decoration:none; display:inline-block; }
+.view-switch button { border-color:transparent; background:transparent; color:#aab7c4; }
+.view-switch button[aria-pressed=true] { background:#32485d; color:#fff; }
+[data-dashboard] button:hover:not(:disabled), .action-link:hover { background:#2b4053; }
+[data-dashboard] button:focus-visible, summary:focus-visible, .action-link:focus-visible, .service-main:focus-visible { outline:2px solid #86baf0; outline-offset:3px; }
+[data-dashboard] button:disabled { opacity:.45; cursor:not-allowed; }
+[data-dashboard] .services { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); align-items:start; margin-top:12px; }
+[data-dashboard] .service { min-height:0; padding:20px; }
+[data-dashboard] .service:hover { transform:none; }
+.service-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.service-main { color:inherit; text-decoration:none; min-width:0; }
+.service-main strong { margin:0; }
+.service-description { margin:12px 0 16px; font-size:14px; }
+[data-dashboard] .service-health { position:static; display:inline-block; width:10px; height:10px; margin-left:8px; vertical-align:middle; }
+.variant-status { display:flex; flex-wrap:wrap; gap:14px; margin:0 0 14px; font-size:12px; }
+[data-dashboard] details { border-top:1px solid #2a3440; margin-top:14px; padding-top:12px; }
+[data-dashboard] summary { cursor:pointer; color:#afc8e1; font-size:14px; width:fit-content; }
+.service-actions { display:flex; flex-wrap:wrap; gap:8px; padding-top:12px; align-items:flex-start; }
+.service-actions [data-controls] { display:flex; flex-wrap:wrap; gap:6px; }
+.action-group { width:100%; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.action-group h2 { width:100%; font-size:14px; margin:4px 0; }
+.service-actions .action-hint { width:100%; font-size:12px; color:#9ca8b5; }
+.router-status { font-size:13px; color:#aec3d7; }
+.catalog-message { min-height:1.5em; margin-top:16px; font-size:14px; overflow-wrap:anywhere; }
+.catalog-message[data-error=true] { color:#ef9e9e; }
+[data-view=compact] .services { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+[data-view=compact] .service { padding:14px; }
+[data-view=compact] .service-main strong { font-size:17px; }
+[data-view=compact] .service-description { display:none; }
+[data-view=compact] .variant-status { margin-top:10px; }
+[data-view=list] .services { grid-template-columns:1fr; gap:10px; }
+[data-view=list] .service { display:grid; grid-template-columns:minmax(150px,.7fr) minmax(240px,2fr); gap:8px 24px; }
+[data-view=list] .service-description { margin:0; }
+[data-view=list] details { grid-column:1/-1; }
+[data-view=list] .variant-status, [data-view=list] .router-status { grid-column:2; margin:0; }
+@media(max-width:600px) {
+  body { padding:20px 12px; }
+  [data-dashboard] .services, [data-view=compact] .services { grid-template-columns:1fr; }
+  [data-view=list] .service { grid-template-columns:1fr; }
+  [data-view=list] .variant-status, [data-view=list] .router-status { grid-column:1; }
+  .view-switch { width:100%; }
+  .view-switch button { flex:1; padding:8px; }
+  .service-actions button, .action-link { font-size:13px; }
+}
