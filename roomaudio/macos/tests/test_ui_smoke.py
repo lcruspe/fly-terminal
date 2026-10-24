@@ -76,6 +76,10 @@ class RoomAudioUiSmoke(unittest.TestCase):
                 result = {"items": []}
             elif path.endswith("/api/media-token"):
                 result = {"token": "test-token", "expires_in": 3600}
+            elif path.endswith("/api/recovery") and route.request.method == "POST":
+                result = {"recovery_id": "queued-test-recovery", "capture": {
+                    "client_connected": online, "recovery_id": "queued-test-recovery",
+                    "recovery_requested_at": int(now.timestamp()), "recovery_ack": None}}
             elif path.endswith("/api/archive/cleanup/trash"):
                 result = {"batches": []}
             elif path.endswith(".png"):
@@ -160,6 +164,32 @@ class RoomAudioUiSmoke(unittest.TestCase):
                         context.close()
         finally:
             browser.close()
+
+    def test_offline_recovery_queues_without_claiming_audio_is_restored(self):
+        context, page, errors, unexpected = self.build_page(390, online=False)
+        try:
+            self.assertTrue(page.locator("#mp3").is_disabled())
+            page.locator("#recoverLive").click()
+            page.wait_for_function("document.querySelector('#recoveryMsg').textContent.includes('сохранена на сервере')")
+            self.assertIn("Mate не подключён", page.locator("#recoveryMsg").inner_text())
+            self.assertTrue(page.locator("#recoverLive").is_enabled())
+            self.assertFalse(page.locator("#liveAudio").is_visible())
+            self.assertEqual(errors, [])
+            self.assertEqual(unexpected, [])
+        finally:
+            context.close()
+
+    def test_recovery_rejection_is_reported_as_rejection(self):
+        context, page, errors, unexpected = self.build_page(390, online=False)
+        try:
+            page.route("**/api/recovery", lambda route: route.fulfill(status=403, body="Forbidden"))
+            page.locator("#recoverLive").click()
+            page.wait_for_function("document.querySelector('#recoveryMsg').textContent.includes('403')")
+            self.assertIn("отклонил команду", page.locator("#recoveryMsg").inner_text())
+            self.assertEqual(errors, [])
+            self.assertEqual(unexpected, [])
+        finally:
+            context.close()
 
     def test_unavailable_source_shows_recovery_not_false_success(self):
         context, page, errors, unexpected = self.build_page(390, online=False)

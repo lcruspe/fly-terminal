@@ -417,11 +417,12 @@ async function copyText(){let text=state.texts.map(r=>'['+r.time.replace('T',' '
 $('copy').onclick=copyText;$('txt').onclick=()=>exportText('txt');$('srt').onclick=()=>exportText('srt');
 let liveDesired=null,liveReconnect=null,liveFailures=0;
 function stopLive(){
+ const wasActive=Boolean(liveDesired);
  liveDesired=null;
  clearTimeout(liveReconnect);liveReconnect=null;liveFailures=0;
  const a=$('liveAudio');a.pause();a.removeAttribute('src');a.load();a.hidden=true;
  $('mp3').disabled=false;$('mp3').hidden=false;$('stopLive').hidden=true;
- $('liveMsg').textContent='Остановлено';
+ if(wasActive)$('liveMsg').textContent='Остановлено';
 }
 function reconnectLive(){
  if(liveDesired!=='/live.mp3'||liveReconnect)return;
@@ -442,8 +443,9 @@ async function live(path,reconnecting=false){
      const data=await api('/api/live/status');
      if(liveDesired!==path)return;
      if(!data.online){
-       $('liveMsg').textContent='Ожидание непрерывного потока от Mate…';
-       reconnectLive();return;
+       if(!reconnecting){stopLive();$('liveMsg').textContent='Эфир недоступен: нет свежего потока от Mate.';}
+       else{$('liveMsg').textContent='Эфир прерван, ожидаем восстановления потока…';reconnectLive();}
+       return;
      }
    }else{
      const recent=await api('/api/archive/latest');
@@ -473,36 +475,58 @@ $('liveAudio').addEventListener('error',reconnectLive);
 $('mp3').onclick=()=>live('/live.mp3');
 $('hls').onclick=()=>live('/live.m3u8');
 $('stopLive').onclick=stopLive;
+let pendingRecoveryId=null;
+function recoveryProgress(capture,streamOnline){
+ const id=capture.recovery_id;
+ // If the page was reopened, recover the state of a recent queued request.
+ if(!pendingRecoveryId && id && capture.recovery_requested_at &&
+    Date.now()-capture.recovery_requested_at*1000<3600000 &&
+    capture.recovery_ack!==id)pendingRecoveryId=id;
+ if(!pendingRecoveryId||id!==pendingRecoveryId)return;
+ const msg=$('recoveryMsg');
+ if(!capture.client_connected){
+  msg.textContent='Команда восстановления сохранена на сервере, но Mate не подключён. Она будет доступна клиенту после восстановления связи; включите ноутбук и проверьте сеть.';
+ }else if(capture.recovery_ack!==id){
+  msg.textContent='Mate подключился. Ожидаем подтверждения перезапуска захвата.';
+ }else if(capture.active_mode!==capture.mode){
+  msg.textContent='Mate получил команду, но ещё не подтвердил выбранный режим записи.';
+ }else if(capture.mode==='off'){
+  msg.textContent='Mate подтвердил команду; микрофон остаётся выключенным по настройке.';
+  pendingRecoveryId=null;
+ }else if(streamOnline){
+  msg.textContent='Mate подтвердил перезапуск, сервер получает свежий поток. Нажмите «Слушать», чтобы проверить воспроизведение.';
+  pendingRecoveryId=null;
+ }else{
+  msg.textContent='Mate подтвердил перезапуск. Ожидаем поступления свежего аудио; эфир пока не восстановлен.';
+ }
+}
 async function recoverLivePipeline(){
  const button=$('recoverLive'),msg=$('recoveryMsg');
  button.disabled=true;
- const desired=liveDesired;
- msg.textContent='Отправляем команду восстановления на Mate…';
+ msg.textContent='Отправляем команду восстановления на сервер…';
  try{
   const response=await fetch(PFX+'/api/recovery',{
-   method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(12000)
+   method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+   body:'{}',signal:AbortSignal.timeout(12000)
   });
-  if(!response.ok)throw Error('HTTP '+response.status);
-  const request=await response.json(),deadline=Date.now()+60000;
-  while(Date.now()<deadline){
-   const [capture,stream]=await Promise.all([api('/api/recording-mode',false,8000),api('/api/live/status',false,8000)]);
-   if(capture.recovery_id!==request.recovery_id){msg.textContent='Запущено новое восстановление из другой вкладки.';return}
-   const confirmed=capture.client_connected&&capture.recovery_ack===request.recovery_id&&capture.active_mode===capture.mode;
-   if(confirmed&&capture.mode==='off'){
-    msg.textContent='Mate подтвердил восстановление. Запись остаётся выключенной.';return;
-   }
-   if(confirmed&&stream.online){
-    msg.textContent='Mate подтвердил захват, сервер получает свежий поток.';
-    if(desired&&liveDesired===desired)await live(desired);
-    msg.textContent+=!$('liveAudio').paused&&$('liveAudio').currentTime>0?' Воспроизведение подтверждено.':' Нажмите «Слушать» для проверки воспроизведения.';
-    status();captureStatus();return;
-   }
-   msg.textContent=!capture.client_connected?'Mate недоступен. Команда сохранена, ожидаем подключения…':!confirmed?'Mate подключён. Перезапускаем захват и передачу…':'Захват перезапущен. Ожидаем свежий аудиопоток…';
-   await new Promise(resolve=>setTimeout(resolve,2000));
+  if(!response.ok){
+   if(response.status===401)throw Error('401');
+   if(response.status===403)throw Error('403');
+   throw Error('HTTP '+response.status);
   }
-  msg.textContent='Восстановление пока не подтверждено. Проверьте питание и сеть Mate; команда сохранена и будет выполнена при подключении.';
- }catch(e){msg.textContent='Не удалось проверить восстановление. Проверьте связь с сервером и повторите попытку.'}
- finally{button.disabled=false}
+  const request=await response.json();
+  if(!request.recovery_id)throw Error('missing recovery_id');
+  pendingRecoveryId=request.recovery_id;
+  msg.textContent='Команда принята сервером. Проверяем подключение Mate…';
+  recoveryProgress(request.capture||{},false);
+  // Polling already runs in status() / captureStatus(). Do not fail a
+  // successfully queued command just because a later status request times out.
+  status();captureStatus();
+ }catch(e){
+  msg.textContent=e.message==='401'?'Сеанс входа истёк. Обновите страницу и войдите снова.':
+   e.message==='403'?'Сервер отклонил команду (403). Проверьте адрес страницы и повторите вход.':
+   'Сервер не подтвердил приём команды ('+(e.message||'сетевая ошибка')+'). Повторите попытку.';
+ }finally{button.disabled=false}
 }
 $('recoverLive').onclick=recoverLivePipeline;
 
@@ -511,7 +535,10 @@ async function status(){try{let s=await api('/api/status');const cap=s.capture||
  $('liveConnection').textContent=stream.online?'Эфир доступен':cap.client_connected?'Mate на связи':'Источник недоступен';
  $('sourceMessage').textContent=stream.online?'Можно слушать непрерывный звук с Mate.':cap.client_connected&&cap.mode==='off'?'Микрофон выключен. Измените режим в настройках источника.':cap.client_connected?'Mate подключён, но свежий эфир не поступает. Попробуйте восстановить соединение.':'Нет связи с Mate. Проверьте питание и сеть ноутбука или отправьте команду восстановления.';
  $('recoverLive').hidden=!!stream.online;
- const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('liveConnection').textContent='Сервер недоступен';$('sourceMessage').textContent='Не удалось получить состояние источника. Проверьте соединение и повторите попытку.';$('recoverLive').hidden=false;$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
+ $('mp3').disabled=!stream.online;
+ if(!stream.online&&!liveDesired)$('liveMsg').textContent='Для прослушивания требуется свежий поток от Mate.';
+ recoveryProgress(cap,!!stream.online);
+ const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('liveConnection').textContent='Сервер недоступен';$('sourceMessage').textContent='Не удалось получить состояние источника. Проверьте соединение и повторите попытку.';$('recoverLive').hidden=false;$('mp3').disabled=true;$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
 
 // Remote recording configuration. "Requested" and "applied" state are never conflated.
 async function captureStatus(){
@@ -527,7 +554,8 @@ async function captureStatus(){
     (s.client_connected?'Запрос: '+labels[s.mode]+' · Mate переключает режим…':
      'Запрос: '+labels[s.mode]+' · Mate пока не подтвердил');
   $('captureSummary').textContent='Архив: '+$('modeStatus').textContent;
-  $('lastSeen').textContent=s.client_last_seen?'Последняя связь: '+new Date(s.client_last_seen*1000).toLocaleString('ru-RU'):'Последняя связь: после запуска сервера подключений не было';
+  $('lastSeen').textContent=s.client_last_seen?'Последняя связь: '+new Date(s.client_last_seen*1000).toLocaleString('ru-RU'):'Последняя связь: нет данных после перезапуска сервера';
+  recoveryProgress(s,false);
   $('modeStatus').style.color=applied?'var(--green)':'var(--muted)';$('pipelineCapture').textContent=!s.client_connected?'Mate не отвечает':s.mode==='off'?'Запись выключена':applied?(s.mode==='voice'?'По голосу':'Постоянно'):'Переключение…';
  }catch(e){$('captureSummary').textContent='Режим записи временно недоступен';$('lastSeen').textContent='Последняя связь: не удалось проверить';$('modeStatus').textContent='Состояние режима временно недоступно';$('pipelineCapture').textContent='Нет данных'}
 }
