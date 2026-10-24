@@ -34,7 +34,7 @@
     dashboard.dataset.view = modes.includes(mode) ? mode : "tiles";
     dashboard.querySelectorAll("[data-view-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.viewMode === dashboard.dataset.view)));
   }
-  setView(read(storageKey, "tiles"));
+  setView(read(storageKey, window.matchMedia("(max-width: 600px)").matches ? "compact" : "tiles"));
   dashboard.querySelectorAll("[data-view-mode]").forEach(button => button.addEventListener("click", () => {
     setView(button.dataset.viewMode);
     write(storageKey, dashboard.dataset.view);

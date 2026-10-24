@@ -82,9 +82,7 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
 
 /* Service catalogue. Preserve the restricted Sprut.Hub page above. */
 [data-dashboard] { width: min(1120px, 100%); }
-.catalog-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap; }
-.catalog-header h1 { font-size:30px; }
-.view-switch { display:flex; gap:4px; padding:4px; border:1px solid #2a3440; border-radius:12px; background:#13181e; }
+.view-switch { display:flex; width:max-content; margin-left:auto; gap:4px; padding:4px; border:1px solid #2a3440; border-radius:12px; background:#13181e; }
 [data-dashboard] button, .action-link { font:inherit; border:1px solid #364453; border-radius:8px; padding:8px 12px; background:#1b2530; color:#e8edf2; cursor:pointer; text-decoration:none; display:inline-block; }
 .view-switch button { border-color:transparent; background:transparent; color:#aab7c4; }
 .view-switch button[aria-pressed=true] { background:#32485d; color:#fff; }
@@ -109,6 +107,8 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
 .service-actions .action-hint { width:100%; font-size:12px; color:#9ca8b5; }
 .router-status { font-size:13px; color:#aec3d7; }
 .catalog-message { min-height:1.5em; margin-top:16px; font-size:14px; overflow-wrap:anywhere; }
+/* Empty status text must not reserve a blank row above the cards. */
+.catalog-message:empty { display:none; }
 .catalog-message[data-error=true] { color:#ef9e9e; }
 [data-view=compact] .services { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
 [data-view=compact] .service { padding:14px; }
@@ -121,11 +121,28 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
 [data-view=list] details { grid-column:1/-1; }
 [data-view=list] .variant-status, [data-view=list] .router-status { grid-column:2; margin:0; }
 @media(max-width:600px) {
-  body { padding:20px 12px; }
-  [data-dashboard] .services, [data-view=compact] .services { grid-template-columns:1fr; }
+  body:not(.dashboard-page) { padding:20px 12px; }
+  /* Catalogue starts at the top, not in a vertically centered desktop shell. */
+  body.dashboard-page {
+    display:block;
+    min-height:100dvh;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom));
+  }
+  .view-switch { width:100%; margin-left:0; gap:2px; padding:3px; border-radius:11px; }
+  .view-switch button { flex:1; min-width:0; padding:7px 4px; }
+  [data-dashboard] .services, [data-view=compact] .services {
+    grid-template-columns:1fr;
+    gap:8px;
+    margin-top:8px;
+  }
+  [data-dashboard] .service { padding:12px 14px; border-radius:12px; }
+  [data-dashboard] .service-main strong { font-size:18px; }
+  [data-dashboard] .service-description { margin:6px 0 8px; line-height:1.35; }
+  [data-dashboard] details { margin-top:8px; padding-top:8px; }
+  [data-dashboard] .variant-status { margin:6px 0 8px; gap:10px; }
+  [data-view=compact] .variant-status { margin-bottom:0; }
+  .catalog-message { min-height:0; margin-top:8px; line-height:1.35; }
   [data-view=list] .service { grid-template-columns:1fr; }
   [data-view=list] .variant-status, [data-view=list] .router-status { grid-column:1; }
-  .view-switch { width:100%; }
-  .view-switch button { flex:1; padding:8px; }
   .service-actions button, .action-link { font-size:13px; }
 }
