@@ -7,6 +7,10 @@
 :{$CADDY_PORT:8080} {
 	root * {$FLY_TERMINAL_REPO_ROOT}/macos/gateway
 
+	# The legacy Tailscale IP/HTTP entry must use HTTPS to persist Secure session cookies.
+	@legacyTailGateway host 100.125.224.119
+	redir @legacyTailGateway https://mac-gateway.tail1c55c5.ts.net{uri} 308
+
 	@ytIcon path /yt-transcriber/apple-touch-icon.png
 	@ytLogin path /yt-login
 	@gatewayStatus path /gateway-status
