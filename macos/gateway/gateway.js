@@ -1,12 +1,24 @@
 (() => {
   "use strict";
+  const host = window.location.hostname;
+  const local = ["127.0.0.1", "localhost", "[::1]"].includes(host);
+  // The Linux Tailscale gateway forwards the macOS Caddy ports as plain TCP.
+  // The historic public Funnel links (HTTPS 8443/10000) must remain unchanged.
+  const linuxGateway = host === "100.125.224.119" || host === "mac-gateway" || host === "mac-gateway.tail1c55c5.ts.net";
+  const directPortAccess = local || linuxGateway || (window.location.protocol === "http:" && window.location.port === "8080");
+  const localPorts = { "8443": "8081", "10000": "8082" };
   document.querySelectorAll("[data-port]").forEach((link) => {
     const port = link.dataset.port;
     const path = link.dataset.path || "/";
-    const local = ["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
-    const localPorts = { "8443": "8081", "10000": "8082" };
-    link.href = `${local ? "http" : "https"}://${window.location.hostname}:${local ? (localPorts[port] || port) : port}${path}`;
+    link.href = `${directPortAccess ? "http" : "https"}://${host}:${directPortAccess ? (localPorts[port] || port) : port}${path}`;
   });
+  // LuCI has a private LAN address. Reach it through a tailnet-only TCP forwarder.
+  if (linuxGateway) {
+    document.querySelectorAll('a[href^="http://192.168.1.115/"]').forEach((link) => {
+      const target = new URL(link.href);
+      link.href = `http://${host}:8115${target.pathname}${target.search}${target.hash}`;
+    });
+  }
   const dashboard = document.querySelector("[data-dashboard]");
   if (!dashboard) return; // The restricted Sprut.Hub page has no admin controls.
   const message = dashboard.querySelector(".catalog-message");
