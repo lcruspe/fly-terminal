@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 from urllib.request import Request, urlopen
 import happ_desktop
 import happ_ping
+import amnezia_ax
 
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -94,6 +95,7 @@ VALID_UI_FONT_FAMILIES = frozenset({
 })
 HAPP_VPN_SERVICE = os.environ.get("FLY_TERMINAL_HAPP_SERVICE", "Happ Plus")
 HAPP_RECONNECT_LOCK = threading.Lock()
+AMNEZIA_ACTION_LOCK = threading.Lock()
 HAPP_PREFERENCES = Path.home() / "Library/Group Containers/group.su.ffg.happ.plus/Library/Preferences/group.su.ffg.happ.plus.plist"
 HAPP_CACHE_DIR = Path.home() / "Library/Containers/su.ffg.happ.plus/Data/Library/Caches/su.ffg.happ.plus/fsCachedData"
 HAPP_CACHE_DB = HAPP_CACHE_DIR.parent / "Cache.db"
@@ -253,6 +255,24 @@ TOOL_ERROR_MESSAGES = {
     "happ_selection_unconfirmed": "Happ не подтвердил выбор сервера. Проверьте состояние клиента.",
     "happ_accessibility_build_failed": "Не удалось собрать компонент управления Happ.",
     "happ_accessibility_unavailable": "Интерфейс Happ Plus недоступен для удалённого управления.",
+    "amnezia_not_running": "AmneziaVPN не запущена на Mac mini.",
+    "amnezia_screen_locked": "Для управления AmneziaVPN разблокируйте экран Mac mini.",
+    "amnezia_accessibility_denied": "Разрешите Accessibility для процесса Fly Terminal в настройках macOS.",
+    "amnezia_window_unavailable": "Откройте окно AmneziaVPN на Mac mini.",
+    "amnezia_profiles_unavailable": "Не удалось прочитать профили AmneziaVPN из интерфейса приложения.",
+    "amnezia_profile_not_found": "Профиль AmneziaVPN изменился или удалён. Обновите список.",
+    "amnezia_action_busy": "Переключение AmneziaVPN уже выполняется.",
+    "amnezia_invalid_profile": "Выберите профиль AmneziaVPN из списка.",
+    "amnezia_disconnect_failed": "AmneziaVPN не приняла команду отключения.",
+    "amnezia_disconnect_timeout": "AmneziaVPN не подтвердила отключение.",
+    "amnezia_select_failed": "Не удалось выбрать профиль в AmneziaVPN.",
+    "amnezia_selection_unconfirmed": "AmneziaVPN не подтвердила смену профиля. Проверьте подключение в приложении.",
+    "amnezia_connect_failed": "AmneziaVPN не приняла команду подключения.",
+    "amnezia_connect_timeout": "AmneziaVPN не подтвердила новое VPN-подключение. Проверьте приложение.",
+    "amnezia_state_unavailable": "Невозможно подтвердить текущее состояние AmneziaVPN. Переключение отменено.",
+    "amnezia_ax_build_failed": "Не удалось собрать компонент управления AmneziaVPN.",
+    "amnezia_ax_unavailable": "Управление AmneziaVPN через macOS Accessibility недоступно.",
+    "amnezia_invalid_action": "Неизвестная команда управления AmneziaVPN.",
     "happ_routing_apply_failed": "Не удалось применить профиль маршрутизации Happ для выбранной подписки.",
     "happ_routing_fallback_failed": "Happ не смог подключиться даже после отключения проблемного профиля маршрутизации.",
     "payload_too_large": "Размер запроса превышает допустимый лимит.",
@@ -2409,6 +2429,21 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             send_json(self, 200, read_update_status())
             return
 
+        if self.path in {"/api/vpn/amnezia/profiles", "/api/vpn/amnezia/status"}:
+            needs_catalog = self.path.endswith("/profiles")
+            if needs_catalog and not AMNEZIA_ACTION_LOCK.acquire(blocking=False):
+                send_json(self, 409, {"ok": False, "error": "amnezia_action_busy", "profiles": []})
+                return
+            try:
+                data = amnezia_ax.command("list" if needs_catalog else "status")
+                send_json(self, 200, {"ok": True, **data})
+            except amnezia_ax.AmneziaAXError as exc:
+                send_json(self, 503, {"ok": False, "error": str(exc), "profiles": []})
+            finally:
+                if needs_catalog:
+                    AMNEZIA_ACTION_LOCK.release()
+            return
+
         if self.path == "/api/vpn/happ/status":
             if happ_desktop.available():
                 send_json(self, 200, {"ok": True, "service": "Happ Desktop", "state": "Управляется в Happ Desktop",
@@ -2498,6 +2533,8 @@ class SessionControlHandler(BaseHTTPRequestHandler):
             self._handle_recover()
         elif self.path == "/api/system/update":
             self._handle_update()
+        elif self.path == "/api/vpn/amnezia/select":
+            self._handle_amnezia_select()
         elif self.path == "/api/vpn/happ/reconnect":
             self._handle_happ_reconnect()
         elif self.path == "/api/vpn/happ/location":
@@ -3244,6 +3281,33 @@ class SessionControlHandler(BaseHTTPRequestHandler):
         finally:
             log_file.close()
         send_json(self, 202, {"ok": True, "state": "running", "pid": process.pid, "summary": "Обновление запущено"})
+
+    def _handle_amnezia_select(self):
+        payload, error = self._read_json_body()
+        if error:
+            send_json(self, 400, {"ok": False, "error": error})
+            return
+        profile_id = payload.get("profileId") if isinstance(payload, dict) else None
+        if not isinstance(profile_id, str) or not re.fullmatch(r"[0-9a-f]{64}", profile_id):
+            send_json(self, 400, {"ok": False, "error": "amnezia_invalid_profile"})
+            return
+        if not AMNEZIA_ACTION_LOCK.acquire(blocking=False):
+            send_json(self, 409, {"ok": False, "error": "amnezia_action_busy"})
+            return
+        try:
+            catalog = amnezia_ax.command("list")
+            if not any(item.get("id") == profile_id for item in catalog["profiles"]):
+                send_json(self, 404, {"ok": False, "error": "amnezia_profile_not_found"})
+                return
+            result = amnezia_ax.command("select", profile_id)
+            if result.get("currentProfileId") != profile_id or result.get("state") != "Connected":
+                send_json(self, 504, {"ok": False, "error": "amnezia_selection_unconfirmed"})
+                return
+            send_json(self, 200, {"ok": True, **result})
+        except amnezia_ax.AmneziaAXError as exc:
+            send_json(self, 503, {"ok": False, "error": str(exc)})
+        finally:
+            AMNEZIA_ACTION_LOCK.release()
 
     def _handle_happ_ping(self):
         payload, error = self._read_json_body()

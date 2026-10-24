@@ -958,6 +958,8 @@
     .tools-panel { display: grid; gap: 14px; }
     .settings-section[hidden],
     .tools-panel[hidden] { display: none !important; }
+    #happVpnControls, #amneziaVpnControls { display: grid; gap: 10px; min-width: 0; }
+    #happVpnControls[hidden], #amneziaVpnControls[hidden] { display: none !important; }
     .settings-section-heading { display: grid; gap: 3px; padding-bottom: 2px; }
     .settings-section-heading strong { font-size: 14px; }
     .settings-section-heading span { color: var(--muted); font-size: 11px; line-height: 1.35; }
@@ -2158,7 +2160,10 @@
               </nav>
               <div class="tools-content">
                 <section class="tools-panel" id="toolsPanelVpn" role="tabpanel" aria-labelledby="toolsTabVpn" data-tools-panel="vpn">
-                  <div class="settings-section-heading"><strong>VPN</strong><span>Подписки Happ и локации</span></div>
+                  <div class="settings-section-heading"><strong>VPN</strong><span>Управление подключениями Mac mini</span></div>
+                  <label class="tools-field-label" for="vpnProvider">Приложение</label>
+                  <select id="vpnProvider" aria-label="VPN приложение"><option value="happ">Happ</option><option value="amnezia">AmneziaVPN</option></select>
+                  <div id="happVpnControls">
                   <label class="tools-field-label" for="happSubscription">Подписка</label>
                   <select id="happSubscription" aria-label="Подписка Happ"><option value="">Загрузка...</option></select>
                   <label class="tools-field-label" for="happLocation">Локация</label>
@@ -2171,6 +2176,17 @@
                     <button type="button" id="pingHapp" disabled title="TCP-пинг всех локаций выбранной подписки с сервера Fly Terminal. Результаты видны 3 минуты.">Проверить пинг</button>
                     <button type="button" id="reconnectHapp" title="Отключить и снова подключить активную конфигурацию Happ Plus через macOS scutil"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.2-4.2"/><path d="M12.5 1.8v3.8H8.7"/><path d="M14 8a6 6 0 0 1-10.2 4.2"/><path d="M3.5 14.2v-3.8h3.8"/></svg>Переподключить</button>
                     <div class="settings-action-status" id="happStatus"></div>
+                  </div>
+                  </div>
+                  <div id="amneziaVpnControls" hidden>
+                    <label class="tools-field-label" for="amneziaProfile">Профиль</label>
+                    <select id="amneziaProfile" aria-label="Профиль AmneziaVPN"><option value="">Выберите AmneziaVPN</option></select>
+                    <div class="settings-action-status" id="amneziaCurrent" aria-live="polite"></div>
+                    <div class="vpn-action-row">
+                      <button type="button" id="refreshAmneziaProfiles">Обновить список</button>
+                      <button type="button" id="connectAmneziaProfile" disabled>Подключить</button>
+                    </div>
+                    <div class="settings-action-status" id="amneziaStatus" role="status" aria-live="polite"></div>
                   </div>
                 </section>
                 <section class="tools-panel" id="toolsPanelFiles" role="tabpanel" aria-labelledby="toolsTabFiles" data-tools-panel="files" hidden>
@@ -2865,6 +2881,14 @@
     const happCatalogNotice = document.getElementById("happCatalogNotice");
     const pingHappBtn = document.getElementById("pingHapp");
     const happPingStatus = document.getElementById("happPingStatus");
+    const vpnProviderSelect = document.getElementById("vpnProvider");
+    const happVpnControls = document.getElementById("happVpnControls");
+    const amneziaVpnControls = document.getElementById("amneziaVpnControls");
+    const amneziaProfileSelect = document.getElementById("amneziaProfile");
+    const amneziaCurrent = document.getElementById("amneziaCurrent");
+    const amneziaStatus = document.getElementById("amneziaStatus");
+    const refreshAmneziaProfilesBtn = document.getElementById("refreshAmneziaProfiles");
+    const connectAmneziaProfileBtn = document.getElementById("connectAmneziaProfile");
 
     // State
     let tabs = []; // { id, type, sessionId, label, customLabel, active, wrapper }
@@ -2880,6 +2904,10 @@
     let macAppsError = "";
     let browserApps = [];
     let browserAppsError = "";
+    let amneziaProfiles = [];
+    let amneziaCatalog = { current: "", currentProfileId: "", state: "Unknown" };
+    let amneziaLoading = false;
+    let amneziaSwitching = false;
     let happSubscriptionsLoading = false;
     let happSubscriptions = [];
     let happPingRunning = false;
@@ -4858,6 +4886,131 @@
       recoveryStatus.textContent = message;
     }
 
+    function setAmneziaStatus(tone, message) {
+      if (!amneziaStatus) return;
+      amneziaStatus.className = `settings-action-status ${tone || ""}`.trim();
+      amneziaStatus.textContent = message;
+    }
+
+    function updateAmneziaAction() {
+      if (!connectAmneziaProfileBtn) return;
+      const selected = amneziaProfileSelect?.value || "";
+      const alreadyConnected = selected === amneziaCatalog.currentProfileId && amneziaCatalog.state === "Connected";
+      connectAmneziaProfileBtn.disabled = amneziaLoading || amneziaSwitching || !selected || alreadyConnected;
+      connectAmneziaProfileBtn.textContent = selected && selected !== amneziaCatalog.currentProfileId ? "Переключить" : "Подключить";
+    }
+
+    function renderAmneziaCatalog(payload, preferredId = "") {
+      amneziaProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+      amneziaCatalog = {
+        current: payload.current || "", currentProfileId: payload.currentProfileId || "", state: payload.state || "Unknown"
+      };
+      if (amneziaProfileSelect) {
+        amneziaProfileSelect.innerHTML = "";
+        if (!amneziaProfiles.length) {
+          amneziaProfileSelect.appendChild(new Option("Профили не найдены", ""));
+          amneziaProfileSelect.disabled = true;
+        } else {
+          amneziaProfileSelect.appendChild(new Option("Выберите профиль…", ""));
+          amneziaProfiles.forEach(profile => amneziaProfileSelect.appendChild(new Option(profile.label, profile.id)));
+          amneziaProfileSelect.disabled = false;
+          const matched = amneziaProfiles.some(profile => profile.id === preferredId);
+          amneziaProfileSelect.value = matched ? preferredId : amneziaCatalog.currentProfileId || "";
+        }
+      }
+      if (amneziaCurrent) amneziaCurrent.textContent = `Состояние: ${amneziaCatalog.state === "Connected" ? "подключено" : amneziaCatalog.state === "Disconnected" ? "отключено" : amneziaCatalog.state}${amneziaCatalog.current ? ` · ${amneziaCatalog.current}` : ""}`;
+      updateAmneziaAction();
+      positionFloatingMenu(toolsMenu);
+    }
+
+    async function loadAmneziaProfiles(preserveSelection = false) {
+      if (amneziaLoading || amneziaSwitching || !amneziaProfileSelect) return;
+      const selectedId = preserveSelection ? amneziaProfileSelect.value : "";
+      amneziaLoading = true;
+      amneziaProfileSelect.disabled = true;
+      if (refreshAmneziaProfilesBtn) refreshAmneziaProfilesBtn.disabled = true;
+      updateAmneziaAction();
+      setAmneziaStatus("", "Читаю профили AmneziaVPN…");
+      try {
+        const response = await localApiFetch("/api/vpn/amnezia/profiles", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) throw new Error(payload.message || "Не удалось получить профили AmneziaVPN");
+        renderAmneziaCatalog(payload, selectedId);
+        setAmneziaStatus("", "");
+      } catch (error) {
+        setAmneziaStatus("danger", error.message || String(error));
+        if (!amneziaProfiles.length) amneziaProfileSelect.replaceChildren(new Option("Недоступно", ""));
+      } finally {
+        amneziaLoading = false;
+        if (refreshAmneziaProfilesBtn) refreshAmneziaProfilesBtn.disabled = false;
+        amneziaProfileSelect.disabled = !amneziaProfiles.length;
+        updateAmneziaAction();
+      }
+    }
+
+    async function verifyAmneziaAfterNetworkChange(label) {
+      // Changing the current VPN may sever the request even if native switching succeeds.
+      for (const delay of [1000, 2500, 4500, 7000, 10000, 15000]) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        try {
+          const response = await localApiFetch("/api/vpn/amnezia/status", { cache: "no-store" });
+          if (!response.ok) continue;
+          const result = await response.json();
+          if (result.state === "Connected" && result.current === label) return true;
+        } catch (_error) { /* Keep checking; never issue a second switch. */ }
+      }
+      return false;
+    }
+
+    async function connectAmneziaProfile() {
+      if (amneziaSwitching || amneziaLoading || !amneziaProfileSelect) return;
+      const profile = amneziaProfiles.find(item => item.id === amneziaProfileSelect.value);
+      if (!profile || (amneziaCatalog.currentProfileId === profile.id && amneziaCatalog.state === "Connected")) return;
+      if (amneziaCatalog.state === "Connected" && amneziaCatalog.currentProfileId !== profile.id &&
+          !confirm(`Смена профиля на «${profile.label}» временно отключит активный VPN Amnezia и может прервать доступ к Mac mini. Продолжить?`)) return;
+      amneziaSwitching = true;
+      amneziaProfileSelect.disabled = true;
+      if (refreshAmneziaProfilesBtn) refreshAmneziaProfilesBtn.disabled = true;
+      updateAmneziaAction();
+      setAmneziaStatus("warn", `Подключаю ${profile.label}…`);
+      try {
+        const response = await localApiFetch("/api/vpn/amnezia/select", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profileId: profile.id })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) {
+          const failure = new Error(result.message || "Не удалось переключить AmneziaVPN");
+          failure.final = [400, 404, 409].includes(response.status);
+          throw failure;
+        }
+        setAmneziaStatus("", `Подключено: ${result.current || profile.label}`);
+        setStatusText(`AmneziaVPN: ${result.current || profile.label}`, 3500);
+      } catch (error) {
+        setAmneziaStatus("warn", "Проверяю соединение после смены VPN…");
+        const verified = !error.final && await verifyAmneziaAfterNetworkChange(profile.label);
+        if (verified) {
+          setAmneziaStatus("", `Подключено: ${profile.label}`);
+          setStatusText(`AmneziaVPN: ${profile.label}`, 3500);
+        } else {
+          setAmneziaStatus("danger", error.message || String(error));
+        }
+      } finally {
+        amneziaSwitching = false;
+        await loadAmneziaProfiles();
+      }
+    }
+
+    function selectVpnProvider(value, refresh = true) {
+      const provider = value === "amnezia" ? "amnezia" : "happ";
+      if (vpnProviderSelect) vpnProviderSelect.value = provider;
+      if (happVpnControls) happVpnControls.hidden = provider !== "happ";
+      if (amneziaVpnControls) amneziaVpnControls.hidden = provider !== "amnezia";
+      try { localStorage.setItem("fly-terminal-vpn-provider", provider); } catch (_error) { /* storage optional */ }
+      if (provider === "amnezia" && refresh) loadAmneziaProfiles();
+      positionFloatingMenu(toolsMenu);
+    }
+
     function setHappStatus(tone, message) {
       if (!happStatus) return;
       happStatus.className = `settings-action-status ${tone || ""}`.trim();
@@ -6533,6 +6686,15 @@
       refreshHappSubscriptionsBtn.onclick = () => loadHappSubscriptions(true);
     }
     if (pingHappBtn) pingHappBtn.onclick = measureHappPing;
+    if (vpnProviderSelect) {
+      vpnProviderSelect.onchange = () => selectVpnProvider(vpnProviderSelect.value);
+      let savedProvider = "happ";
+      try { savedProvider = localStorage.getItem("fly-terminal-vpn-provider") || "happ"; } catch (_error) { /* storage optional */ }
+      selectVpnProvider(savedProvider);
+    }
+    if (refreshAmneziaProfilesBtn) refreshAmneziaProfilesBtn.onclick = () => loadAmneziaProfiles(true);
+    if (connectAmneziaProfileBtn) connectAmneziaProfileBtn.onclick = connectAmneziaProfile;
+    if (amneziaProfileSelect) amneziaProfileSelect.onchange = updateAmneziaAction;
     window.addEventListener("focus", refreshHappPingExpiry);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) refreshHappPingExpiry();
