@@ -269,12 +269,6 @@ body.dashboard-page {
 .catalog-message { margin-top: 16px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .catalog-message:empty { display:none; }
 .catalog-message[data-error=true] { color: #efabb6; border-color: #57353d; }
-[data-view=compact] .services { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-[data-view=compact] .service { height: 96px; padding: 12px; grid-template-rows: 32px 24px; gap: 8px 6px; border-radius: 10px; }
-[data-view=compact] .service-main { gap: 9px; }
-[data-view=compact] .service-main strong { font-size: 14px; }
-[data-view=compact] .service-icon { width: 30px; height: 30px; flex-basis: 30px; border-radius: 8px; }
-[data-view=compact] .service-icon::before { width: 16px; height: 16px; }
 .service-table-scroll { overflow-x: auto; margin-top: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .service-table { width: 100%; min-width: 440px; border-collapse: collapse; font-size: 13px; text-align: left; }
 .service-table caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -292,7 +286,7 @@ body.dashboard-page {
 .service-table .service-icon::before { width: 16px; height: 16px; }
 .service-table .service-status { margin: 0; }
 @media (max-width: 820px) and (min-width: 601px) {
-  [data-dashboard] .services, [data-view=compact] .services { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-dashboard] .services { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media(max-width:600px) {
   body:not(.dashboard-page) { padding:20px 12px; }
@@ -303,13 +297,12 @@ body.dashboard-page {
   }
   .view-switch { width: 100%; margin: 0; }
   .view-switch button { flex: 1; min-width: 0; padding: 8px 4px; }
-  [data-dashboard] .services, [data-view=compact] .services {
+  [data-dashboard] .services {
     grid-template-columns:1fr;
     gap:8px;
     margin-top:8px;
   }
   [data-dashboard] .service { height: 104px; padding: 14px; gap: 12px 8px; }
-  [data-view=compact] .service { height: 92px; padding: 12px; gap: 8px 6px; }
   [data-dashboard] .service-main strong { font-size: 15px; }
   .service-table-scroll { margin-top: 8px; }
   .service-table th, .service-table td { padding: 11px 12px; }

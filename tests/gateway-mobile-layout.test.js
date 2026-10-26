@@ -15,17 +15,17 @@ test("catalog starts with the view switch and has no decorative heading", () => 
   assert.match(html, /<section class="services" aria-label="Каталог сервисов">/);
 });
 
-test("mobile cards have a compact top-aligned layout without an empty message gap", () => {
+test("mobile cards have a top-aligned layout without an empty message gap", () => {
   assert.match(css, /\.catalog-message:empty\s*\{\s*display:none;/);
   assert.match(css, /@media\(max-width:600px\)[\s\S]*body\.dashboard-page\s*\{\s*display:block;/);
-  assert.match(css, /\[data-dashboard\] \.services, \[data-view=compact\] \.services\s*\{\s*grid-template-columns:1fr;\s*gap:8px;\s*margin-top:8px;/);
+  assert.match(css, /\[data-dashboard\] \.services\s*\{\s*grid-template-columns:1fr;\s*gap:8px;\s*margin-top:8px;/);
   assert.match(css, /body:not\(\.dashboard-page\)\s*\{\s*padding:20px 12px;/);
 });
 
 function selectedMode({mobile, stored}) {
   // Exercise the production initialization up to action-menu setup.
   const init = js.slice(0, js.indexOf('  dashboard.querySelectorAll(".service-menu").forEach')) + "})();";
-  const buttons = ["tiles", "compact", "table"].map(viewMode => ({
+  const buttons = ["tiles", "table"].map(viewMode => ({
     dataset: {viewMode}, setAttribute(name, value) { this[name] = value; }, addEventListener() {}
   }));
   const dashboard = {
@@ -48,8 +48,10 @@ function selectedMode({mobile, stored}) {
   return {active: dashboard.dataset.view, pressed: buttons.filter(b => b["aria-pressed"] === "true").map(b => b.dataset.viewMode)};
 }
 
-test("compact is the mobile default; previously selected display mode wins", () => {
-  assert.deepEqual(selectedMode({mobile: true}), {active: "compact", pressed: ["compact"]});
+test("tiles is the default; obsolete compact falls back and table is preserved", () => {
+  assert.deepEqual(selectedMode({mobile: true}), {active: "tiles", pressed: ["tiles"]});
   assert.deepEqual(selectedMode({mobile: false}), {active: "tiles", pressed: ["tiles"]});
+  assert.deepEqual(selectedMode({mobile: true, stored: "compact"}), {active: "tiles", pressed: ["tiles"]});
+  assert.deepEqual(selectedMode({mobile: true, stored: "table"}), {active: "table", pressed: ["table"]});
   assert.deepEqual(selectedMode({mobile: true, stored: "list"}), {active: "table", pressed: ["table"]});
 });

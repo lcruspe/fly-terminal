@@ -26,7 +26,7 @@
   if (!dashboard) return; // The restricted Sprut.Hub page has no admin controls.
   const message = dashboard.querySelector(".catalog-message");
   const storageKey = "fly-gateway-view-v1";
-  const modes = ["tiles", "compact", "table"];
+  const modes = ["tiles", "table"];
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
   let tableContainer, tableMoves = [];
@@ -85,7 +85,8 @@
     renderTable(dashboard.dataset.view === "table");
     dashboard.querySelectorAll("[data-view-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.viewMode === dashboard.dataset.view)));
   }
-  setView(read(storageKey, window.matchMedia("(max-width: 600px)").matches ? "compact" : "tiles"));
+  setView(read(storageKey, "tiles"));
+  write(storageKey, dashboard.dataset.view);
   dashboard.querySelectorAll("[data-view-mode]").forEach(button => button.addEventListener("click", () => {
     setView(button.dataset.viewMode);
     write(storageKey, dashboard.dataset.view);
