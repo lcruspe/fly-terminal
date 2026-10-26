@@ -26,7 +26,6 @@
   if (!dashboard) return; // The restricted Sprut.Hub page has no admin controls.
   const message = dashboard.querySelector(".catalog-message");
   const storageKey = "fly-gateway-view-v1";
-  const detailsKey = "fly-gateway-actions-v1";
   const modes = ["tiles", "compact", "table"];
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
@@ -45,7 +44,7 @@
       const caption = table.createCaption();
       caption.textContent = "Каталог сервисов";
       const head = table.createTHead().insertRow();
-      ["Сервис", "Состояние", "Описание", "Действия"].forEach(label => {
+      ["Сервис", "Состояние", "Действия"].forEach(label => {
         const cell = document.createElement("th");
         cell.scope = "col";
         cell.textContent = label;
@@ -58,7 +57,7 @@
         const name = document.createElement("th");
         name.scope = "row";
         row.append(name);
-        const status = row.insertCell(), description = row.insertCell(), actions = row.insertCell();
+        const status = row.insertCell(), actions = row.insertCell();
         const move = (node, cell) => {
           if (!node) return;
           const marker = document.createComment("card position");
@@ -66,10 +65,9 @@
           tableMoves.push({node, marker, cell});
         };
         move(card.querySelector(".service-main"), name);
-        // Move the existing nodes; preserve listeners, open details and live statuses.
+        // Move existing nodes to preserve listeners and live statuses.
         card.querySelectorAll(".service-heading > [data-health], .roomaudio-status, .variant-status, .router-status").forEach(node => move(node, status));
-        move(card.querySelector(".service-description"), description);
-        move(card.querySelector("details"), actions);
+        move(card.querySelector(".service-menu"), actions);
       });
       tableContainer.append(table);
       services.after(tableContainer);
@@ -81,6 +79,7 @@
     services.hidden = active;
   }
   function setView(mode) {
+    closeMenus();
     if (mode === "list") mode = "table"; // Migrate the saved list preference.
     dashboard.dataset.view = modes.includes(mode) ? mode : "tiles";
     renderTable(dashboard.dataset.view === "table");
@@ -91,15 +90,57 @@
     setView(button.dataset.viewMode);
     write(storageKey, dashboard.dataset.view);
   }));
-  let opened = read(detailsKey, {});
-  if (!opened || typeof opened !== "object" || Array.isArray(opened)) opened = {};
-  dashboard.querySelectorAll("details[data-details-key]").forEach(details => {
-    details.open = opened[details.dataset.detailsKey] === true;
-    details.addEventListener("toggle", () => {
-      opened[details.dataset.detailsKey] = details.open;
-      write(detailsKey, opened);
+  function closeMenus() {
+    dashboard.querySelectorAll(".service-actions:popover-open").forEach(panel => panel.hidePopover());
+  }
+  dashboard.querySelectorAll(".service-menu").forEach(menu => {
+    const trigger = menu.querySelector(".action-menu-trigger");
+    const panel = menu.querySelector(".service-actions");
+    panel.addEventListener("beforetoggle", event => {
+      trigger.setAttribute("aria-expanded", String(event.newState === "open"));
+      if (event.newState !== "open") return;
+      // Wait for the native popover to enter the top layer before measuring it.
+      queueMicrotask(() => {
+        if (!panel.matches(":popover-open")) return;
+        const anchor = trigger.getBoundingClientRect();
+        const gap = 8;
+        const height = panel.offsetHeight;
+        const below = window.innerHeight - anchor.bottom - gap;
+        const top = below >= height || below >= anchor.top - gap
+          ? Math.min(anchor.bottom + gap, window.innerHeight - height - gap)
+          : anchor.top - height - gap;
+        panel.style.top = `${Math.max(gap, top)}px`;
+        panel.style.left = `${Math.max(gap, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - gap))}px`;
+        panel.scrollTop = 0;
+        panel.querySelector("a, button:not(:disabled)")?.focus({preventScroll: true});
+      });
+    });
+    panel.addEventListener("click", event => {
+      const action = event.target.closest("a, button");
+      if (!action || action.disabled) return;
+      panel.hidePopover();
+      if (action.tagName === "BUTTON") trigger.focus({preventScroll: true});
+    }, true);
+    panel.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        panel.hidePopover();
+        trigger.focus({preventScroll: true});
+      } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        const items = [...panel.querySelectorAll("a, button:not(:disabled)")];
+        if (!items.length) return;
+        event.preventDefault();
+        const index = items.indexOf(document.activeElement);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        items[next].focus();
+      }
     });
   });
+  window.addEventListener("resize", closeMenus);
+  document.addEventListener("scroll", event => {
+    if (!(event.target instanceof Element) || !event.target.closest(".service-actions")) closeMenus();
+  }, true);
 
   let csrf = "", pending = false;
   const labels = { start: "Запустить", stop: "Остановить", restart: "Перезапустить", "vpn-connect": "Подключить VPN", "vpn-disconnect": "Отключить VPN" };

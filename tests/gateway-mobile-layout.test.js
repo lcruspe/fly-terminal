@@ -23,8 +23,8 @@ test("mobile cards have a compact top-aligned layout without an empty message ga
 });
 
 function selectedMode({mobile, stored}) {
-  // Exercise the production initialization up to persisted action-details setup.
-  const init = js.slice(0, js.indexOf("  let opened =")) + "})();";
+  // Exercise the production initialization up to action-menu setup.
+  const init = js.slice(0, js.indexOf('  dashboard.querySelectorAll(".service-menu").forEach')) + "})();";
   const buttons = ["tiles", "compact", "table"].map(viewMode => ({
     dataset: {viewMode}, setAttribute(name, value) { this[name] = value; }, addEventListener() {}
   }));
