@@ -1,5 +1,5 @@
 # Idempotent RoomAudio/AudioMonitor recovery for the current interactive user.
-# No microphone mode changes, no forced process termination, no duplicate workers.
+# Preserve selected microphone mode; restart only stale managers and start missing workers.
 $ErrorActionPreference = 'Stop'
 $room = Join-Path $env:LOCALAPPDATA 'RoomAudio'
 $python = 'D:\Conda\python.exe'
@@ -23,6 +23,29 @@ function Exists-Process([string]$name) {
 try {
     $processes = @(Get-CimInstance Win32_Process |
         Where-Object { $_.Name -in @('python.exe','pythonw.exe') -and $_.CommandLine })
+    # Recover a manager that still has a PID but no longer runs its control
+    # loop. Newly started processes get a two-minute initialization grace.
+    $managerPath = Join-Path $room 'capture_manager.py'
+    $heartbeatPath = Join-Path $room 'capture-manager.heartbeat'
+    $heartbeatUtc = if (Test-Path -LiteralPath $heartbeatPath -PathType Leaf) {
+        (Get-Item -LiteralPath $heartbeatPath).LastWriteTimeUtc
+    } else { [datetime]::MinValue }
+    $utcNow = [datetime]::UtcNow
+    $staleSeconds = ($utcNow - $heartbeatUtc).TotalSeconds
+    foreach ($proc in @($processes | Where-Object {
+        ([string]$_.CommandLine).IndexOf($managerPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    })) {
+        $ageSeconds = ($utcNow - $proc.CreationDate.ToUniversalTime()).TotalSeconds
+        if ($ageSeconds -ge 120 -and $staleSeconds -ge 90) {
+            & "$env:WINDIR\System32\taskkill.exe" /PID ([string]$proc.ProcessId) /T /F | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Cannot stop stale manager PID=$($proc.ProcessId)"
+            }
+            Write-Event ("Restart stale capture manager PID=" + $proc.ProcessId +
+                         " heartbeat_age_s=" + [Math]::Round($staleSeconds))
+            $processes = @($processes | Where-Object { $_.ProcessId -ne $proc.ProcessId })
+        }
+    }
     $workers = @(
         @{ Path=$watch; Python=$pythonw; Dir=(Split-Path -Parent $watch) },
         @{ Path=(Join-Path $room 'capture_manager.py'); Python=$python; Dir=$room },

@@ -16,8 +16,10 @@
 	@gatewayStatus path /gateway-status
 	@ytUi path /yt-transcriber /yt-transcriber/*
 	@roomaudioRoot path /roomaudio
-	# Recording ingest, client control and setup stay LAN/Tailscale-only.
-	@roomAudioPrivate path /roomaudio/ingest/* /roomaudio/client/* /roomaudio/setup/*
+	# Mate can switch Wi-Fi subnets. Permit source ingest and polling over the
+	# Oracle HTTPS relay: server.py checks X-Ingest-Key for every such request.
+	# Installation/setup endpoints remain unavailable through the public relay.
+	@roomAudioPrivate path /roomaudio/setup/*
 	handle @roomAudioPrivate {
 		respond "Not found" 404
 	}

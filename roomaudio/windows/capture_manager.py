@@ -13,6 +13,7 @@ CONF=json.loads((ROOT/"client.json").read_text(encoding="utf-8-sig"))
 TRANSPORT=ClientTransport(CONF)
 PYTHON=sys.executable
 LOG=ROOT/"capture-manager.log"
+HEARTBEAT=ROOT/"capture-manager.heartbeat"
 logging.basicConfig(filename=str(LOG),level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s",encoding="utf-8")
 VALID={"continuous","voice","off"}
@@ -25,6 +26,18 @@ class Manager:
         self.last_start=0.0
         self.child_output=None
         self.recovery_id=None
+        self.last_heartbeat=0.0
+
+    def heartbeat(self):
+        # Independent Task Scheduler watchdog: a PID alone is not proof that
+        # control polling still runs. Keep a timestamp even during outages.
+        now=time.monotonic()
+        if now-self.last_heartbeat>=10:
+            try:
+                HEARTBEAT.touch()
+            except OSError as exc:
+                logging.warning("Cannot write watchdog heartbeat: %s",exc)
+            self.last_heartbeat=now
 
     def poll(self):
         uri="/client/recording-mode?"+urlencode({"active":self.active, "recovery_ack":self.recovery_id or ""})
@@ -73,6 +86,7 @@ class Manager:
     def loop(self):
         print("RoomAudio capture manager online",flush=True)
         while True:
+            self.heartbeat()
             try:
                 requested,recovery_id=self.poll()
                 if requested!=self.active or recovery_id!=self.recovery_id:
