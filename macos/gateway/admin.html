@@ -17,36 +17,39 @@
     <p class="catalog-message" role="status" aria-live="polite"></p>
     <section class="services" aria-label="Каталог сервисов">
       <article class="service" data-service="terminal">
-        <div class="service-heading"><a class="service-main" data-port="8443" href="#"><strong>Fly Terminal</strong></a><span data-health="terminal"></span></div>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Fly Terminal" aria-haspopup="dialog" aria-controls="actions-terminal" popovertarget="actions-terminal" aria-expanded="false" title="Действия: Fly Terminal">⋮</button><div class="service-actions" id="actions-terminal" popover="auto" role="dialog" aria-label="Действия: Fly Terminal">
+        <div class="service-heading"><a class="service-main" data-port="8443" href="#"><span class="service-icon icon-terminal" aria-hidden="true"></span><strong>Fly Terminal</strong></a></div>
+        <div class="service-status"><span data-health="terminal" data-health-label></span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Fly Terminal" aria-haspopup="dialog" aria-controls="actions-terminal" popovertarget="actions-terminal" aria-expanded="false" title="Действия: Fly Terminal"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-terminal" popover="auto" role="dialog" aria-label="Действия: Fly Terminal">
           <a class="action-link" data-port="8443" href="#">Открыть терминал</a>
-
         </div></div>
       </article>
       <article class="service" data-service="browser">
-        <div class="service-heading"><a class="service-main" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#"><strong>Браузер</strong></a></div>
-        <div class="variant-status"><span data-health="native">Native</span><span data-health="fallback">Fallback</span></div>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Браузер" aria-haspopup="dialog" aria-controls="actions-browser" popovertarget="actions-browser" aria-expanded="false" title="Действия: Браузер">⋮</button><div class="service-actions" id="actions-browser" popover="auto" role="dialog" aria-label="Действия: Браузер">
+        <div class="service-heading"><a class="service-main" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#"><span class="service-icon icon-globe2" aria-hidden="true"></span><strong>Браузер</strong></a></div>
+        <div class="service-status"><span data-health="native">Native</span><span data-health="fallback">Fallback</span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Браузер" aria-haspopup="dialog" aria-controls="actions-browser" popovertarget="actions-browser" aria-expanded="false" title="Действия: Браузер"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-browser" popover="auto" role="dialog" aria-label="Действия: Браузер">
           <section class="action-group"><h2>Native</h2><a class="action-link" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#">Открыть Native</a><div data-controls="native"></div></section>
           <section class="action-group"><h2>Fallback</h2><a class="action-link" data-port="8443" data-path="/browser/" href="#">Открыть Fallback</a><div data-controls="fallback"></div></section>
         </div></div>
       </article>
       <article class="service" data-service="roomaudio">
-        <div class="service-heading"><a class="service-main" href="/roomaudio/"><strong>RoomAudio</strong></a><span class="roomaudio-status"><span data-health="roomaudio">Mac</span><span data-health="roomaudio_source">Источник</span></span></div>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: RoomAudio" aria-haspopup="dialog" aria-controls="actions-roomaudio" popovertarget="actions-roomaudio" aria-expanded="false" title="Действия: RoomAudio">⋮</button><div class="service-actions" id="actions-roomaudio" popover="auto" role="dialog" aria-label="Действия: RoomAudio"><a class="action-link" href="/roomaudio/">Открыть аудиоархив</a><div data-controls="roomaudio"></div></div></div>
+        <div class="service-heading"><a class="service-main" href="/roomaudio/"><span class="service-icon icon-soundwave" aria-hidden="true"></span><strong>RoomAudio</strong></a></div>
+        <div class="service-status"><span data-health="roomaudio">Mac</span><span data-health="roomaudio_source">Источник</span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: RoomAudio" aria-haspopup="dialog" aria-controls="actions-roomaudio" popovertarget="actions-roomaudio" aria-expanded="false" title="Действия: RoomAudio"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-roomaudio" popover="auto" role="dialog" aria-label="Действия: RoomAudio"><a class="action-link" href="/roomaudio/">Открыть аудиоархив</a><div data-controls="roomaudio"></div></div></div>
       </article>
       <article class="service" data-service="yt">
-        <div class="service-heading"><a class="service-main" href="/yt-transcriber/"><strong>YT Transcript</strong></a><span data-health="yt"></span></div>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: YT Transcript" aria-haspopup="dialog" aria-controls="actions-yt" popovertarget="actions-yt" aria-expanded="false" title="Действия: YT Transcript">⋮</button><div class="service-actions" id="actions-yt" popover="auto" role="dialog" aria-label="Действия: YT Transcript"><a class="action-link" href="/yt-transcriber/">Открыть расшифровки</a><div data-controls="yt"></div></div></div>
+        <div class="service-heading"><a class="service-main" href="/yt-transcriber/"><span class="service-icon icon-youtube" aria-hidden="true"></span><strong>YT Transcript</strong></a></div>
+        <div class="service-status"><span data-health="yt" data-health-label></span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: YT Transcript" aria-haspopup="dialog" aria-controls="actions-yt" popovertarget="actions-yt" aria-expanded="false" title="Действия: YT Transcript"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-yt" popover="auto" role="dialog" aria-label="Действия: YT Transcript"><a class="action-link" href="/yt-transcriber/">Открыть расшифровки</a><div data-controls="yt"></div></div></div>
       </article>
       <article class="service" data-service="spruthub">
-        <div class="service-heading"><a class="service-main" data-port="10000" href="#"><strong>Sprut.Hub</strong></a><span data-health="spruthub"></span></div>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Sprut.Hub" aria-haspopup="dialog" aria-controls="actions-spruthub" popovertarget="actions-spruthub" aria-expanded="false" title="Действия: Sprut.Hub">⋮</button><div class="service-actions" id="actions-spruthub" popover="auto" role="dialog" aria-label="Действия: Sprut.Hub"><a class="action-link" data-port="10000" href="#">Открыть хаб</a><div data-controls="spruthub"></div></div></div>
+        <div class="service-heading"><a class="service-main" data-port="10000" href="#"><span class="service-icon icon-house-door" aria-hidden="true"></span><strong>Sprut.Hub</strong></a></div>
+        <div class="service-status"><span data-health="spruthub" data-health-label></span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Sprut.Hub" aria-haspopup="dialog" aria-controls="actions-spruthub" popovertarget="actions-spruthub" aria-expanded="false" title="Действия: Sprut.Hub"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-spruthub" popover="auto" role="dialog" aria-label="Действия: Sprut.Hub"><a class="action-link" data-port="10000" href="#">Открыть хаб</a><div data-controls="spruthub"></div></div></div>
       </article>
       <article class="service" data-service="openwrt">
-        <div class="service-heading"><a class="service-main" href="http://192.168.1.115/"><strong>OpenWrt</strong></a><span data-health="openwrt"></span></div>
-        <p class="router-status"></p>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: OpenWrt" aria-haspopup="dialog" aria-controls="actions-openwrt" popovertarget="actions-openwrt" aria-expanded="false" title="Действия: OpenWrt">⋮</button><div class="service-actions" id="actions-openwrt" popover="auto" role="dialog" aria-label="Действия: OpenWrt"><a class="action-link" href="http://192.168.1.115/">Панель роутера</a><a class="action-link" href="http://192.168.1.115/cgi-bin/luci/admin/services/amnezia-locations">Amnezia VPN</a><div data-controls="openwrt"></div></div></div>
+        <div class="service-heading"><a class="service-main" href="http://192.168.1.115/"><span class="service-icon icon-router" aria-hidden="true"></span><strong>OpenWrt</strong></a></div>
+        <div class="service-status"><span data-health="openwrt"><span class="router-status"></span></span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: OpenWrt" aria-haspopup="dialog" aria-controls="actions-openwrt" popovertarget="actions-openwrt" aria-expanded="false" title="Действия: OpenWrt"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-openwrt" popover="auto" role="dialog" aria-label="Действия: OpenWrt"><a class="action-link" href="http://192.168.1.115/">Панель роутера</a><a class="action-link" href="http://192.168.1.115/cgi-bin/luci/admin/services/amnezia-locations">Amnezia VPN</a><div data-controls="openwrt"></div></div></div>
       </article>
     </section>
   </main>

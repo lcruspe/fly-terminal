@@ -66,7 +66,7 @@
         };
         move(card.querySelector(".service-main"), name);
         // Move existing nodes to preserve listeners and live statuses.
-        card.querySelectorAll(".service-heading > [data-health], .roomaudio-status, .variant-status, .router-status").forEach(node => move(node, status));
+        card.querySelectorAll(".service-status").forEach(node => move(node, status));
         move(card.querySelector(".service-menu"), actions);
       });
       tableContainer.append(table);
@@ -151,6 +151,11 @@
   const names = { native: "браузер Native", fallback: "браузер Fallback", roomaudio: "сервер RoomAudio", yt: "YT Transcript", spruthub: "подключение к Sprut.Hub", openwrt: "Amnezia VPN" };
   const indicators = new Map();
   dashboard.querySelectorAll("[data-health]").forEach(node => {
+    if (node.hasAttribute("data-health-label")) {
+      const label = document.createElement("span");
+      label.className = "health-label";
+      node.append(label);
+    }
     const dot = document.createElement("span");
     dot.className = "service-health";
     dot.setAttribute("role", "status");
@@ -161,9 +166,12 @@
     const dot = indicators.get(key);
     if (!dot) return;
     dot.dataset.state = state;
+    dot.parentElement.dataset.state = state;
     const text = { up: "Доступен", down: "Недоступен", unknown: "Нет данных" }[state] || "Проверка";
+    const label = dot.parentElement.querySelector(".health-label");
+    if (label) label.textContent = state === "up" ? "Работает" : text;
     dot.title = text;
-    dot.setAttribute("aria-label", `${dot.parentElement.textContent.trim() || key}: ${text}`);
+    dot.setAttribute("aria-label", `${label ? key : dot.parentElement.textContent.trim() || key}: ${text}`);
   }
   indicators.forEach((_, key) => indicator(key, "checking"));
   const controls = [];
