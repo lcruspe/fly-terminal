@@ -25,7 +25,7 @@ test("mobile cards have a compact top-aligned layout without an empty message ga
 function selectedMode({mobile, stored}) {
   // Exercise the production initialization up to persisted action-details setup.
   const init = js.slice(0, js.indexOf("  let opened =")) + "})();";
-  const buttons = ["tiles", "compact", "list"].map(viewMode => ({
+  const buttons = ["tiles", "compact", "table"].map(viewMode => ({
     dataset: {viewMode}, setAttribute(name, value) { this[name] = value; }, addEventListener() {}
   }));
   const dashboard = {
@@ -51,5 +51,5 @@ function selectedMode({mobile, stored}) {
 test("compact is the mobile default; previously selected display mode wins", () => {
   assert.deepEqual(selectedMode({mobile: true}), {active: "compact", pressed: ["compact"]});
   assert.deepEqual(selectedMode({mobile: false}), {active: "tiles", pressed: ["tiles"]});
-  assert.deepEqual(selectedMode({mobile: true, stored: "list"}), {active: "list", pressed: ["list"]});
+  assert.deepEqual(selectedMode({mobile: true, stored: "list"}), {active: "table", pressed: ["table"]});
 });

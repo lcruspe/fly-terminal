@@ -12,7 +12,7 @@
     <div class="view-switch" role="group" aria-label="Вид сервисов">
       <button type="button" data-view-mode="tiles" aria-pressed="true">Плитки</button>
       <button type="button" data-view-mode="compact" aria-pressed="false">Компактно</button>
-      <button type="button" data-view-mode="list" aria-pressed="false">Список</button>
+      <button type="button" data-view-mode="table" aria-pressed="false">Таблица</button>
     </div>
     <p class="catalog-message" role="status" aria-live="polite"></p>
     <section class="services" aria-label="Каталог сервисов">
@@ -34,9 +34,9 @@
         </div></details>
       </article>
       <article class="service" data-service="roomaudio">
-        <div class="service-heading"><a class="service-main" href="/roomaudio/"><strong>RoomAudio</strong></a><span data-health="roomaudio"></span></div>
+        <div class="service-heading"><a class="service-main" href="/roomaudio/"><strong>RoomAudio</strong></a><span class="roomaudio-status"><span data-health="roomaudio">Mac</span><span data-health="roomaudio_source">Источник</span></span></div>
         <p class="service-description">Аудиоархив и прослушивание трансляции. Управление сервером на Mac.</p>
-        <details data-details-key="roomaudio"><summary>Действия</summary><div class="service-actions"><a class="action-link" href="/roomaudio/">Открыть аудиоархив</a><div data-controls="roomaudio"></div><p class="action-hint">Перезапуск сервера прерывает прослушивание. Связь с источником аудио проверяется в RoomAudio.</p></div></details>
+        <details data-details-key="roomaudio"><summary>Действия</summary><div class="service-actions"><a class="action-link" href="/roomaudio/">Открыть аудиоархив</a><div data-controls="roomaudio"></div><p class="action-hint">Перезапуск сервера прерывает прослушивание. Индикатор источника показывает свежую связь с устройством захвата звука.</p></div></details>
       </article>
       <article class="service" data-service="yt">
         <div class="service-heading"><a class="service-main" href="/yt-transcriber/"><strong>YT Transcript</strong></a><span data-health="yt"></span></div>

@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 from urllib.parse import urlsplit
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 HOME = Path.home()
 DOMAIN = f"gui/{os.getuid()}"
@@ -97,6 +97,24 @@ def local_status():
         return {}
 
 
+def roomaudio_status():
+    """Read only the local RoomAudio health; never expose its credentials."""
+    try:
+        config_path = HOME / "Library/Application Support/RoomAudio/config.json"
+        config = json.loads(config_path.read_text())
+        token = base64.b64encode(f"{config['username']}:{config['password']}".encode()).decode()
+        port = int(config.get("port", 8766))
+        request = Request(f"http://127.0.0.1:{port}/api/status",
+                          headers={"Authorization": "Basic " + token})
+        with urlopen(request, timeout=4) as response:
+            data = json.load(response)
+        online = data.get("source_online")
+        source = "up" if online is True else "down" if online is False else "unknown"
+        return {"roomaudio": "up", "roomaudio_source": source}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"roomaudio_source": "unknown"}
+
+
 def router_status():
     try:
         result = router("status")
@@ -108,10 +126,12 @@ def router_status():
 
 
 def status():
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         services = pool.submit(local_status)
         openwrt = pool.submit(router_status)
+        roomaudio = pool.submit(roomaudio_status)
         result = {"services": services.result(), "openwrt": openwrt.result()}
+    result["services"].update(roomaudio.result())
     result.update(ok=True, csrf=CSRF, actions=ACTIONS,
                   busy=[key for key, lock in LOCKS.items() if lock.locked()])
     return result

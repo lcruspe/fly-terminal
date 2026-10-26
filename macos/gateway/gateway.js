@@ -27,11 +27,63 @@
   const message = dashboard.querySelector(".catalog-message");
   const storageKey = "fly-gateway-view-v1";
   const detailsKey = "fly-gateway-actions-v1";
-  const modes = ["tiles", "compact", "list"];
+  const modes = ["tiles", "compact", "table"];
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+  let tableContainer, tableMoves = [];
+  function renderTable(active) {
+    const services = dashboard.querySelector(".services");
+    if (!services) return;
+    if (active && !tableContainer) {
+      tableContainer = document.createElement("div");
+      tableContainer.className = "service-table-scroll";
+      tableContainer.tabIndex = 0;
+      tableContainer.setAttribute("role", "region");
+      tableContainer.setAttribute("aria-label", "Таблица сервисов — горизонтальная прокрутка");
+      const table = document.createElement("table");
+      table.className = "service-table";
+      const caption = table.createCaption();
+      caption.textContent = "Каталог сервисов";
+      const head = table.createTHead().insertRow();
+      ["Сервис", "Состояние", "Описание", "Действия"].forEach(label => {
+        const cell = document.createElement("th");
+        cell.scope = "col";
+        cell.textContent = label;
+        head.append(cell);
+      });
+      const body = table.createTBody();
+      services.querySelectorAll(".service").forEach(card => {
+        const row = body.insertRow();
+        row.dataset.service = card.dataset.service;
+        const name = document.createElement("th");
+        name.scope = "row";
+        row.append(name);
+        const status = row.insertCell(), description = row.insertCell(), actions = row.insertCell();
+        const move = (node, cell) => {
+          if (!node) return;
+          const marker = document.createComment("card position");
+          node.before(marker);
+          tableMoves.push({node, marker, cell});
+        };
+        move(card.querySelector(".service-main"), name);
+        // Move the existing nodes; preserve listeners, open details and live statuses.
+        card.querySelectorAll(".service-heading > [data-health], .roomaudio-status, .variant-status, .router-status").forEach(node => move(node, status));
+        move(card.querySelector(".service-description"), description);
+        move(card.querySelector("details"), actions);
+      });
+      tableContainer.append(table);
+      services.after(tableContainer);
+    }
+    if (tableContainer) {
+      tableMoves.forEach(({node, marker, cell}) => active ? cell.append(node) : marker.after(node));
+      tableContainer.hidden = !active;
+    }
+    services.hidden = active;
+  }
   function setView(mode) {
+    if (mode === "list") mode = "table"; // Migrate the saved list preference.
     dashboard.dataset.view = modes.includes(mode) ? mode : "tiles";
+    renderTable(dashboard.dataset.view === "table");
     dashboard.querySelectorAll("[data-view-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.viewMode === dashboard.dataset.view)));
   }
   setView(read(storageKey, window.matchMedia("(max-width: 600px)").matches ? "compact" : "tiles"));
@@ -66,7 +118,7 @@
     dot.dataset.state = state;
     const text = { up: "Доступен", down: "Недоступен", unknown: "Нет данных" }[state] || "Проверка";
     dot.title = text;
-    dot.setAttribute("aria-label", text);
+    dot.setAttribute("aria-label", `${dot.parentElement.textContent.trim() || key}: ${text}`);
   }
   indicators.forEach((_, key) => indicator(key, "checking"));
   const controls = [];

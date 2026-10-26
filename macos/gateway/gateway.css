@@ -115,11 +115,26 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
 [data-view=compact] .service-main strong { font-size:17px; }
 [data-view=compact] .service-description { display:none; }
 [data-view=compact] .variant-status { margin-top:10px; }
-[data-view=list] .services { grid-template-columns:1fr; gap:10px; }
-[data-view=list] .service { display:grid; grid-template-columns:minmax(150px,.7fr) minmax(240px,2fr); gap:8px 24px; }
-[data-view=list] .service-description { margin:0; }
-[data-view=list] details { grid-column:1/-1; }
-[data-view=list] .variant-status, [data-view=list] .router-status { grid-column:2; margin:0; }
+[data-dashboard] [hidden] { display:none !important; }
+[data-service=roomaudio] .service-heading { flex-wrap:wrap; }
+.roomaudio-status { display:flex; flex-wrap:wrap; flex-shrink:0; gap:6px; }
+.roomaudio-status > span { display:inline-flex; align-items:center; padding:3px 7px; border:1px solid #364453; border-radius:20px; font-size:12px; white-space:nowrap; }
+.service-table-scroll { overflow-x:auto; margin-top:12px; border:1px solid #2a3440; border-radius:12px; background:#13181e; }
+.service-table { width:100%; min-width:760px; border-collapse:collapse; font-size:14px; text-align:left; }
+.service-table caption { padding:12px 16px; text-align:left; font-weight:600; }
+.service-table th, .service-table td { padding:14px 16px; vertical-align:top; border-top:1px solid #2a3440; }
+.service-table thead { background:#1b2530; color:#afc8e1; }
+.service-table tbody th { min-width:150px; }
+.service-table td:nth-child(2) { min-width:180px; }
+.service-table td:nth-child(3) { width:40%; }
+.service-table td:nth-child(4) { min-width:180px; }
+.service-table .service-main strong { font-size:16px; }
+.service-table .service-description, .service-table .variant-status { margin:0; }
+.service-table .variant-status { flex-direction:column; gap:8px; }
+.service-table [data-health] { white-space:nowrap; }
+[data-dashboard] .service-table details { margin:0; padding:0; border:0; }
+.service-table .service-actions { min-width:180px; }
+.service-table .router-status { margin-top:8px; }
 @media(max-width:600px) {
   body:not(.dashboard-page) { padding:20px 12px; }
   /* Catalogue starts at the top, not in a vertically centered desktop shell. */
@@ -142,7 +157,5 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
   [data-dashboard] .variant-status { margin:6px 0 8px; gap:10px; }
   [data-view=compact] .variant-status { margin-bottom:0; }
   .catalog-message { min-height:0; margin-top:8px; line-height:1.35; }
-  [data-view=list] .service { grid-template-columns:1fr; }
-  [data-view=list] .variant-status, [data-view=list] .router-status { grid-column:1; }
   .service-actions button, .action-link { font-size:13px; }
 }

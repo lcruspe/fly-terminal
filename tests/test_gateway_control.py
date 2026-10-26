@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -36,6 +36,23 @@ class GatewayControlTests(unittest.TestCase):
             'Authorization': 'Basic ' + base64.b64encode(b'admin-test:password-test').decode(),
             'Content-Type': 'application/json', 'Origin': self.url, 'X-Gateway-CSRF': module.CSRF,
         }
+
+    def test_roomaudio_source_health_is_independent_of_silence(self):
+        for online, expected in ((True, 'up'), (False, 'down'), (None, 'unknown')):
+            response = MagicMock()
+            response.__enter__.return_value.read.return_value = json.dumps(
+                {'source_online': online, 'mic_silent': True}).encode()
+            with patch.object(Path, 'read_text', return_value=json.dumps(
+                    {'username': 'test', 'password': 'secret'})), \
+                    patch.object(module, 'urlopen', return_value=response) as request:
+                self.assertEqual(module.roomaudio_status(),
+                                 {'roomaudio': 'up', 'roomaudio_source': expected})
+                self.assertEqual(request.call_args.args[0].full_url,
+                                 'http://127.0.0.1:8766/api/status')
+
+    def test_roomaudio_failure_leaves_source_unknown(self):
+        with patch.object(Path, 'read_text', side_effect=OSError):
+            self.assertEqual(module.roomaudio_status(), {'roomaudio_source': 'unknown'})
 
     def post(self, data, headers=None):
         req = Request(self.url + '/gateway-control/action', data=json.dumps(data).encode(), headers=self.headers if headers is None else headers)
