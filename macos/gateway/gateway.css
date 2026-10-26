@@ -211,6 +211,9 @@ body.dashboard-page {
   white-space: nowrap;
   color: #acb5c3;
 }
+.service-status > .browser-mode-link { text-decoration: none; cursor: pointer; }
+.service-status > .browser-mode-link:hover { background: #25334a; border-color: #647da4; color: #d4e2ff; }
+.browser-mode-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .service-status > [data-health]:empty { padding: 0; }
 .service-status > [data-health][data-state=down] { border-color: #57353d; background: #261b22; color: #e2acb5; }
 [data-dashboard] .service-health {
