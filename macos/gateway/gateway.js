@@ -99,8 +99,10 @@
     panel.addEventListener("beforetoggle", event => {
       trigger.setAttribute("aria-expanded", String(event.newState === "open"));
       if (event.newState !== "open") return;
-      // Wait for the native popover to enter the top layer before measuring it.
-      queueMicrotask(() => {
+      // Native beforetoggle may run a microtask checkpoint before opening.
+      // Measure on the next frame, once the popover is in the top layer.
+      panel.dataset.positioned = "false";
+      requestAnimationFrame(() => {
         if (!panel.matches(":popover-open")) return;
         const anchor = trigger.getBoundingClientRect();
         const gap = 8;
@@ -111,6 +113,7 @@
           : anchor.top - height - gap;
         panel.style.top = `${Math.max(gap, top)}px`;
         panel.style.left = `${Math.max(gap, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - gap))}px`;
+        panel.dataset.positioned = "true";
         panel.scrollTop = 0;
         panel.querySelector("a, button:not(:disabled)")?.focus({preventScroll: true});
       });
@@ -138,9 +141,10 @@
     });
   });
   window.addEventListener("resize", closeMenus);
-  document.addEventListener("scroll", event => {
+  // Close on user scrolling, not the browser scrolling a trigger into view.
+  ["wheel", "touchmove"].forEach(type => document.addEventListener(type, event => {
     if (!(event.target instanceof Element) || !event.target.closest(".service-actions")) closeMenus();
-  }, true);
+  }, {capture: true, passive: true}));
 
   let csrf = "", pending = false;
   const labels = { start: "Запустить", stop: "Остановить", restart: "Перезапустить", "vpn-connect": "Подключить VPN", "vpn-disconnect": "Отключить VPN" };

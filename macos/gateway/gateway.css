@@ -101,11 +101,12 @@ p { margin: 0; color: #9ca8b5; line-height: 1.55; }
 [data-dashboard] .service-health { position:static; display:inline-block; width:10px; height:10px; margin-left:8px; vertical-align:middle; }
 .variant-status { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:14px; margin:0; font-size:12px; }
 .service-actions[popover] {
-  position:fixed; inset:auto; margin:0; width:min(260px,calc(100vw - 16px));
+  position:fixed; inset:auto; margin:0; width:min(260px,calc(100vw - 16px)); text-align:left;
   max-height:calc(100dvh - 16px); overflow-y:auto; overscroll-behavior:contain;
   padding:6px; border:1px solid #425165; border-radius:12px;
   background:#18212b; color:#e8edf2; box-shadow:0 12px 40px #0009;
 }
+.service-actions[data-positioned="false"] { visibility:hidden; }
 .service-actions:popover-open { display:flex; flex-direction:column; gap:2px; }
 .service-actions [data-controls] { display:contents; }
 .service-actions button, .service-actions .action-link {
