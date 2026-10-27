@@ -14,7 +14,7 @@ import archive_api
 import archive_cleanup
 import audio_quality
 import recording_settings
-import control_origin
+import control_csrf
 import speech_index
 import live_relay
 import storage_paths
@@ -209,6 +209,28 @@ class Handler(BaseHTTPRequestHandler):
     def authorized(self):
         return self.session_valid() or self.basic_valid()
 
+    def csrf_identity(self):
+        # Bind token to the *validated* session, not to a forwarded hostname.
+        # Preserve Basic-authenticated LAN tooling with a separate identity.
+        if self.session_valid():
+            try:
+                cookies = SimpleCookie()
+                cookies.load(self.headers.get("Cookie", ""))
+                return b"session:" + cookies[SESSION_COOKIE].value.encode("ascii")
+            except (CookieError, KeyError, UnicodeError, ValueError):
+                return None
+        if self.basic_valid():
+            return b"basic:" + self.headers.get("Authorization", "").encode("ascii")
+        return None
+
+    def csrf_token(self):
+        identity = self.csrf_identity()
+        return control_csrf.issue_token(SESSION_KEY, identity) if identity else None
+
+    def csrf_valid(self):
+        return control_csrf.valid_token(SESSION_KEY, self.csrf_identity(),
+                                        self.headers.get("X-RoomAudio-CSRF", ""))
+
     def require_auth(self):
         if self.authorized():
             return True
@@ -268,11 +290,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(409, "Out-of-order live packet")
             return self.reply(200, "OK")
         if path.startswith("/api/archive/cleanup/"):
+            self.close_connection = True
             if not self.authorized():
                 return self.reply(401, "Login required")
-            origin = self.headers.get("Origin", "")
-            if not control_origin.permitted_origin(origin, self.headers.get("Host", "")):
-                return self.reply(403, "Invalid origin")
+            if not self.csrf_valid():
+                return self.reply(403, "Invalid CSRF token")
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.reply(415, "Expected JSON")
             try:
@@ -291,10 +313,9 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             if not self.authorized():
                 return self.reply(401, "Login required")
-            # A browser session must only change modes from our own site.
-            origin = self.headers.get("Origin", "")
-            if not control_origin.permitted_origin(origin, self.headers.get("Host", "")):
-                return self.reply(403, "Invalid origin")
+            # Session-bound token is independent of proxy Host/Origin rewriting.
+            if not self.csrf_valid():
+                return self.reply(403, "Invalid CSRF token")
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.reply(415, "Expected JSON")
             try:
@@ -429,6 +450,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.login_page()
         if not (self.authorized() or self.valid_media_token(path, query.get("mt", [""])[0])):
             return self.reply(401, "Authentication required")
+        if path == "/api/csrf-token":
+            return self.json_reply({"token": self.csrf_token()})
         if path == "/api/recording-mode":
             return self.json_reply(recording_settings.status())
         if path == "/api/live/status":

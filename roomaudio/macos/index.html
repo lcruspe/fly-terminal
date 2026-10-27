@@ -215,6 +215,26 @@ const params=()=>{let p=new URLSearchParams();p.set('start',local(state.start));
 const periodPath=()=>'/period/'+stamp(state.start)+'/'+stamp(state.end)+'.mp3';
 function notice(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3800)}
 async function api(path,wantBlob=false,timeout=0){const r=await fetch(PFX+path,{signal:timeout?AbortSignal.timeout(timeout):undefined,credentials:'same-origin',cache:'no-store'});if(!r.ok){if(r.status===401)notice('Сессия истекла — обновите страницу для входа');throw Error('HTTP '+r.status)}return wantBlob?r.blob():r.json()}
+let csrfCache=null;
+async function csrfToken(){
+ if(!csrfCache){
+  csrfCache=api('/api/csrf-token',false,10000).then(result=>{
+   if(!/^[0-9a-f]{64}$/.test(result.token||''))throw Error('Некорректный токен безопасности');
+   return result.token;
+  }).catch(error=>{csrfCache=null;throw error});
+ }
+ return csrfCache;
+}
+async function postJson(path,payload,timeout=12000){
+ const token=await csrfToken();
+ const response=await fetch(PFX+path,{
+  method:'POST',credentials:'same-origin',cache:'no-store',
+  headers:{'Content-Type':'application/json','X-RoomAudio-CSRF':token},
+  body:JSON.stringify(payload),signal:AbortSignal.timeout(timeout)
+ });
+ if(response.status===403)csrfCache=null; // a renewed session must fetch a new token
+ return response;
+}
 async function media(path){const c=grants.get(path);if(c&&c.until>Date.now()+90000)return c.url;const d=await api('/api/media-token?path='+encodeURIComponent(path));const url=PFX+path+'?mt='+encodeURIComponent(d.token);grants.set(path,{url,until:Date.now()+(d.expires_in||7200)*1000});return url}
 function switchTab(which){
  which=which==='live'?'live':'archive';
@@ -528,10 +548,7 @@ async function recoverLivePipeline(){
  button.disabled=true;
  msg.textContent='Отправляем команду восстановления на сервер…';
  try{
-  const response=await fetch(PFX+'/api/recovery',{
-   method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
-   body:'{}',signal:AbortSignal.timeout(12000)
-  });
+  const response=await postJson('/api/recovery',{},12000);
   if(!response.ok){
    if(response.status===401)throw Error('401');
    if(response.status===403)throw Error('403');
@@ -639,8 +656,8 @@ $('scheduleSave').onclick=async()=>{
  for(const rule of scheduleDraft.rules){if(!rule.days.length||!rule.start||!rule.end||rule.start===rule.end){$('scheduleFeedback').textContent='Укажите разные часы и хотя бы один день для каждого интервала';return}}
  scheduleSaving=true;$('scheduleSave').disabled=true;$('scheduleFeedback').textContent='Сохраняем…';
  try{
-  const response=await fetch(PFX+'/api/recording-schedule',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(scheduleDraft),signal:AbortSignal.timeout(10000)});
-  if(!response.ok)throw Error(response.status===400?'Проверьте интервалы: они не должны пересекаться':response.status===401?'Войдите в Room Audio заново':response.status===403?'Сервер отклонил адрес подключения. Откройте Room Audio через Fly Terminal':'HTTP '+response.status);
+  const response=await postJson('/api/recording-schedule',scheduleDraft,10000);
+  if(!response.ok)throw Error(response.status===400?'Проверьте интервалы: они не должны пересекаться':response.status===401?'Войдите в Room Audio заново':response.status===403?'Проверка безопасности не прошла. Обновите страницу и повторите сохранение':'HTTP '+response.status);
   const data=await response.json();syncSchedule(data.schedule,true);
   $('scheduleFeedback').textContent=data.client_connected?'Сохранено · ожидаем переключения Mate':'Сохранено · применится при подключении Mate';
   notice('Расписание сохранено');captureStatus();
@@ -673,11 +690,7 @@ async function changeCaptureMode(mode){
  all.forEach(b=>b.disabled=true);
  $('modeStatus').textContent='Отправляем команду на Mate…';
  try{
-  const response=await fetch(PFX+'/api/recording-mode',{
-   method:'POST',credentials:'same-origin',
-   headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({mode})
-  });
+  const response=await postJson('/api/recording-mode',{mode});
   if(!response.ok)throw Error('HTTP '+response.status);
   const data=await response.json();
   $('modeStatus').textContent='Режим сохранён. Ожидаем подтверждения ноутбука…';
@@ -734,9 +747,7 @@ async function init(){
 
 const cleanupState={job:null,preview:null,ticker:null,busy:false};
 async function cleanupAction(endpoint,payload){
- const r=await fetch(PFX+'/api/archive/cleanup/'+endpoint,{
-   method:'POST',credentials:'same-origin',
-   headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ const r=await postJson('/api/archive/cleanup/'+endpoint,payload);
  if(!r.ok)throw Error('HTTP '+r.status+' '+(await r.text()).slice(0,110));
  return r.json();
 }
