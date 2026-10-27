@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101318">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Network Map — Mac Gateway</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-glyph" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M8 28L19.5 8L31 28H8Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 28L20 18L26 28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="20" cy="8" r="2.5" fill="currentColor"/></svg></div>
+        <div class="brand-word"><strong>ATLAS<span class="brand-accent">.</span></strong><span>MAC GATEWAY</span></div>
+        <span class="brand-divider" aria-hidden="true"></span>
+        <div class="product-name">Мониторинг сети</div>
+      </div>
+      <div class="top-actions">
+        <span class="live-flag"><span class="led" aria-hidden="true"></span> LIVE MONITOR</span>
+        <span class="top-time" id="clock">--:--:--</span>
+        <a class="back-link" href="/" title="Вернуться к стартовой странице"><span class="back-arrow">↗</span><span>Gateway</span></a>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="heading-row" aria-label="Сводка мониторинга">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-line"></span> ИНФРАСТРУКТУРА / ОБЗОР</div>
+          <h1>Карта сети<span class="heading-dot">.</span></h1>
+          <p class="subtitle">Mac Mini, виртуальные машины, VPN, устройства и сервисы — на одной карте.</p>
+        </div>
+        <div class="freshness">
+          <span class="refresh-icon" aria-hidden="true">↻</span>
+          <div><span class="freshness-title" id="lastChecked">Получение данных…</span><span class="freshness-sub" id="checkDuration">Проверка каждые 30 секунд</span></div>
+          <button class="icon-button" id="refreshButton" type="button" title="Обновить отображение" aria-label="Обновить данные">↻</button>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="Ключевые показатели">
+        <article class="metric-card card-primary">
+          <div class="metric-label">УЗЛЫ В СЕТИ <span class="metric-icon">◈</span></div>
+          <div class="metric-main"><span id="metricNodes">—</span><span class="metric-denom" id="metricNodesTotal">/ —</span></div>
+          <div class="metric-footer"><span class="metric-indicator ok"></span><span id="metricNodesSub">Проверяем устройства</span></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">АКТИВНЫЕ СЕРВИСЫ <span class="metric-icon">⌘</span></div>
+          <div class="metric-main"><span id="metricServices">—</span><span class="metric-denom" id="metricServicesTotal">/ —</span></div>
+          <div class="metric-footer"><span class="metric-indicator info"></span><span id="metricServicesSub">HTTP / TCP проверки</span></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">TAILSCALE <span class="metric-icon">◇</span></div>
+          <div class="metric-main metric-word" id="metricTailnet">—</div>
+          <div class="metric-footer"><span class="metric-indicator neutral" id="tailIndicator"></span><span>Linux Gateway · Lima</span></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">AMNEZIA VPN <span class="metric-icon">⛨</span></div>
+          <div class="metric-main metric-word" id="metricVpn">—</div>
+          <div class="metric-footer"><span class="metric-indicator neutral" id="vpnIndicator"></span><span id="vpnDescription">Маршрут Mac Mini</span></div>
+        </article>
+      </section>
+
+      <section class="work-grid" aria-label="Топология и сведения об устройствах">
+        <article class="panel topology-panel">
+          <div class="panel-heading">
+            <div><div class="panel-kicker">01 / ЖИВАЯ ТОПОЛОГИЯ</div><h2>Схема подключений</h2></div>
+            <div class="legend"><span><i class="key-dot online"></i>В сети</span><span><i class="key-dot warning"></i>Частично</span><span><i class="key-dot offline"></i>Недоступен</span><span><i class="key-dot unknown"></i>Неизвестно</span></div>
+          </div>
+          <div class="canvas-shell">
+            <div class="canvas-toolbar"><span class="map-mode"><span class="mode-icon">●</span> LIVE TOPOLOGY</span><div class="zoom-actions"><button type="button" id="zoomOut" title="Уменьшить" aria-label="Уменьшить карту">−</button><button type="button" id="zoomReset" title="Исходный масштаб" aria-label="Исходный масштаб">⤢</button><button type="button" id="zoomIn" title="Увеличить" aria-label="Увеличить карту">+</button></div></div>
+            <div id="mapScroller" class="map-scroller" tabindex="0" aria-label="Схема сети с горизонтальной прокруткой">
+              <svg class="topology-svg" id="topologySvg" viewBox="0 0 1460 760" role="img" aria-label="Интерактивная топология сети"><defs><pattern id="dotGrid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#273139" opacity=".48"/></pattern><filter id="nodeShadow" x="-35%" y="-35%" width="170%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#000" flood-opacity=".27"/></filter><marker id="arrowEnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#546977" stroke-width="1.5"/></marker></defs><rect width="1460" height="760" fill="url(#dotGrid)"/><g id="edgeLayer"></g><g id="nodeLayer"></g></svg>
+            </div>
+            <div class="canvas-footer"><span><span class="pulse-small">◉</span> Данные обновляются автоматически</span><span>Выбери узел для деталей <span class="desktop-hint">· Колесо мыши — масштаб</span></span></div>
+          </div>
+        </article>
+        <aside class="panel detail-panel" aria-label="Информация о выбранном устройстве">
+          <div class="panel-heading detail-heading"><div><div class="panel-kicker">02 / ИНСПЕКТОР УЗЛА</div><h2>Устройство</h2></div><span class="detail-action-symbol">↗</span></div>
+          <div id="detailContent"><div class="detail-empty">Выбери устройство на карте</div></div>
+        </aside>
+      </section>
+
+      <section class="bottom-grid">
+        <article class="panel nodes-panel">
+          <div class="panel-heading"><div><div class="panel-kicker">03 / СОСТОЯНИЕ СЕТИ</div><h2>Все устройства <span class="item-counter" id="nodesCounter">—</span></h2></div><div class="filter-control"><button type="button" class="filter-btn active" data-filter="all">Все</button><button type="button" class="filter-btn" data-filter="issues">Проблемы</button></div></div>
+          <div class="table-viewport"><table class="device-table"><thead><tr><th>УСТРОЙСТВО</th><th>АДРЕС</th><th>ДОСТУПНОСТЬ · ЗАМЕРЫ ЗА 24 Ч</th><th>СОСТОЯНИЕ</th></tr></thead><tbody id="nodesTable"><tr><td colspan="4" class="table-placeholder">Получение состояния сети…</td></tr></tbody></table></div>
+        </article>
+        <article class="panel events-panel"><div class="panel-heading"><div><div class="panel-kicker">04 / ЖУРНАЛ СОБЫТИЙ</div><h2>Последние изменения</h2></div><span class="timeline-glyph">◷</span></div><div id="eventList" class="event-list"><div class="event-empty">События появятся при изменении состояния узлов.</div></div></article>
+      </section>
+      <footer class="app-footer"><span><span class="footer-mark">◆</span> ATLAS NETWORK MAP <span class="footer-version">v1.0</span></span><span>Только мониторинг · Изменение VPN и маршрутов отключено</span><span id="footerStamp">—</span></footer>
+    </main>
+  </div>
+  <script defer src="./app.js"></script>
+</body>
+</html>

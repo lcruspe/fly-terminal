@@ -31,6 +31,13 @@
 		{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
 	}
 
+	# Independent read-only Network Map, protected by the existing gateway auth.
+	@networkMapRoot path /network-map
+	redir @networkMapRoot /network-map/ 302
+	handle_path /network-map/* {
+		reverse_proxy 127.0.0.1:7799
+	}
+
 	@assets path /gateway.css /gateway.js
 	@gatewayUi path / /admin.html /gateway.js /gateway.css
 	header @gatewayUi {
