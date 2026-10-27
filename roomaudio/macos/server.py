@@ -286,7 +286,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeError, json.JSONDecodeError):
                 return self.reply(400, "Invalid payload")
             return archive_cleanup.api_post(self,path,payload,ROOT)
-        if path in ("/api/recording-mode", "/api/recovery"):
+        if path in ("/api/recording-mode", "/api/recovery", "/api/recording-schedule"):
             # Rejected requests may still have unread bodies. Do not let a
             # proxy reuse that connection and parse the body as another method.
             self.close_connection = True
@@ -294,7 +294,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(401, "Login required")
             # A browser session must only change modes from our own site.
             origin = self.headers.get("Origin", "")
-            if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net", 
+            if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net", "https://mac-gateway.tail1c55c5.ts.net",
                                "http://127.0.0.1:8766", "http://localhost:8766",
                               "http://192.168.1.173:8766", "http://kruspe-mac-mini.local:8766", "http://100.105.89.30:8766"):
                 return self.reply(403, "Invalid origin")
@@ -302,7 +302,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(415, "Expected JSON")
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 1 <= length <= 256:
+                if not 1 <= length <= (8192 if path == "/api/recording-schedule" else 256):
                     return self.reply(413, "Invalid payload")
                 payload = json.loads(self.rfile.read(length))
                 if path == "/api/recovery":
@@ -312,6 +312,9 @@ class Handler(BaseHTTPRequestHandler):
                     if created:
                         live_relay.hub.reset()
                     return self.json_reply({"recovery_id":token,"capture":recording_settings.status()})
+                if path == "/api/recording-schedule":
+                    recording_settings.set_schedule(payload)
+                    return self.json_reply(recording_settings.status())
                 requested = payload["mode"]
                 if not isinstance(requested,str) or requested not in recording_settings.VALID:
                     return self.reply(400, "Unknown recording mode")

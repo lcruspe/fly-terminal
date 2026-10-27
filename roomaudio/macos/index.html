@@ -116,6 +116,13 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
 .archive-range{border-bottom:1px solid var(--stroke);padding-bottom:22px;margin-bottom:22px}.archive-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);align-items:start}.records{max-height:58vh;margin-top:12px}.transcripts{max-height:58vh}.speechfilter{margin-bottom:8px}.export-menu{position:relative;align-self:flex-end}.export-menu>summary{list-style:revert;cursor:pointer;min-height:41px;display:list-item;margin-left:15px}.export-menu[open]{flex-basis:100%}.export-menu[open]>summary{width:fit-content}.export-menu .export{margin-bottom:8px}.stats{border-top:1px solid var(--stroke);margin:24px 0 0;padding-top:15px}.stat{padding:8px}.stat strong{font-size:17px}.phrase:focus-visible,summary:focus-visible,canvas:focus-visible,input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.phrase{border-radius:4px}.modebuttons button{min-height:44px}.hint:empty{display:none}
 @media(max-width:780px){.wrap{padding:0 16px 170px}header{margin-bottom:22px}.archive-workspace{grid-template-columns:1fr}.livebox{padding:22px}.livebox .export .btn{min-height:44px}.head-right{gap:8px}.archive-tools>summary small{display:block;margin:5px 0 0}.records,.transcripts{max-height:45vh}.range{gap:12px}.pipeline{grid-template-columns:1fr}.pipeline span{display:block}.livebox h2{font-size:22px}h1{font-size:30px}}
 @media(max-width:470px){.wrap{padding:0 12px 180px}.brand strong{font-size:18px}.logo{width:32px;height:32px}.range{display:flex}.control{min-width:100%;width:100%}.range .primary{width:100%}.export-menu{width:100%}.export-menu>summary{margin-left:16px}.sectionhead select{max-width:100%}.tools-content{padding:15px}.livebox .primary{width:100%}.livebox .export{display:flex}.livebox .export .btn{flex:1}.livebox .row{align-items:flex-start}.livebox .pill{white-space:normal}.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* Weekly source scheduler: touch-first, no modal or hidden actions. */
+.schedule-panel{border-top:1px solid var(--stroke);margin-top:22px;padding-top:20px}
+.schedule-top .hint{margin:3px 0 0}.switch-row{display:flex;align-items:center;gap:9px;min-height:42px;padding:7px 12px;border:1px solid var(--stroke);border-radius:12px;background:var(--field);font-weight:700;font-size:12px;cursor:pointer}.switch-row input{appearance:none;width:38px;height:22px;border-radius:15px;background:var(--muted);position:relative;cursor:pointer;flex:none;transition:background .18s}.switch-row input:before{content:"";width:16px;height:16px;border-radius:50%;background:white;position:absolute;top:3px;left:3px;transition:transform .18s}.switch-row input:checked{background:var(--blue)}.switch-row input:checked:before{transform:translateX(16px)}
+.schedule-state{border-left:3px solid var(--stroke);padding:6px 10px;font-size:12px;margin:12px 0;line-height:1.5;color:var(--muted)}.schedule-state.active{border-color:var(--green);color:var(--fg)}
+.schedule-settings{display:flex;flex-direction:column;gap:12px}.schedule-mode{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;flex-wrap:wrap}.schedule-mode select{flex:1;max-width:350px}.schedule-windows-title{margin:5px 0 -5px}.schedule-windows-title strong{font-size:13px}.schedule-windows{display:flex;flex-direction:column;gap:9px}.schedule-window{padding:13px;border:1px solid var(--stroke);border-radius:12px;background:var(--field)}.schedule-window-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between}.schedule-time-pair{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.schedule-time-pair label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}.schedule-time-pair input{border:1px solid var(--stroke);border-radius:9px;padding:8px;background:var(--card);width:107px;min-height:42px;font-size:14px;font-variant-numeric:tabular-nums}.schedule-remove{background:transparent;border:1px solid var(--stroke);border-radius:9px;min-height:40px;padding:8px 12px;color:var(--muted)}.schedule-remove:hover{color:var(--fg)}.schedule-days{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.schedule-day{border:1px solid var(--stroke);min-width:41px;height:41px;border-radius:10px;background:var(--card);font-weight:750;font-size:12px}.schedule-day[aria-pressed=true]{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 30%,var(--card));color:var(--fg)}.schedule-overnight{font-size:11px;color:var(--muted);margin:7px 0 0}.schedule-actions{display:flex;flex-wrap:wrap;gap:7px}.schedule-actions .btn{min-height:39px}.schedule-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px}.schedule-footer .btn{min-height:43px}.schedule-footer .hint{margin:0}.schedule-footer .btn:disabled{opacity:.45}
+@media(max-width:520px){.schedule-top{align-items:flex-start}.switch-row{width:100%;justify-content:space-between}.schedule-window-top{align-items:flex-end}.schedule-time-pair{gap:8px}.schedule-time-pair label{flex-direction:column;align-items:flex-start;gap:3px}.schedule-day{flex:1;min-width:36px}.schedule-actions .btn{flex:1}.schedule-footer .btn{width:100%}}
 </style>
 </head><body><div class="wrap">
 <header><div class="brand"><div class="logo">≋</div><div><strong>RoomAudio</strong><small>Audio Intelligence</small></div></div>
@@ -171,7 +178,23 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
  </div>
 </div>
 </details></section>
-<details class="archive-tools" id="sourceSettings"><summary>Настройки источника <small>Режим записи</small></summary><div class="tools-content" id="recordingPanel"><h2>Что сохранять в архив</h2><p class="hint" id="modeStatus">Получаем состояние микрофона…</p><div class="modebuttons" role="group" aria-label="Режим захвата"><button data-record-mode="continuous" type="button">Постоянно</button><button data-record-mode="voice" type="button">Только речь</button><button data-record-mode="off" type="button">Выключено</button></div><p class="hint">«Выключено» отключает микрофон и эфир. В режиме «Только речь» эфир остаётся непрерывным, а архив сохраняет речь.</p></div></details>
+<details class="archive-tools" id="sourceSettings"><summary>Настройки источника <small id="scheduleHeader">Режим и расписание</small></summary>
+<div class="tools-content" id="recordingPanel">
+<h2>Управление вручную</h2><p class="hint" id="modeStatus">Получаем состояние микрофона…</p>
+<div class="modebuttons" role="group" aria-label="Режим захвата"><button data-record-mode="continuous" type="button">Постоянно</button><button data-record-mode="voice" type="button">Только речь</button><button data-record-mode="off" type="button">Выключено</button></div>
+<p class="hint">Ручной выбор приостанавливает расписание. «Выключено» останавливает микрофон и эфир, но не сервер и архив.</p>
+<div class="schedule-panel" id="schedulePanel">
+ <div class="row schedule-top"><div><h2>Расписание записи</h2><p class="hint">Включение и выключение микрофона по времени Москвы</p></div>
+  <label class="switch-row" for="scheduleEnabled"><input type="checkbox" id="scheduleEnabled" role="switch"><span>По расписанию</span></label></div>
+ <p class="schedule-state" id="scheduleStatus" role="status" aria-live="polite">Расписание отключено</p>
+ <div class="schedule-settings" id="scheduleEditor">
+  <label class="schedule-mode" for="scheduleMode">Во время работы <select id="scheduleMode"><option value="voice">Записывать только речь</option><option value="continuous">Записывать постоянно</option></select></label>
+  <div class="row schedule-windows-title"><strong>Когда включать</strong><span class="label">В остальное время микрофон выключен</span></div>
+  <div id="scheduleWindows" class="schedule-windows"></div>
+  <div class="schedule-actions"><button type="button" class="btn" id="scheduleAdd">+ Добавить интервал</button><button type="button" class="btn" data-schedule-preset="workdays">Будни 9–18</button><button type="button" class="btn" data-schedule-preset="everyday">Каждый день</button><button type="button" class="btn" data-schedule-preset="night">Ночью</button></div>
+ </div>
+ <div class="schedule-footer"><p class="hint" id="scheduleFeedback" role="status" aria-live="polite"></p><button type="button" class="btn primary" id="scheduleSave">Сохранить расписание</button></div>
+</div></div></details>
 <details class="archive-tools" id="connectionDetails"><summary>Подробности соединения <small>Диагностика и резервный архивный поток</small></summary><div class="tools-content"><div class="pipeline" id="pipeline" aria-label="Состояние обработки"><div><small>Микрофон</small><strong id="pipelineCapture">Проверяем</strong><span>Ноутбук Mate</span></div><div><small>Передача</small><strong id="pipelineTransfer">Проверяем</strong><span>Mac mini · архив</span></div><div><small>Расшифровка</small><strong id="pipelineAsr">Проверяем</strong><span>Whisper · локально</span></div></div><h2>Резервное прослушивание</h2><p class="hint">HLS собирается из свежих архивных фрагментов. Возможны задержка и пропуски тишины: это не непрерывный прямой эфир.</p><button id="hls" class="btn">Слушать архивный поток HLS</button></div></details>
 </div>
 <div class="player" id="archivePlayer" hidden role="region" aria-label="Плеер архива"><div><strong id="playTitle">Выберите запись</strong><small id="playDescription">Отдельный фрагмент или весь период</small></div><div class="transport"><button id="minus15" title="Назад 15 секунд">↶</button><button id="play" class="big" title="Воспроизведение">▶</button><button id="plus15" title="Вперёд 15 секунд">↷</button><button id="nextVoice" title="Пропустить тишину: следующая речь" aria-label="Следующая речь">⏭</button></div><div class="seekline"><span id="current">00:00</span><input type="range" id="seek" aria-label="Позиция воспроизведения" min="0" max="1000" value="0"><span id="total">00:00</span><select id="speed" title="Скорость"><option value=".75">0.75×</option><option selected value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div><audio id="audio" playsinline preload="metadata" hidden></audio></div>
@@ -540,6 +563,91 @@ async function status(){try{let s=await api('/api/status');const cap=s.capture||
  recoveryProgress(cap,!!stream.online);
  const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('liveConnection').textContent='Сервер недоступен';$('sourceMessage').textContent='Не удалось получить состояние источника. Проверьте соединение и повторите попытку.';$('recoverLive').hidden=false;$('mp3').disabled=true;$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
 
+// Local weekly editor. The server is the only authority for current mode.
+const weekNames=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+let scheduleDraft={enabled:false,mode:'voice',rules:[]};
+let scheduleDirty=false,scheduleFingerprint=null,scheduleSaving=false;
+function scheduleClone(value){return JSON.parse(JSON.stringify(value))}
+function scheduleKey(value){return JSON.stringify([value.enabled,value.mode,value.rules])}
+function scheduleMarkDirty(){scheduleDirty=true;$('scheduleFeedback').textContent='Есть несохранённые изменения';$('scheduleSave').disabled=false}
+function newScheduleWindow(days=[0,1,2,3,4],start='09:00',end='18:00'){
+ if(scheduleDraft.rules.length>=14){notice('Можно добавить не больше 14 интервалов');return}
+ scheduleDraft.rules.push({days:[...days],start,end});scheduleMarkDirty();renderScheduleWindows();
+}
+function renderScheduleWindows(){
+ const container=$('scheduleWindows');container.replaceChildren();
+ scheduleDraft.rules.forEach((rule,index)=>{
+  const box=document.createElement('div');box.className='schedule-window';
+  const top=document.createElement('div');top.className='schedule-window-top';
+  const times=document.createElement('div');times.className='schedule-time-pair';
+  for(const [key,label] of [['start','С'],['end','До']]){
+   const field=document.createElement('label');field.textContent=label;
+   const input=document.createElement('input');input.type='time';input.step=60;input.value=rule[key];input.setAttribute('aria-label',label+' · интервал '+(index+1));
+   input.onchange=()=>{rule[key]=input.value;scheduleMarkDirty();renderScheduleWindows()};
+   field.append(input);times.append(field);
+  }
+  const remove=document.createElement('button');remove.className='schedule-remove';remove.type='button';remove.textContent='Удалить';remove.setAttribute('aria-label','Удалить интервал '+(index+1));
+  remove.onclick=()=>{scheduleDraft.rules.splice(index,1);scheduleMarkDirty();renderScheduleWindows()};
+  top.append(times,remove);box.append(top);
+  const days=document.createElement('div');days.className='schedule-days';days.setAttribute('role','group');days.setAttribute('aria-label','Дни недели для интервала '+(index+1));
+  weekNames.forEach((name,d)=>{const b=document.createElement('button');b.type='button';b.className='schedule-day';b.textContent=name;b.setAttribute('aria-label',name);b.setAttribute('aria-pressed',String(rule.days.includes(d)));
+   b.onclick=()=>{rule.days=rule.days.includes(d)?rule.days.filter(x=>x!==d):[...rule.days,d].sort((a,b)=>a-b);b.setAttribute('aria-pressed',String(rule.days.includes(d)));scheduleMarkDirty()};days.append(b)});
+  box.append(days);
+  const note=document.createElement('p');note.className='schedule-overnight';
+  if(rule.end<rule.start)note.textContent='Период продолжается до следующего дня';
+  box.append(note);container.append(box);
+ });
+ $('scheduleAdd').disabled=scheduleDraft.rules.length>=14;
+}
+function renderScheduleState(schedule){
+ const status=$('scheduleStatus'),header=$('scheduleHeader');
+ if(!schedule?.enabled){status.textContent='Сейчас: ручное управление · расписание выключено';status.classList.remove('active');header.textContent='Режим и расписание';return}
+ const next=schedule.next_transition_at?new Date(schedule.next_transition_at*1000).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):null;
+ const current=schedule.active?'Сейчас запись включена':'Сейчас микрофон выключен';
+ const nextLabel=schedule.active?'выключение':'включение';
+ status.textContent=current+(next?' · '+nextLabel+' '+next+' (МСК)':'');
+ status.classList.toggle('active',!!schedule.active);
+ header.textContent=schedule.active?'Запись по расписанию':'Ожидание по расписанию';
+}
+function syncSchedule(schedule,force=false){
+ if(!schedule)return;
+ renderScheduleState(schedule);
+ const normalized={enabled:!!schedule.enabled,mode:schedule.mode||'voice',rules:schedule.rules||[]};
+ const key=scheduleKey(normalized);
+ if(scheduleDirty&&!force)return;
+ if(!force&&key===scheduleFingerprint)return;
+ scheduleDraft=scheduleClone(normalized);scheduleDirty=false;scheduleFingerprint=key;
+ $('scheduleEnabled').checked=scheduleDraft.enabled;
+ $('scheduleMode').value=scheduleDraft.mode;
+ renderScheduleWindows();
+ $('scheduleFeedback').textContent='';$('scheduleSave').disabled=true;
+}
+$('scheduleEnabled').onchange=()=>{scheduleDraft.enabled=$('scheduleEnabled').checked;
+ if(scheduleDraft.enabled&&!scheduleDraft.rules.length)newScheduleWindow();
+ else scheduleMarkDirty()};
+$('scheduleMode').onchange=()=>{scheduleDraft.mode=$('scheduleMode').value;scheduleMarkDirty()};
+$('scheduleAdd').onclick=()=>newScheduleWindow();
+document.querySelectorAll('[data-schedule-preset]').forEach(b=>b.onclick=()=>{
+ const preset=b.dataset.schedulePreset;
+ scheduleDraft.rules=[preset==='night'?{days:[0,1,2,3,4,5,6],start:'22:00',end:'07:00'}:
+ {days:preset==='workdays'?[0,1,2,3,4]:[0,1,2,3,4,5,6],start:'09:00',end:'18:00'}];
+ scheduleDraft.enabled=true;$('scheduleEnabled').checked=true;scheduleMarkDirty();renderScheduleWindows();
+});
+$('scheduleSave').onclick=async()=>{
+ if(scheduleSaving)return;
+ if(scheduleDraft.enabled&&!scheduleDraft.rules.length){$('scheduleFeedback').textContent='Добавьте хотя бы один интервал';return}
+ for(const rule of scheduleDraft.rules){if(!rule.days.length||!rule.start||!rule.end||rule.start===rule.end){$('scheduleFeedback').textContent='Укажите разные часы и хотя бы один день для каждого интервала';return}}
+ scheduleSaving=true;$('scheduleSave').disabled=true;$('scheduleFeedback').textContent='Сохраняем…';
+ try{
+  const response=await fetch(PFX+'/api/recording-schedule',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(scheduleDraft),signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Error(response.status===400?'Проверьте интервалы: они не должны пересекаться':'HTTP '+response.status);
+  const data=await response.json();syncSchedule(data.schedule,true);
+  $('scheduleFeedback').textContent=data.client_connected?'Сохранено · ожидаем переключения Mate':'Сохранено · применится при подключении Mate';
+  notice('Расписание сохранено');captureStatus();
+ }catch(error){$('scheduleFeedback').textContent='Не удалось сохранить: '+error.message;scheduleDirty=true}
+ finally{scheduleSaving=false;$('scheduleSave').disabled=!scheduleDirty}
+};
+
 // Remote recording configuration. "Requested" and "applied" state are never conflated.
 async function captureStatus(){
  try{
@@ -548,12 +656,13 @@ async function captureStatus(){
     b.classList.toggle('active',b.dataset.recordMode===s.mode);
     b.setAttribute('aria-pressed',b.dataset.recordMode===s.mode?'true':'false');
   });
+  syncSchedule(s.schedule);
   const labels={continuous:'Постоянная запись',voice:'Только интервалы с речью',off:'Микрофон выключен'};
   const applied=s.client_connected && s.active_mode===s.mode;
   $('modeStatus').textContent=applied?(labels[s.mode]+' · Mate подтвердил') :
     (s.client_connected?'Запрос: '+labels[s.mode]+' · Mate переключает режим…':
      'Запрос: '+labels[s.mode]+' · Mate пока не подтвердил');
-  $('captureSummary').textContent='Архив: '+$('modeStatus').textContent;
+  $('captureSummary').textContent=(s.schedule?.enabled?'По расписанию: ':'Архив: ')+$('modeStatus').textContent;
   $('lastSeen').textContent=s.client_last_seen?'Последняя связь: '+new Date(s.client_last_seen*1000).toLocaleString('ru-RU'):'Последняя связь: нет данных после перезапуска сервера';
   recoveryProgress(s,false);
   $('modeStatus').style.color=applied?'var(--green)':'var(--muted)';$('pipelineCapture').textContent=!s.client_connected?'Mate не отвечает':s.mode==='off'?'Запись выключена':applied?(s.mode==='voice'?'По голосу':'Постоянно'):'Переключение…';
@@ -573,6 +682,7 @@ async function changeCaptureMode(mode){
   const data=await response.json();
   $('modeStatus').textContent='Режим сохранён. Ожидаем подтверждения ноутбука…';
   all.forEach(b=>b.classList.toggle('active',b.dataset.recordMode===data.mode));
+  syncSchedule(data.schedule,true);
   setTimeout(captureStatus,3800);
  }catch(e){notice('Не удалось изменить режим записи');captureStatus()}
  finally{all.forEach(b=>b.disabled=false)}
