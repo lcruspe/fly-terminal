@@ -197,7 +197,8 @@ body.dashboard-page {
   font-size: 11px;
   color: var(--muted);
 }
-.service-status > [data-health] {
+.service-status > [data-health],
+.service-status > .network-map-badge {
   display: inline-flex;
   align-items: center;
   flex-direction: row-reverse;
@@ -325,4 +326,3 @@ body.dashboard-page {
 
 /* Network Map catalogue entry. */
 .icon-network { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23b9f98b' stroke-width='1.7'%3E%3Ccircle cx='8' cy='3' r='2'/%3E%3Ccircle cx='3' cy='13' r='2'/%3E%3Ccircle cx='13' cy='13' r='2'/%3E%3Cpath d='M7 5L4 11M9 5l3 6M5 13h6'/%3E%3C/svg%3E"); }
-.service-status .network-map-badge {color:#b9f98b;font:700 10px ui-monospace,SFMono-Regular,monospace;letter-spacing:.06em;background:#b9f98b10;border:1px solid #b9f98b38;border-radius:7px;padding:7px 9px;}
