@@ -640,7 +640,7 @@ $('scheduleSave').onclick=async()=>{
  scheduleSaving=true;$('scheduleSave').disabled=true;$('scheduleFeedback').textContent='Сохраняем…';
  try{
   const response=await fetch(PFX+'/api/recording-schedule',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(scheduleDraft),signal:AbortSignal.timeout(10000)});
-  if(!response.ok)throw Error(response.status===400?'Проверьте интервалы: они не должны пересекаться':'HTTP '+response.status);
+  if(!response.ok)throw Error(response.status===400?'Проверьте интервалы: они не должны пересекаться':response.status===401?'Войдите в Room Audio заново':response.status===403?'Сервер отклонил адрес подключения. Откройте Room Audio через Fly Terminal':'HTTP '+response.status);
   const data=await response.json();syncSchedule(data.schedule,true);
   $('scheduleFeedback').textContent=data.client_connected?'Сохранено · ожидаем переключения Mate':'Сохранено · применится при подключении Mate';
   notice('Расписание сохранено');captureStatus();

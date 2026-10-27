@@ -14,6 +14,7 @@ import archive_api
 import archive_cleanup
 import audio_quality
 import recording_settings
+import control_origin
 import speech_index
 import live_relay
 import storage_paths
@@ -270,9 +271,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.authorized():
                 return self.reply(401, "Login required")
             origin = self.headers.get("Origin", "")
-            if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net",
-                               "http://127.0.0.1:8766", "http://localhost:8766",
-                              "http://192.168.1.173:8766", "http://kruspe-mac-mini.local:8766", "http://100.105.89.30:8766"):
+            if not control_origin.permitted_origin(origin, self.headers.get("Host", "")):
                 return self.reply(403, "Invalid origin")
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.reply(415, "Expected JSON")
@@ -294,9 +293,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(401, "Login required")
             # A browser session must only change modes from our own site.
             origin = self.headers.get("Origin", "")
-            if origin not in ("https://129-158-49-130.sslip.io", "https://home.tail1c55c5.ts.net", "https://mac-gateway.tail1c55c5.ts.net",
-                               "http://127.0.0.1:8766", "http://localhost:8766",
-                              "http://192.168.1.173:8766", "http://kruspe-mac-mini.local:8766", "http://100.105.89.30:8766"):
+            if not control_origin.permitted_origin(origin, self.headers.get("Host", "")):
                 return self.reply(403, "Invalid origin")
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.reply(415, "Expected JSON")
