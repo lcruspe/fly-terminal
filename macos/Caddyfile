@@ -62,6 +62,26 @@
 		reverse_proxy 127.0.0.1:8787
 	}
 
+	# Commander Funnel uses 8443 for the catalog and 10000 for Sprut.Hub.
+	# Keep terminal/browser endpoints on the catalog origin, including WebSockets.
+	@commanderTerminal {
+		host commander-hub.tail1c55c5.ts.net
+		path /fly /fly/* /terminal /terminal/* /api/* /browser /browser/* /desktop /desktop/* /desktop-ws* /desktop-stream-ws* /native-browser-stream-ws* /desktop-webrtc-api* /native-browser-webrtc-api* /websockify* /mobile-keyboard.js /ws /data /signaling /webrtc /audio /video
+	}
+	handle @commanderTerminal {
+		reverse_proxy 127.0.0.1:{$CADDY_TERMINAL_PORT:8081}
+	}
+	@commanderOpenwrt {
+		host commander-hub.tail1c55c5.ts.net
+		path /cgi-bin/luci* /luci-static/* /ubus /ubus/*
+	}
+	handle @commanderOpenwrt {
+		reverse_proxy 192.168.1.115:80 {
+			header_up -Authorization
+			header_up Host 192.168.1.115
+		}
+	}
+
 	# Service controls are available only to the primary administrator.
 	handle /gateway-control/* {
 		@gatewayControlDenied expression `{http.auth.user.id} != "{$CADDY_BASIC_AUTH_USER}"`

@@ -9,16 +9,25 @@
   // Keep Linux-gateway public links on the Tailscale HTTPS Serve endpoints.
   const secureGateway = linuxGateway && window.location.protocol === "https:";
   const directPortAccess = local || (linuxGateway && !secureGateway) || (window.location.protocol === "http:" && window.location.port === "8080");
+  const commanderGateway = host === "commander-hub.tail1c55c5.ts.net" && window.location.port === "8443";
   const localPorts = { "8443": "8081", "10000": "8082" };
   document.querySelectorAll("[data-port]").forEach((link) => {
     const port = link.dataset.port;
     const path = link.dataset.path || "/";
+    if (commanderGateway && port === "8443") {
+      link.href = `${window.location.origin}${path === "/" ? "/fly/" : path}`;
+      return;
+    }
     link.href = `${directPortAccess ? "http" : "https"}://${host}:${directPortAccess ? (localPorts[port] || port) : port}${path}`;
   });
   // LuCI has a private LAN address. Reach it through a tailnet-only TCP forwarder.
-  if (linuxGateway) {
+  if (linuxGateway || commanderGateway) {
     document.querySelectorAll('a[href^="http://192.168.1.115/"]').forEach((link) => {
       const target = new URL(link.href);
+      if (commanderGateway) {
+        link.href = `${window.location.origin}${target.pathname === "/" ? "/cgi-bin/luci/" : target.pathname}${target.search}${target.hash}`;
+        return;
+      }
       link.href = `${secureGateway ? "https" : "http"}://${host}:${secureGateway ? "10443" : "8115"}${target.pathname}${target.search}${target.hash}`;
     });
   }
