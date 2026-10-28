@@ -781,6 +781,11 @@
       let lastRttDeltaMs = 0;
       let latestServerStats = {};
       let latestDecodeQueueSize = 0;
+      let presentedFrameCount = 0;
+      let previousBottleneckFrames = 0;
+      let previousBottleneckTime = 0;
+      let streamIdleProfileActive = false;
+      const bottleneckSamples = [];
       let latestFrameMeta = null;
       let lastRenderedFrameId = 0;
       const pendingFrameMeta = new Map();
@@ -827,6 +832,8 @@
             server: latestServerStats,
             decodeQueueSize: latestDecodeQueueSize,
             renderedFrameId: lastRenderedFrameId,
+            bottleneckAnalysis: analyzeBottlenecks(bottleneckSamples),
+            bottleneckSamples,
           },
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -940,6 +947,90 @@
         return Number.isFinite(value) ? `${value.toFixed(1)}${suffix}` : "—";
       }
 
+      // Analyse short rolling intervals. Thresholds are heuristics, not proof of cause.
+      function analyzeBottlenecks(samples) {
+        const window = samples.slice(-12);
+        if (!window.length) return { status: "collecting", findings: [] };
+        const last = window[window.length - 1];
+        if (!last.connected) return { status: "disconnected", findings: [] };
+        if (last.hidden) return { status: "hidden", findings: [] };
+        if (last.idle) return { status: "idle", findings: [] };
+        let start = window.length - 1;
+        while (start > 0 && window[start - 1].connected && !window[start - 1].hidden && !window[start - 1].idle) start--;
+        const recent = window.slice(start);
+        if (recent.length < 5) return { status: "collecting", findings: [] };
+        const findings = [];
+        const values = key => recent.map(s => s[key]).filter(Number.isFinite);
+        const p95 = key => percentile(values(key), 0.95);
+        const add = (area, evidence, advice) => findings.push({ area, evidence, advice });
+        const rtt = p95("rttMs"), jitter = p95("jitterMs"), loss = p95("lossPercent");
+        if ((rtt !== null && rtt > 180) || (jitter !== null && jitter > 40) || (loss !== null && loss > 3)) {
+          const evidence = [];
+          if (rtt !== null && rtt > 180) evidence.push(`RTT p95 ${rtt.toFixed(0)} мс`);
+          if (jitter !== null && jitter > 40) evidence.push(`разброс/джиттер p95 ${jitter.toFixed(0)} мс`);
+          if (loss !== null && loss > 3) evidence.push(`потери пакетов до ${loss.toFixed(1)}%`);
+          add("Сеть", evidence.join(", "), "Проверьте маршрут и Wi-Fi; попробуйте проводное подключение или другую сеть.");
+        }
+        const budget = 1000 / Math.max(1, last.targetFps || 30);
+        const capture = p95("captureMs"), encode = p95("encodeMs");
+        if ((capture !== null && capture > Math.max(50, budget * 2)) || (encode !== null && encode > Math.max(40, budget * 1.5))) {
+          const evidence = [];
+          if (capture !== null && capture > Math.max(50, budget * 2)) evidence.push(`захват → кодирование p95 ${capture.toFixed(0)} мс`);
+          if (encode !== null && encode > Math.max(40, budget * 1.5)) evidence.push(`кодирование p95 ${encode.toFixed(0)} мс`);
+          add("Mac: захват или кодирование", evidence.join(", "), "Проверьте нагрузку Mac; попробуйте уменьшить разрешение или FPS потока.");
+        }
+        const queue = p95("queueMs");
+        if (queue !== null && queue > 100) add("Очередь отправки", `задержка очереди p95 ${queue.toFixed(0)} мс`, "Проверьте соединение и попробуйте снизить разрешение или битрейт.");
+        const decode = p95("decodeMs"), drops = p95("droppedPercent"), decodeQueue = p95("decodeQueue");
+        if ((decode !== null && decode > Math.max(40, budget * 1.5)) || (drops !== null && drops > 10) || (decodeQueue !== null && decodeQueue >= 3)) {
+          const evidence = [];
+          if (decode !== null && decode > Math.max(40, budget * 1.5)) evidence.push(`декодирование p95 ${decode.toFixed(0)} мс/кадр`);
+          if (drops !== null && drops > 10) evidence.push(`пропущено кадров до ${drops.toFixed(1)}%`);
+          if (decodeQueue !== null && decodeQueue >= 3) evidence.push(`очередь декодирования ${decodeQueue.toFixed(0)}`);
+          add("Клиент: декодирование или вывод", evidence.join(", "), "Проверьте нагрузку устройства и аппаратное ускорение браузера; попробуйте снизить разрешение.");
+        }
+        // Only compare FPS when the source actually produced frames; static desktops
+        // and intentional idle capture must not be diagnosed as a failure.
+        const firstSource = recent.find(s => Number.isFinite(s.sourceFrameId));
+        const lastSource = [...recent].reverse().find(s => Number.isFinite(s.sourceFrameId));
+        const fps = values("fps");
+        if (firstSource && lastSource && lastSource.at > firstSource.at && lastSource.sourceFrameId > firstSource.sourceFrameId && fps.length >= 5) {
+          const sourceFps = (lastSource.sourceFrameId - firstSource.sourceFrameId) * 1000 / (lastSource.at - firstSource.at);
+          const shownFps = fps.reduce((a, b) => a + b, 0) / fps.length;
+          if (sourceFps >= 10 && shownFps < sourceFps * 0.6 && sourceFps - shownFps >= 8) {
+            add("Низкий FPS при активном источнике", `источник ≈${sourceFps.toFixed(0)} FPS, показано ≈${shownFps.toFixed(0)} FPS`, "Сопоставьте с показателями сети и клиента; точная причина по одному FPS не определяется.");
+          }
+        }
+        return { status: findings.length ? "suspected" : "no_signal", findings };
+      }
+
+      function sampleBottlenecks() {
+        const now = performance.now();
+        const connected = usingWebRtc ? dataChannelOpen(reliableChannel) : Boolean(socket && socket.readyState === WebSocket.OPEN);
+        const sourceFresh = lastSourceFrameAt > 0 && now - lastSourceFrameAt < 2000;
+        const elapsed = now - previousBottleneckTime;
+        const presentedFps = previousBottleneckTime && elapsed > 0 ? (presentedFrameCount - previousBottleneckFrames) * 1000 / elapsed : null;
+        previousBottleneckFrames = presentedFrameCount;
+        previousBottleneckTime = now;
+        bottleneckSamples.push({
+          at: now, connected, hidden: document.hidden, idle: streamIdleProfileActive,
+          targetFps: qualityProfile().fps,
+          fps: connected && !document.hidden ? presentedFps : null,
+          sourceFrameId: sourceFresh ? latestServerStats.sourceFrameId : null,
+          captureMs: sourceFresh ? latestServerStats.captureToEncodeMs : null,
+          encodeMs: sourceFresh ? latestServerStats.encodeMs : null,
+          rttMs: lastRttMs, jitterMs: lastRttMs === null ? null : lastRttDeltaMs,
+          queueMs: latestServerStats.queueDelayMs ?? null,
+          decodeMs: usingWebRtc ? (latestServerStats.decodeMs ?? null) : null,
+          droppedPercent: usingWebRtc ? (latestServerStats.droppedPercent ?? null) : null,
+          lossPercent: usingWebRtc ? (latestServerStats.lossPercent ?? null) : null,
+          decodeQueue: usingWebRtc ? null : latestDecodeQueueSize,
+        });
+        if (bottleneckSamples.length > 12) bottleneckSamples.shift();
+        if (!diagnosticsPanel.classList.contains("hidden")) refreshDiagnostics();
+      }
+      setInterval(sampleBottlenecks, 1000);
+
       function refreshDiagnostics() {
         const report = {
           rtt: average(diagnostics.rttMs),
@@ -950,15 +1041,26 @@
           captureEncodeP95: percentile(diagnostics.captureEncodeMs, 0.95),
           encodeP95: percentile(diagnostics.encodeMs, 0.95),
         };
+        const analysis = analyzeBottlenecks(bottleneckSamples);
+        const statuses = {
+          collecting: "Собираю данные: требуется около 5 секунд.",
+          disconnected: "Нет активного соединения.",
+          hidden: "Вкладка скрыта: браузер может ограничивать частоту кадров.",
+          idle: "Активен режим ожидания: пониженные FPS и разрешение штатны.",
+          no_signal: "Явных признаков узкого места не обнаружено; часть показателей может быть недоступна.",
+          suspected: "Возможные узкие места за последние 12 секунд:",
+        };
+        const findings = analysis.findings.map(item => `• ${item.area}: ${item.evidence}. ${item.advice}`);
         diagnosticsText.textContent = [
+          statuses[analysis.status], ...findings, "",
           `Транспорт: ${diagnostics.transport}`,
-          `RTT: ${formatMetric(report.rtt)} · джиттер: ${formatMetric(report.jitter)}`,
+          `RTT: ${formatMetric(report.rtt)} · джиттер/разброс RTT: ${formatMetric(report.jitter)}`,
           `Очередь отправки: ${formatMetric(Number(latestServerStats.queueDelayMs))} · ${Number(latestServerStats.queueBytes || 0)} Б`,
           `Битрейт: ${((Number(latestServerStats.bitrateBps) || currentBitrate) / 1_000_000).toFixed(2)} Мбит/с`,
-          `Capture→encode p95: ${formatMetric(report.captureEncodeP95)} · encode p95: ${formatMetric(report.encodeP95)}`,
-          `Decode→show p95: ${formatMetric(report.decodeDisplayP95)} · decodeQueue: ${latestDecodeQueueSize}`,
-          `Действие→следующий кадр p50/p95: ${formatMetric(report.actionP50)} / ${formatMetric(report.actionP95)}`,
-          `Сбросы декодера: ${diagnostics.decoderResets} · dropped server: ${Number(latestServerStats.droppedFrames || 0)}`,
+          `Захват → кодирование p95: ${formatMetric(report.captureEncodeP95)} · кодирование p95: ${formatMetric(report.encodeP95)}`,
+          `Декодирование → показ p95: ${formatMetric(report.decodeDisplayP95)} · очередь: ${latestDecodeQueueSize}`,
+          `Действие → следующий кадр p50/p95: ${formatMetric(report.actionP50)} / ${formatMetric(report.actionP95)}`,
+          `Сбросы декодера: ${diagnostics.decoderResets} · пропуски сервера: ${Number(latestServerStats.droppedFrames || 0)}`,
           `Режим: ${currentQualityMode} · target ${(currentBitrate / 1_000_000).toFixed(2)} Мбит/с`,
         ].join("\n");
       }
@@ -1165,6 +1267,7 @@
           if (firstFrame && !browserHostLocked) updateOverlay(false);
           resolveWebRtcVisibleActions(performance.now());
           frameCount++;
+          presentedFrameCount++;
           const now = performance.now();
           lastPresentedAt = now;
           frozenSince = 0;
@@ -1388,6 +1491,7 @@
               }
               frame.close();
               const shownAt = performance.now();
+              lastPresentedAt = shownAt;
               latestDecodeQueueSize = decoder.decodeQueueSize;
               if (meta) {
                 latestFrameMeta = meta;
@@ -1403,6 +1507,7 @@
               }
 
               frameCount++;
+              presentedFrameCount++;
               const now = performance.now();
               if (now - lastFpsTime >= 1000) {
                 const fps = Math.round((frameCount * 1000) / (now - lastFpsTime));
@@ -1472,6 +1577,7 @@
           serverPixelWidth = msg.pixelWidth || serverPixelWidth;
           serverPixelHeight = msg.pixelHeight || serverPixelHeight;
           currentBitrate = Number(msg.requestedBitrate || msg.bitrate || currentBitrate);
+          if (typeof msg.idleProfileActive === "boolean") streamIdleProfileActive = msg.idleProfileActive;
           resBadge.textContent = `${streamWidth}×${streamHeight}`;
           if (msg.screenLocked) {
             statusBadge.textContent = "Mac заблокирован";
@@ -1487,6 +1593,8 @@
             idleTimeoutSelect.value = String(timeout);
             safeStorageSet(IDLE_TIMEOUT_KEY, String(timeout));
           }
+        } else if (msg.type === "stream_policy") {
+          if (typeof msg.idleProfileActive === "boolean") streamIdleProfileActive = msg.idleProfileActive;
         } else if (msg.type === "codec") {
           if (!usingWebRtc) await initVideoDecoder(msg.codec || activeCodec);
         } else if (msg.type === "display") {
@@ -1510,8 +1618,11 @@
           }
         } else if (msg.type === "frame_telemetry") {
           lastSourceFrameAt = performance.now();
-          latestServerStats.captureToEncodeMs = Number(msg.captureToEncodeMs || 0);
-          latestServerStats.encodeMs = Number(msg.encodeMs || 0);
+          latestServerStats.sourceFrameId = Number(msg.frameId);
+          latestServerStats.captureToEncodeMs = Number(msg.captureToEncodeMs);
+          latestServerStats.encodeMs = Number(msg.encodeMs);
+          keepRecent(diagnostics.captureEncodeMs, latestServerStats.captureToEncodeMs);
+          keepRecent(diagnostics.encodeMs, latestServerStats.encodeMs);
         } else if (msg.type === "transport_stats") {
           latestServerStats = { ...latestServerStats, ...msg };
         } else if (msg.type === "input_ack") {
@@ -1616,12 +1727,23 @@
               const dt = (inbound.timestamp - previousInboundStats.timestamp) / 1000;
               const bytes = Number(inbound.bytesReceived || 0) - Number(previousInboundStats.bytesReceived || 0);
               if (dt > 0 && bytes >= 0) latestServerStats.bitrateBps = Math.round(bytes * 8 / dt);
+              const decoded = Number(inbound.framesDecoded) - previousInboundStats.decoded;
+              const dropped = Number(inbound.framesDropped) - previousInboundStats.dropped;
+              const received = Number(inbound.packetsReceived) - previousInboundStats.received;
+              const lost = Number(inbound.packetsLost) - previousInboundStats.lost;
+              const decodeTime = Number(inbound.totalDecodeTime) - previousInboundStats.decodeTime;
+              latestServerStats.decodeMs = decoded > 0 && Number.isFinite(decodeTime) && decodeTime >= 0 ? 1000 * decodeTime / decoded : null;
+              latestServerStats.droppedPercent = decoded >= 0 && dropped >= 0 && decoded + dropped >= 20 ? 100 * dropped / (decoded + dropped) : null;
+              latestServerStats.lossPercent = received >= 0 && lost >= 0 && received + lost >= 50 ? 100 * lost / (received + lost) : null;
               const emitted = Number(inbound.jitterBufferEmittedCount || 0) - previousInboundStats.emitted;
               latestServerStats.playoutBufferMs = emitted > 0
                 ? 1000 * (Number(inbound.jitterBufferDelay || 0) - previousInboundStats.jitterDelay) / emitted : 0;
             }
             previousInboundStats = {
               timestamp: inbound.timestamp, bytesReceived: Number(inbound.bytesReceived || 0),
+              decoded: Number(inbound.framesDecoded), dropped: Number(inbound.framesDropped),
+              received: Number(inbound.packetsReceived), lost: Number(inbound.packetsLost),
+              decodeTime: Number(inbound.totalDecodeTime),
               emitted: Number(inbound.jitterBufferEmittedCount || 0),
               jitterDelay: Number(inbound.jitterBufferDelay || 0),
             };
