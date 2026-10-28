@@ -1,4 +1,4 @@
-import json, sqlite3, threading, time, uuid, logging
+import json, os, sqlite3, subprocess, threading, time, uuid, logging
 from pathlib import Path
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
@@ -16,6 +16,7 @@ def connect():
 def setup():
     with connect() as c:
         c.execute('''CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, url TEXT NOT NULL, language TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL, stage TEXT NOT NULL, progress REAL, title TEXT, result TEXT, error TEXT, created REAL NOT NULL, updated REAL NOT NULL)''')
+        os.chmod(DB, 0o600)
         c.execute("UPDATE jobs SET status='queued', stage='Ожидает повторного запуска после перезапуска сервиса', progress=NULL, updated=? WHERE status='running'", (time.time(),))
     threading.Thread(target=worker, daemon=True, name='transcription-queue').start()
     wakeup.set()
@@ -64,11 +65,18 @@ def worker():
                 else:
                     job = None
             if job:
+                prevent_sleep = None
                 try:
+                    if os.path.exists('/usr/bin/caffeinate'):
+                        prevent_sleep = subprocess.Popen(['/usr/bin/caffeinate', '-i'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     run_job(job)
                 except Exception as exc:
                     log.exception('Job %s failed', job['id'])
                     update(job['id'], status='failed', stage='Ошибка', progress=None, error=str(exc)[:2000])
+                finally:
+                    if prevent_sleep is not None:
+                        prevent_sleep.terminate()
+                        prevent_sleep.wait()
                 continue
         except Exception:
             log.exception('Queue error')
