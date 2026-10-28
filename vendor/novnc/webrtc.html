@@ -432,21 +432,28 @@
       const VALID_RESOLUTIONS = ["1280x720", "1600x900", "1920x1080", "2560x1440"];
       const VALID_FPS_LIMITS = [15, 30, 45, 60];
       const IDLE_TIMEOUT_OPTIONS = [60, 180, 300, 600, 900, 1800, 3600];
-      let requestedResolution = VALID_RESOLUTIONS.includes(urlParams.get("resolution") || "")
-        ? urlParams.get("resolution") : "1920x1080";
-      let [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
-      let requestedFps = VALID_FPS_LIMITS.includes(Number(urlParams.get("fps"))) ? Number(urlParams.get("fps")) : 60;
       const displayParam = urlParams.get("display") || "";
       const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
       const explicitClientRole = urlParams.get("client");
       const clientRole = explicitClientRole === "browser" ? "browser" : "desktop";
       const isBrowserClient = clientRole === "browser";
-      let autoResizeEnabled = !isBrowserClient && urlParams.get("autoResize") === "1";
+      const streamPreferenceKey = `flyNativeStreamPreferences:${clientRole}`;
+      let savedStreamPreferences = {};
+      try { savedStreamPreferences = JSON.parse(safeStorageGet(streamPreferenceKey) || "{}"); } catch (_) {}
+      const resolutionParam = urlParams.get("resolution");
+      let requestedResolution = VALID_RESOLUTIONS.includes(resolutionParam) ? resolutionParam
+        : (VALID_RESOLUTIONS.includes(savedStreamPreferences.resolution) ? savedStreamPreferences.resolution : "1920x1080");
+      let [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
+      const fpsParam = Number(urlParams.get("fps"));
+      let requestedFps = VALID_FPS_LIMITS.includes(fpsParam) ? fpsParam
+        : (VALID_FPS_LIMITS.includes(savedStreamPreferences.fps) ? savedStreamPreferences.fps : 60);
+      let autoResizeEnabled = !isBrowserClient && (urlParams.has("autoResize")
+        ? urlParams.get("autoResize") === "1" : savedStreamPreferences.autoResize === true);
       const wsPath = isBrowserClient
         ? (rawWsPath === "desktop-stream-ws" ? "native-browser-stream-ws" : rawWsPath)
         : (rawWsPath === "native-browser-stream-ws" ? "desktop-stream-ws" : rawWsPath);
       const requestedScaleMode = ["contain", "fill", "sync"].includes(urlParams.get("scale"))
-        ? urlParams.get("scale") : "contain";
+        ? urlParams.get("scale") : (["contain", "fill", "sync"].includes(savedStreamPreferences.scale) ? savedStreamPreferences.scale : "contain");
       
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.host;
@@ -527,6 +534,12 @@
 
       function safeStorageSet(key, value) {
         try { localStorage.setItem(key, value); } catch (_) {}
+      }
+
+      function saveStreamPreferences() {
+        safeStorageSet(streamPreferenceKey, JSON.stringify({
+          resolution: requestedResolution, fps: requestedFps, scale: fitMode, autoResize: autoResizeEnabled
+        }));
       }
 
       function clampHudPosition() {
@@ -1459,10 +1472,6 @@
           serverPixelWidth = msg.pixelWidth || serverPixelWidth;
           serverPixelHeight = msg.pixelHeight || serverPixelHeight;
           currentBitrate = Number(msg.requestedBitrate || msg.bitrate || currentBitrate);
-          if (VALID_FPS_LIMITS.includes(Number(msg.fpsCap))) {
-            requestedFps = Number(msg.fpsCap);
-            fpsLimitSelect.value = String(requestedFps);
-          }
           resBadge.textContent = `${streamWidth}×${streamHeight}`;
           if (msg.screenLocked) {
             statusBadge.textContent = "Mac заблокирован";
@@ -1477,11 +1486,6 @@
             sessionIdleTimeoutSeconds = timeout;
             idleTimeoutSelect.value = String(timeout);
             safeStorageSet(IDLE_TIMEOUT_KEY, String(timeout));
-          }
-        } else if (msg.type === "stream_policy") {
-          if (VALID_FPS_LIMITS.includes(Number(msg.fpsCap))) {
-            requestedFps = Number(msg.fpsCap);
-            fpsLimitSelect.value = String(requestedFps);
           }
         } else if (msg.type === "codec") {
           if (!usingWebRtc) await initVideoDecoder(msg.codec || activeCodec);
@@ -1888,22 +1892,8 @@
 
       function calculateCaptureSize() {
         const profile = qualityProfile();
-        const baseWidth = autoResizeEnabled ? Math.max(640, viewport.clientWidth) : (fitMode === "sync" ? serverPixelWidth : requestedWidth);
-        const baseHeight = autoResizeEnabled ? Math.max(360, viewport.clientHeight) : (fitMode === "sync" ? serverPixelHeight : requestedHeight);
-        let scale = profile.baseScale * adaptiveScaleState.value;
-        if (currentQualityMode === "auto") {
-          const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-          const viewportScale = Math.min(
-            1,
-            Math.max(640, viewport.clientWidth * dpr) / baseWidth,
-            Math.max(360, viewport.clientHeight * dpr) / baseHeight
-          );
-          scale *= Math.max(0.55, viewportScale);
-        }
-        const minimumScale = Math.min(1, Math.max(640 / baseWidth, 360 / baseHeight));
-        scale = Math.max(minimumScale, Math.min(1, scale));
-        const width = Math.max(640, Math.min(7680, Math.floor((baseWidth * scale) / 2) * 2));
-        const height = Math.max(360, Math.min(4320, Math.floor((baseHeight * scale) / 2) * 2));
+        const width = fitMode === "sync" ? serverPixelWidth : requestedWidth;
+        const height = fitMode === "sync" ? serverPixelHeight : requestedHeight;
         return { width, height, fps: profile.fps };
       }
 
@@ -1924,6 +1914,7 @@
         const fps = Number(value);
         if (!VALID_FPS_LIMITS.includes(fps)) return false;
         requestedFps = fps;
+        saveStreamPreferences();
         fpsLimitSelect.value = String(fps);
         resetClientIdleClock();
         sendTransportMessage({ type: "session_activity" });
@@ -1940,6 +1931,14 @@
         requestedResolution = resolution;
         [requestedWidth, requestedHeight] = resolution.split("x").map(Number);
         streamResolutionSelect.value = resolution;
+        if (fitMode === "sync") {
+          fitMode = "contain";
+          applyFitMode();
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: "fly-desktop-scale-mode", mode: fitMode }, window.location.origin);
+          }
+        }
+        saveStreamPreferences();
         adaptiveScaleState.value = 1;
         resetClientIdleClock();
         sendTransportMessage({ type: "session_activity" });
@@ -1965,6 +1964,7 @@
       function setAutoResizeEnabled(enabled, notifyParent = true) {
         if (isBrowserClient) return;
         autoResizeEnabled = enabled === true;
+        saveStreamPreferences();
         autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
         displayAutoResize.setEnabled(autoResizeEnabled);
         applyFitMode();
@@ -2206,6 +2206,7 @@
           fitMode = "contain";
         }
         applyFitMode();
+        saveStreamPreferences();
         configureStream();
         if (window.parent !== window) {
           window.parent.postMessage({ type: "fly-desktop-scale-mode", mode: fitMode }, window.location.origin);
