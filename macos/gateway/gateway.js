@@ -216,7 +216,9 @@
     const data = await request("/gateway-control/status", { signal: AbortSignal.timeout(15000) });
     csrf = data.csrf;
     supported = data.actions || {};
-    indicators.forEach((_, key) => indicator(key, key === "openwrt" ? (data.openwrt.reachable ? "up" : "down") : data.services[key] || "unknown"));
+    indicators.forEach((_, key) => {
+      if (key !== "networkmap") indicator(key, key === "openwrt" ? (data.openwrt.reachable ? "up" : "down") : data.services[key] || "unknown");
+    });
     dashboard.querySelector(".router-status").textContent = data.openwrt.reachable
       ? (data.openwrt.connected ? `VPN: ${data.openwrt.location}` : "VPN отключён · интернет напрямую") : "Нет связи с роутером";
     enableControls();
@@ -246,7 +248,15 @@
       enableControls();
     }
   }
+  async function pollNetworkMap() {
+    try {
+      const response = await fetch("/network-map/healthz", { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(5000) });
+      const data = await response.json();
+      indicator("networkmap", response.ok && data.ok === true ? "up" : "down");
+    } catch { indicator("networkmap", "down"); }
+  }
   async function poll() {
+    pollNetworkMap();
     if (pending) return;
     try {
       await refresh();
@@ -255,7 +265,7 @@
     catch {
       csrf = "";
       enableControls();
-      indicators.forEach((_, key) => indicator(key, "unknown"));
+      indicators.forEach((_, key) => { if (key !== "networkmap") indicator(key, "unknown"); });
       if (!message.textContent) message.textContent = "Управление недоступно. Ссылки на сервисы продолжают работать.";
     }
   }

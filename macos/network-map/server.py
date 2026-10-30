@@ -21,6 +21,7 @@ import time
 import urllib.error
 import urllib.request
 from collections import Counter
+from contextlib import closing
 
 ROOT = pathlib.Path(__file__).resolve().parent
 HOST = '127.0.0.1'
@@ -147,18 +148,22 @@ def summarize_node(items,node_id,old=None):
 
 def db_connect():
     conn=sqlite3.connect(DB,timeout=5)
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.execute('CREATE TABLE IF NOT EXISTS samples (stamp INTEGER, node TEXT, status TEXT, ms INTEGER, PRIMARY KEY(stamp,node))')
-    conn.execute('CREATE TABLE IF NOT EXISTS events (stamp INTEGER, node TEXT, previous TEXT, status TEXT, message TEXT)')
-    conn.execute('CREATE INDEX IF NOT EXISTS ix_samples_stamp ON samples(stamp)')
-    conn.execute('CREATE INDEX IF NOT EXISTS ix_events_stamp ON events(stamp)')
-    return conn
+    try:
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('CREATE TABLE IF NOT EXISTS samples (stamp INTEGER, node TEXT, status TEXT, ms INTEGER, PRIMARY KEY(stamp,node))')
+        conn.execute('CREATE TABLE IF NOT EXISTS events (stamp INTEGER, node TEXT, previous TEXT, status TEXT, message TEXT)')
+        conn.execute('CREATE INDEX IF NOT EXISTS ix_samples_stamp ON samples(stamp)')
+        conn.execute('CREATE INDEX IF NOT EXISTS ix_events_stamp ON events(stamp)')
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
 
 def record(snapshot,previous):
     now=int(time.time())
     try:
-        with db_connect() as conn:
+        with closing(db_connect()) as conn, conn:
             for n in snapshot['nodes']:
                 conn.execute('INSERT OR REPLACE INTO samples VALUES (?,?,?,?)',(now,n['id'],n['status'],n.get('latency_ms')))
                 prev=next((x for x in previous['nodes'] if x['id']==n['id']),None) if previous else None
@@ -240,7 +245,7 @@ def monitor():
 
 def get_history():
     try:
-        with db_connect() as c:
+        with closing(db_connect()) as c, c:
             since=int(time.time())-86400
             events=[{'stamp':r[0],'node':r[1],'previous':r[2],'status':r[3],'message':r[4]}
                     for r in c.execute('SELECT stamp,node,previous,status,message FROM events ORDER BY stamp DESC LIMIT 60')]
