@@ -63,7 +63,6 @@ SERVICES = [
     ('chromium','mac','Chromium fallback','http','http://127.0.0.1:7690/','browser','Colima / Chromium'),
     ('roomaudio','mac','RoomAudio','http','http://127.0.0.1:8766/','/roomaudio/','Аудиоархив'),
     ('yt','mac','YT Transcript','http','http://127.0.0.1:8080/yt-transcriber/','/yt-transcriber/','Транскрипция видео'),
-    ('go2rtc','mac','go2rtc','http','http://127.0.0.1:1984/','', 'Камеры и потоки'),
     ('control','mac','Gateway Control','http','http://127.0.0.1:7684/','', 'Управление сервисами'),
     ('spruthub','sprut','Sprut.Hub Web','http','http://192.168.1.100/','sprut','Панель умного дома'),
     ('luci','openwrt','OpenWrt LuCI','http','http://192.168.1.115/','openwrt','Веб-конфигурация'),

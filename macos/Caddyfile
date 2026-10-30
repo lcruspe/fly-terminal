@@ -23,14 +23,16 @@
 	handle @roomAudioPrivate {
 		respond "Not found" 404
 	}
+	@mailMcp443 path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
 	# RoomAudio authenticates requests with its own Basic Auth realm.
-	@gatewayProtected not path /roomaudio /roomaudio/* /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png
+	@gatewayProtected not path /roomaudio /roomaudio/* /archive/* /segment/* /clip/* /live.mp3 /live.m3u8 /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
 
 	basic_auth @gatewayProtected {
 		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
 		{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
 	}
 
+	@roomAudioLegacy path /archive/* /segment/* /clip/* /live.mp3 /live.m3u8
 	# Independent read-only Network Map, protected by the existing gateway auth.
 	@networkMapRoot path /network-map
 	redir @networkMapRoot /network-map/ 302
@@ -46,6 +48,10 @@
 		Expires "0"
 	}
 	@spruthubUser expression `{http.auth.user.id} == "{$CADDY_SPRUTHUB_AUTH_USER}"`
+
+	handle @mailMcp443 {
+		reverse_proxy 127.0.0.1:7691
+	}
 
 	handle @ytIcon {
 		uri strip_prefix /yt-transcriber
@@ -108,6 +114,8 @@
 			header_up X-Forwarded-Prefix /roomaudio
 		}
 	}
+	redir @roomAudioLegacy /roomaudio{uri} 307
+
 
 	handle @assets {
 		file_server
@@ -128,7 +136,10 @@
 :{$CADDY_TERMINAL_PORT:8081} {
 	root * {$FLY_TERMINAL_REPO_ROOT}
 
-	basic_auth {
+	@mailMcp path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
+	@terminalProtected not path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
+
+	basic_auth @terminalProtected {
 		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
 	}
 
@@ -155,6 +166,9 @@
 	}
 
 	route {
+		handle @mailMcp {
+			reverse_proxy 127.0.0.1:7691
+		}
 		redir @terminalRoot /terminal/ 302
 		reverse_proxy @terminal 127.0.0.1:{$TTYD_PORT:7682}
 		reverse_proxy @api 127.0.0.1:{$FLY_TERMINAL_CONTROL_PORT:7683}

@@ -21,7 +21,7 @@ Caddy routes `/network-map/*` to `127.0.0.1:7799` using `handle_path`, **without
 ## Monitoring semantics
 
 - 11 curated nodes: internet, home router, Mac Mini, Linux/Tailscale VM, OpenWrt, Sprut.Hub, Mate, iPhone, MacBook, Commander Hub, Oracle HTTPS relay.
-- 15 service checks cover Fly Terminal, desktop WebRTC/streamers, Chromium, RoomAudio, YT Transcript, go2rtc, gateway control, Sprut.Hub, LuCI, router, public relay, and external HTTPS.
+- 14 service checks cover Fly Terminal, desktop WebRTC/streamers, Chromium, RoomAudio, YT Transcript, gateway control, Sprut.Hub, LuCI, router, public relay, and external HTTPS.
 - HTTP 2xx/3xx, HTTP 401 and 403 indicate *responsive* service (some require login); HTTP 404/410/429 indicate degraded route; 5xx, refused connection and timeouts indicate failed probe. TCP availability does **not** prove full end-to-end application operation.
 - Tailscale peer state means *reachability through this tailnet*, not whether a device is powered on or otherwise reachable (e.g. via RDC). An offline Mate Tailscale peer **does not imply Mate is shut down**.
 - Topology edges show known logical/physical relationships and peer connectivity; they are **not packet-level path tracing** or proof of a particular ISP route.
