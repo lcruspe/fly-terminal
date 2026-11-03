@@ -297,23 +297,43 @@ def inject_scroll(dx: int, dy: int):
         cf.CFRelease(ev)
 
 
+MODIFIER_KEY_FLAGS = {
+    "AltLeft": kCGEventFlagMaskAlternate, "AltRight": kCGEventFlagMaskAlternate,
+    "ShiftLeft": kCGEventFlagMaskShift, "ShiftRight": kCGEventFlagMaskShift,
+    "ControlLeft": kCGEventFlagMaskControl, "ControlRight": kCGEventFlagMaskControl,
+    "MetaLeft": kCGEventFlagMaskCommand, "MetaRight": kCGEventFlagMaskCommand,
+    "Command": kCGEventFlagMaskCommand,
+}
+
+
+def keyboard_event_flags(code: str, is_down: bool, modifiers: dict = None) -> int:
+    """A modifier's own key-up must *clear* that flag, including on reset_input.
+
+    Browser keydown carries alt=True. Reusing those flags on synthetic keyup
+    otherwise leaves macOS believing Option is still held after focus loss.
+    """
+    modifiers = modifiers if isinstance(modifiers, dict) else {}
+    flags = 0
+    if modifiers.get("meta") or modifiers.get("cmd"):
+        flags |= kCGEventFlagMaskCommand
+    if modifiers.get("shift"):
+        flags |= kCGEventFlagMaskShift
+    if modifiers.get("ctrl") or modifiers.get("control"):
+        flags |= kCGEventFlagMaskControl
+    if modifiers.get("alt") or modifiers.get("option"):
+        flags |= kCGEventFlagMaskAlternate
+    if not is_down:
+        flags &= ~MODIFIER_KEY_FLAGS.get(code, 0)
+    return flags
+
+
 def inject_key(code: str, key: str, is_down: bool, modifiers: dict = None):
     vk = WEB_KEY_TO_MAC_VK.get(code)
     if vk is not None:
         ev = cg.CGEventCreateKeyboardEvent(None, vk, is_down)
         if ev:
-            flags = 0
-            if modifiers:
-                if modifiers.get("meta") or modifiers.get("cmd"):
-                    flags |= kCGEventFlagMaskCommand
-                if modifiers.get("shift"):
-                    flags |= kCGEventFlagMaskShift
-                if modifiers.get("ctrl") or modifiers.get("control"):
-                    flags |= kCGEventFlagMaskControl
-                if modifiers.get("alt") or modifiers.get("option"):
-                    flags |= kCGEventFlagMaskAlternate
-            if flags:
-                cg.CGEventSetFlags(ev, flags)
+            # Explicitly clear CGEvent flags even when the result is zero.
+            cg.CGEventSetFlags(ev, keyboard_event_flags(code, is_down, modifiers))
             cg.CGEventPost(kCGHIDEventTap, ev)
             cf.CFRelease(ev)
         return
@@ -943,6 +963,13 @@ class StreamServer:
                 "ownerId": self.control_owner_id,
             })
 
+    def _release_stale_modifiers(self, state: ClientState):
+        """Plain text must not inherit Option/Cmd from a lost browser keyup."""
+        for code in list(state.pressed_keys):
+            if code in MODIFIER_KEY_FLAGS:
+                key, modifiers = state.pressed_keys.pop(code)
+                inject_key(code, key, False, modifiers)
+
     def _release_client_input(self, state: ClientState):
         for button in list(state.pressed_buttons):
             inject_mouse("up", state.last_x, state.last_y, button)
@@ -1212,8 +1239,10 @@ class StreamServer:
                         code = data.get("code", "")
                         key = data.get("key", "")
                         modifiers = data.get("modifiers")
-                        state.pressed_keys[code] = (key, modifiers)
-                        inject_key(code, key, True, modifiers)
+                        # Modifier repeat events must not create duplicate down transitions.
+                        if code not in MODIFIER_KEY_FLAGS or code not in state.pressed_keys:
+                            state.pressed_keys[code] = (key, modifiers)
+                            inject_key(code, key, True, modifiers)
                         self._ack_input(state, data)
                     elif msg_type == "keyup":
                         code = data.get("code", "")
@@ -1221,6 +1250,7 @@ class StreamServer:
                         state.pressed_keys.pop(code, None)
                         self._ack_input(state, data)
                     elif msg_type == "text":
+                        self._release_stale_modifiers(state)
                         inject_text(str(data.get("text", "")))
                         self._ack_input(state, data)
                     elif msg_type == "clipboard":

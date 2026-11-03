@@ -542,6 +542,151 @@
         }));
       }
 
+      // Native WebRTC shares the durable UI preference store with Fly Terminal.
+      // Keep the browser cache as an offline fallback, not as the authority.
+      const nativePreferencePrefix = isBrowserClient ? "nativeBrowser" : "nativeDesktop";
+      const nativeQualityKey = nativePreferencePrefix + "QualityMode";
+      const nativeTimeoutKey = nativePreferencePrefix + "IdleTimeoutSeconds";
+      const nativePinKey = nativePreferencePrefix + "HudPinned";
+      const nativePositionKey = nativePreferencePrefix + "HudPosition";
+      const nativeResolutionKey = isBrowserClient ? "nativeBrowserResolution" : "desktopResolution";
+      const nativeFpsKey = isBrowserClient ? "nativeBrowserFps" : "desktopFps";
+      const nativeScaleKey = isBrowserClient ? "nativeBrowserScaleMode" : "desktopScaleMode";
+      let nativePendingPreferences = {};
+      let nativePreferencesSaving = false;
+      let nativeRetryTimer = null;
+      let nativeRetryBackoff = 1500;
+
+      function nativePreferencesFetch(options = {}) {
+        const headers = { ...(options.headers || {}) };
+        if (window.location.username) {
+          headers.Authorization = "Basic " + btoa(window.location.username + ":" + window.location.password);
+        }
+        return fetch("/api/ui/preferences", {
+          cache: "no-store",
+          credentials: "include",
+          ...options,
+          headers
+        });
+      }
+
+      function queueNativePreferences(patch) {
+        Object.assign(nativePendingPreferences, patch);
+        if (nativePreferencesSaving) return;
+        clearTimeout(nativeRetryTimer);
+        nativeRetryTimer = setTimeout(flushNativePreferences, 150);
+      }
+
+      async function flushNativePreferences() {
+        if (nativePreferencesSaving || !Object.keys(nativePendingPreferences).length) return;
+        const patch = nativePendingPreferences;
+        nativePendingPreferences = {};
+        nativePreferencesSaving = true;
+        let failed = false;
+        const controller = new AbortController();
+        const requestTimeout = setTimeout(() => controller.abort(), 5000);
+        try {
+          const response = await nativePreferencesFetch({
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+            signal: controller.signal
+          });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          nativeRetryBackoff = 1500;
+        } catch (error) {
+          failed = true;
+          // Later user changes always win over an older failed request.
+          nativePendingPreferences = { ...patch, ...nativePendingPreferences };
+          nativeRetryBackoff = Math.min(nativeRetryBackoff * 2, 60000);
+          console.warn("Unable to persist Native settings", error);
+        } finally {
+          clearTimeout(requestTimeout);
+          nativePreferencesSaving = false;
+          if (Object.keys(nativePendingPreferences).length) {
+            clearTimeout(nativeRetryTimer);
+            nativeRetryTimer = setTimeout(flushNativePreferences, failed ? nativeRetryBackoff : 150);
+          }
+        }
+      }
+
+      function validNativePosition(value) {
+        return !!value && typeof value === "object" &&
+          Number.isFinite(value.x) && Number.isFinite(value.y) &&
+          value.x >= 0 && value.x <= 10000 && value.y >= 0 && value.y <= 10000;
+      }
+
+      async function loadNativePreferences() {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2500);
+        let persisted;
+        try {
+          const response = await nativePreferencesFetch({ signal: controller.signal });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          persisted = await response.json();
+          if (!persisted || persisted.ok !== true) throw new Error("Invalid preference payload");
+        } catch (error) {
+          console.warn("Native settings unavailable; using browser fallback", error);
+          return; // Never push local defaults over existing server settings on GET failure.
+        } finally {
+          clearTimeout(timeout);
+        }
+
+        const missing = {};
+        const choose = (key, valid, fallback) => {
+          if (valid(persisted[key])) return persisted[key];
+          missing[key] = fallback;
+          return fallback;
+        };
+        const validQuality = value => ["auto", "text", "smooth", "data"].includes(value);
+        const validResolution = value => VALID_RESOLUTIONS.includes(value);
+        const validFps = value => VALID_FPS_LIMITS.includes(value);
+        const validScale = value => ["contain", "fill", "sync"].includes(value);
+
+        currentQualityMode = choose(nativeQualityKey, validQuality, currentQualityMode);
+        safeStorageSet("flyRemoteQualityMode", currentQualityMode);
+        qualityModeSelect.value = currentQualityMode;
+        diagnostics.qualityMode = currentQualityMode;
+
+        sessionIdleTimeoutSeconds = choose(nativeTimeoutKey,
+          value => IDLE_TIMEOUT_OPTIONS.includes(value), sessionIdleTimeoutSeconds);
+        idleTimeoutSelect.value = String(sessionIdleTimeoutSeconds);
+        safeStorageSet(IDLE_TIMEOUT_KEY, String(sessionIdleTimeoutSeconds));
+
+        hudPinned = choose(nativePinKey, value => typeof value === "boolean", hudPinned);
+        setHudPinned(hudPinned);
+        let cachedPosition = null;
+        try { cachedPosition = JSON.parse(safeStorageGet(HUD_POSITION_KEY) || "null"); } catch (_) {}
+        const defaultPosition = validNativePosition(cachedPosition)
+          ? cachedPosition : { x: 12, y: 12 };
+        const position = choose(nativePositionKey, validNativePosition, defaultPosition);
+        hudDock.style.left = position.x + "px";
+        hudDock.style.top = position.y + "px";
+        safeStorageSet(HUD_POSITION_KEY, JSON.stringify(position));
+        requestAnimationFrame(clampHudPosition);
+
+        requestedResolution = choose(nativeResolutionKey, validResolution,
+          validResolution(savedStreamPreferences.resolution) ? savedStreamPreferences.resolution : requestedResolution);
+        [requestedWidth, requestedHeight] = requestedResolution.split("x").map(Number);
+        streamResolutionSelect.value = requestedResolution;
+        requestedFps = choose(nativeFpsKey, validFps,
+          validFps(savedStreamPreferences.fps) ? savedStreamPreferences.fps : requestedFps);
+        fpsLimitSelect.value = String(requestedFps);
+        fitMode = choose(nativeScaleKey, validScale,
+          validScale(savedStreamPreferences.scale) ? savedStreamPreferences.scale : fitMode);
+        if (!isBrowserClient) {
+          autoResizeEnabled = choose("desktopAutoResize",
+            value => typeof value === "boolean",
+            typeof savedStreamPreferences.autoResize === "boolean" ? savedStreamPreferences.autoResize : autoResizeEnabled);
+          autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
+          displayAutoResize.setEnabled(autoResizeEnabled);
+        }
+        applyFitMode();
+        saveStreamPreferences();
+        // Seed only missing fields; existing server values always win.
+        if (Object.keys(missing).length) queueNativePreferences(missing);
+      }
+
       function clampHudPosition() {
         const maxX = Math.max(8, viewport.clientWidth - hudDock.offsetWidth - 8);
         const maxY = Math.max(8, viewport.clientHeight - hudDock.offsetHeight - 8);
@@ -552,10 +697,12 @@
       }
 
       function saveHudPosition() {
-        safeStorageSet(HUD_POSITION_KEY, JSON.stringify({
+        const position = {
           x: Number.parseFloat(hudDock.style.left || "12"),
           y: Number.parseFloat(hudDock.style.top || "12")
-        }));
+        };
+        safeStorageSet(HUD_POSITION_KEY, JSON.stringify(position));
+        queueNativePreferences({ [nativePositionKey]: position });
       }
 
       function restoreHudPosition() {
@@ -591,13 +738,14 @@
         scheduleHudCollapse();
       }
 
-      function setHudPinned(pinned) {
+      function setHudPinned(pinned, persist = false) {
         hudPinned = Boolean(pinned);
         hudDock.classList.toggle("pinned", hudPinned);
         hudPinBtn.classList.toggle("active", hudPinned);
         hudPinBtn.setAttribute("aria-pressed", hudPinned ? "true" : "false");
         hudPinBtn.title = hudPinned ? "Открепить панель" : "Закрепить панель";
         safeStorageSet(HUD_PIN_KEY, hudPinned ? "1" : "0");
+        if (persist) queueNativePreferences({ [nativePinKey]: hudPinned });
         if (hudPinned) {
           clearHudCollapseTimer();
           setHudExpanded(true);
@@ -627,11 +775,11 @@
       hudBar.addEventListener("focusout", scheduleHudCollapse);
       hudPinBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        setHudPinned(!hudPinned);
+        setHudPinned(!hudPinned, true);
       });
       hudCollapseBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (hudPinned) setHudPinned(false);
+        if (hudPinned) setHudPinned(false, true);
         clearHudCollapseTimer();
         setHudExpanded(false);
       });
@@ -814,6 +962,7 @@
         stableNetworkTicks = 0;
         poorNetworkTicks = 0;
         safeStorageSet("flyRemoteQualityMode", currentQualityMode);
+        queueNativePreferences({ [nativeQualityKey]: currentQualityMode });
         const profile = qualityProfile();
         setTargetBitrate(Math.min(currentBitrate, profile.maxBitrate));
         configureStream(true);
@@ -2038,6 +2187,7 @@
         requestedFps = fps;
         saveStreamPreferences();
         fpsLimitSelect.value = String(fps);
+        queueNativePreferences({ [nativeFpsKey]: fps });
         resetClientIdleClock();
         sendTransportMessage({ type: "session_activity" });
         configureStream(true);
@@ -2056,12 +2206,14 @@
         if (fitMode === "sync") {
           fitMode = "contain";
           applyFitMode();
+          queueNativePreferences({ [nativeScaleKey]: fitMode });
           if (window.parent !== window) {
             window.parent.postMessage({ type: "fly-desktop-scale-mode", mode: fitMode }, window.location.origin);
           }
         }
         saveStreamPreferences();
         adaptiveScaleState.value = 1;
+        queueNativePreferences({ [nativeResolutionKey]: resolution });
         resetClientIdleClock();
         sendTransportMessage({ type: "session_activity" });
         configureStream(true);
@@ -2087,6 +2239,7 @@
         if (isBrowserClient) return;
         autoResizeEnabled = enabled === true;
         saveStreamPreferences();
+        queueNativePreferences({ desktopAutoResize: autoResizeEnabled });
         autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
         displayAutoResize.setEnabled(autoResizeEnabled);
         applyFitMode();
@@ -2108,6 +2261,7 @@
         if (!IDLE_TIMEOUT_OPTIONS.includes(timeout)) return;
         sessionIdleTimeoutSeconds = timeout;
         safeStorageSet(IDLE_TIMEOUT_KEY, String(timeout));
+        queueNativePreferences({ [nativeTimeoutKey]: timeout });
         lastSessionActivityAt = performance.now();
         sendSessionSettings(true);
       });
@@ -2227,6 +2381,14 @@
         return { meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
       }
 
+      // Track forwarded modifiers, even when keyup occurs after focus has moved
+      // from the remote input layer to HUD/clipboard controls.
+      const remoteModifiersDown = new Set();
+      const REMOTE_MODIFIER_CODES = new Set([
+        "AltLeft", "AltRight", "MetaLeft", "MetaRight",
+        "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight"
+      ]);
+
       inputLayer.addEventListener("keydown", (e) => {
         if (e.key === "F12") return;
         if (e.isComposing || e.key === "Process") {
@@ -2253,6 +2415,7 @@
           registerInput({ type: "text", text: e.key });
           return;
         }
+        if (REMOTE_MODIFIER_CODES.has(e.code)) remoteModifiersDown.add(e.code);
         registerInput({ type: "keydown", code: e.code, key: e.key, modifiers: keyModifiers(e) });
       });
 
@@ -2264,11 +2427,19 @@
           return;
         }
         e.preventDefault();
+        if (REMOTE_MODIFIER_CODES.has(e.code)) remoteModifiersDown.delete(e.code);
         if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) return;
         registerInput({ type: "keyup", code: e.code, key: e.key, modifiers: keyModifiers(e) });
       });
 
       clipboardSink.addEventListener("paste", handleNativePaste);
+      document.addEventListener("keyup", (e) => {
+        // A modifier can be released over the HUD or clipboard field rather
+        // than over inputLayer. Forward the release exactly once.
+        if (e.target !== inputLayer && remoteModifiersDown.delete(e.code)) {
+          registerInput({ type: "keyup", code: e.code, key: e.key, modifiers: keyModifiers(e) });
+        }
+      }, true);
       document.addEventListener("keyup", (e) => {
         if (!swallowedClipboardCode || e.code !== swallowedClipboardCode) return;
         e.preventDefault();
@@ -2278,9 +2449,12 @@
 
       function resetRemoteInput() {
         activePointerButtons.clear();
+        remoteModifiersDown.clear();
         sendTransportMessage({ type: "reset_input" });
       }
+      inputLayer.addEventListener("blur", resetRemoteInput);
       window.addEventListener("blur", resetRemoteInput);
+      window.addEventListener("focus", resetRemoteInput);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") resetRemoteInput();
       });
@@ -2329,6 +2503,7 @@
         }
         applyFitMode();
         saveStreamPreferences();
+        queueNativePreferences({ [nativeScaleKey]: fitMode });
         configureStream();
         if (window.parent !== window) {
           window.parent.postMessage({ type: "fly-desktop-scale-mode", mode: fitMode }, window.location.origin);
@@ -2349,9 +2524,11 @@
         connect();
       };
 
-      // Start
-      applyFitMode();
-      connect();
+      // Start with the canonical server settings, including after clearing browser data.
+      loadNativePreferences().finally(() => {
+        applyFitMode();
+        connect();
+      });
     })();
   </script>
 </body>

@@ -42,6 +42,8 @@ test('explicit resolution changes configure capture at selected dimensions even 
     VALID_RESOLUTIONS: ['1280x720', '1920x1080'], streamResolutionSelect: {}, adaptiveScaleState: {},
     autoResizeEnabled: true, requestedDisplayName: '', currentBitrate: 4500000,
     resetClientIdleClock() {}, saveStreamPreferences() {}, applyFitMode() {},
+    nativeScaleKey: "desktopScaleMode", nativeResolutionKey: "desktopResolution",
+    queueNativePreferences: patch => calls.push({type: "preferences", ...patch}),
     sendTransportMessage: message => calls.push(message),
     window: { parent: null, location: { origin: 'https://example.test' } },
   };
@@ -54,6 +56,8 @@ test('explicit resolution changes configure capture at selected dimensions even 
   assert.equal(configure.height, 720);
   assert.equal(configure.force, true);
   assert.equal(context.fitMode, 'contain');
+  assert.ok(calls.some(message => message.desktopScaleMode === 'contain'));
+  assert.ok(calls.some(message => message.desktopResolution === '1280x720'));
 });
 
 test('server init does not replace the selected FPS with a previous encoder setting', () => {

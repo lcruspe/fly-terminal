@@ -2146,6 +2146,47 @@ def normalize_ui_preferences(payload):
     if desktop_fps in VALID_DESKTOP_FPS:
         preferences["desktopFps"] = desktop_fps
 
+    # Native WebRTC uses the same durable, authenticated preference store as
+    # the terminal UI. Browser and desktop streams have independent profiles.
+    for prefix in ("nativeDesktop", "nativeBrowser"):
+        quality = payload.get(f"{prefix}QualityMode")
+        if isinstance(quality, str) and quality in {"auto", "text", "smooth", "data"}:
+            preferences[f"{prefix}QualityMode"] = quality
+
+        pinned = payload.get(f"{prefix}HudPinned")
+        if isinstance(pinned, bool):
+            preferences[f"{prefix}HudPinned"] = pinned
+
+        position = payload.get(f"{prefix}HudPosition")
+        if isinstance(position, dict):
+            try:
+                x, y = float(position["x"]), float(position["y"])
+            except (ValueError, TypeError, KeyError, OverflowError):
+                pass
+            else:
+                if 0 <= x <= 10000 and 0 <= y <= 10000:
+                    preferences[f"{prefix}HudPosition"] = {"x": x, "y": y}
+
+        try:
+            timeout = int(payload.get(f"{prefix}IdleTimeoutSeconds"))
+        except (TypeError, ValueError, OverflowError):
+            timeout = 0
+        if timeout in {60, 180, 300, 600, 900, 1800, 3600}:
+            preferences[f"{prefix}IdleTimeoutSeconds"] = timeout
+
+    browser_resolution = payload.get("nativeBrowserResolution")
+    if isinstance(browser_resolution, str) and browser_resolution in VALID_DESKTOP_RESOLUTIONS:
+        preferences["nativeBrowserResolution"] = browser_resolution
+    browser_scale = payload.get("nativeBrowserScaleMode")
+    if isinstance(browser_scale, str) and browser_scale in VALID_DESKTOP_SCALE_MODES:
+        preferences["nativeBrowserScaleMode"] = browser_scale
+    try:
+        browser_fps = int(payload.get("nativeBrowserFps"))
+    except (TypeError, ValueError, OverflowError):
+        browser_fps = 0
+    if browser_fps in VALID_DESKTOP_FPS:
+        preferences["nativeBrowserFps"] = browser_fps
+
     for key in ("mainResolutionPresets", "virtualResolutionPresets"):
         values = payload.get(key)
         if isinstance(values, list):
