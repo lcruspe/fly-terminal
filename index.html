@@ -2897,6 +2897,13 @@
     let preferences = readPreferences();
     let editingSnippetId = null;
     let persistPreferencesTimer = null;
+    // Track only fields explicitly edited in this tab. Whole-object writes from
+    // another, stale tab previously reverted settings saved by Native HUD.
+    let lastObservedUiPreferences = JSON.parse(JSON.stringify(preferences));
+    let pendingUiPreferences = {};
+    let uiPreferencesInFlight = {};
+    let uiPreferencesSaving = false;
+    let uiPreferencesRetryDelay = 1500;
     let statusResetTimer = null;
     let browserConfig = { enabled: false, url: "", nativeUrl: "", fallbackUrl: "", backend: "" };
     let desktopConfig = { enabled: false, url: "" };
@@ -3020,25 +3027,65 @@
     }
 
     function savePreferences() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)); } catch (_) {}
       applyAllThemes();
       applyWindowTitle();
-      clearTimeout(persistPreferencesTimer);
-      persistPreferencesTimer = setTimeout(persistUiPreferences, 180);
+      // Compare with the last local snapshot, NOT the entire server document:
+      // unrelated settings from other clients must never be written back.
+      for (const [key, value] of Object.entries(preferences)) {
+        if (JSON.stringify(value) !== JSON.stringify(lastObservedUiPreferences[key])) {
+          pendingUiPreferences[key] = value;
+        }
+      }
+      lastObservedUiPreferences = JSON.parse(JSON.stringify(preferences));
+      if (Object.keys(pendingUiPreferences).length && !uiPreferencesSaving) {
+        clearTimeout(persistPreferencesTimer);
+        persistPreferencesTimer = setTimeout(persistUiPreferences, 180);
+      }
     }
 
     async function persistUiPreferences() {
+      if (uiPreferencesSaving || !Object.keys(pendingUiPreferences).length) return;
+      const patch = pendingUiPreferences;
+      pendingUiPreferences = {};
+      uiPreferencesInFlight = patch;
+      uiPreferencesSaving = true;
+      let failed = false;
       try {
         const response = await localApiFetch("/api/ui/preferences", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(preferences)
+          body: JSON.stringify(patch)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        uiPreferencesRetryDelay = 1500;
       } catch (error) {
+        failed = true;
+        // An edit made while the request was in flight takes precedence.
+        pendingUiPreferences = { ...patch, ...pendingUiPreferences };
+        uiPreferencesRetryDelay = Math.min(uiPreferencesRetryDelay * 2, 60000);
         console.warn("Unable to persist Fly Terminal UI preferences on server", error);
+      } finally {
+        uiPreferencesInFlight = {};
+        uiPreferencesSaving = false;
+        if (Object.keys(pendingUiPreferences).length) {
+          clearTimeout(persistPreferencesTimer);
+          persistPreferencesTimer = setTimeout(persistUiPreferences, failed ? uiPreferencesRetryDelay : 180);
+        }
       }
     }
+
+    // Commit any unsent selection when the tab closes (debounce alone loses it).
+    window.addEventListener("pagehide", () => {
+      const patch = { ...uiPreferencesInFlight, ...pendingUiPreferences };
+      if (!Object.keys(patch).length) return;
+      localApiFetch("/api/ui/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+        keepalive: true
+      }).catch(() => {});
+    });
 
     async function loadPersistedPreferences() {
       try {
@@ -3049,9 +3096,12 @@
         const hasPersistedPreferences = persistedKeys.some(key => payload?.[key] !== undefined && payload?.[key] !== null);
         if (hasPersistedPreferences) {
           preferences = readPreferencesFromObject({ ...preferences, ...payload });
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)); } catch (_) {}
+          lastObservedUiPreferences = JSON.parse(JSON.stringify(preferences));
           return;
         }
+        // First installation only: seed the server using existing local settings.
+        Object.assign(pendingUiPreferences, preferences);
         await persistUiPreferences();
       } catch (error) {
         console.warn("Unable to load persisted Fly Terminal UI preferences", error);

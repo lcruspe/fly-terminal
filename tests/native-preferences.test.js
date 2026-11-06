@@ -12,20 +12,32 @@ const controller = html.slice(start, end);
 function createClient(saved, { browser = false, local = {}, failGet = false } = {}) {
   const requests = [];
   const cache = { ...local };
+  const listeners = {};
+  const timers = new Map();
+  let nextTimer = 0;
+  let getOffline = failGet;
+  let configureCalls = 0;
+  let sessionSettingsCalls = 0;
   const context = {
     isBrowserClient: browser,
-    window: { location: { username: '', password: '' } },
+    window: {
+      location: { username: '', password: '' },
+      addEventListener: (name, callback) => { listeners[name] = callback; }
+    },
     URLSearchParams, AbortController,
     fetch: async (url, options) => {
       requests.push({ url, options });
       if (options.method === 'POST') {
         return { ok: true, json: async () => ({ ok: true }) };
       }
-      if (failGet) throw new Error('offline');
+      if (getOffline) throw new Error('offline');
       return { ok: true, json: async () => ({ ok: true, ...saved }) };
     },
-    setTimeout: () => 1,
-    clearTimeout: () => {},
+    setTimeout: (fn, ms) => { const id = ++nextTimer; timers.set(id, { fn, ms }); return id; },
+    clearTimeout: id => { timers.delete(id); },
+    configureStream: () => { configureCalls++; },
+    sendSessionSettings: () => { sessionSettingsCalls++; },
+    displayAutoResize: { setEnabled: () => {}, schedule: () => {} },
     console: { warn: () => {} },
     VALID_RESOLUTIONS: ['1280x720', '1600x900', '1920x1080', '2560x1440'],
     VALID_FPS_LIMITS: [15, 30, 45, 60],
@@ -54,7 +66,6 @@ function createClient(saved, { browser = false, local = {}, failGet = false } = 
     fitMode: 'contain',
     autoResizeEnabled: false,
     autoResizeBtn: { setAttribute: () => {} },
-    displayAutoResize: { setEnabled: () => {} },
     applyFitMode: () => {},
     savedStreamPreferences: {},
     saveStreamPreferences: () => {},
@@ -62,7 +73,12 @@ function createClient(saved, { browser = false, local = {}, failGet = false } = 
   context.savedStreamPreferences = JSON.parse(cache["flyNativeStreamPreferences:" + (browser ? "browser" : "desktop")] || "{}");
   vm.createContext(context);
   vm.runInContext(controller + '\nthis.nativeApi = { loadNativePreferences, queueNativePreferences, flushNativePreferences };', context);
-  return { context, cache, requests, api: context.nativeApi };
+  return {
+    context, cache, requests, api: context.nativeApi, listeners, timers,
+    setGetOffline: value => { getOffline = value; },
+    get configureCalls() { return configureCalls; },
+    get sessionSettingsCalls() { return sessionSettingsCalls; }
+  };
 }
 
 test('stored server configuration overrides defaults without being overwritten', async () => {
@@ -150,4 +166,67 @@ test('legacy stream cache wins over default URL during first server migration', 
   assert.equal(patch.nativeBrowserResolution, '1600x900');
   assert.equal(patch.nativeBrowserFps, 30);
   assert.equal(patch.nativeBrowserScaleMode, 'fill');
+});
+
+test('quick tab close commits pending Native changes with keepalive', async () => {
+  const client = createClient({});
+  client.api.queueNativePreferences({
+    nativeBrowserQualityMode: 'text',
+    desktopFps: 30,
+  });
+  client.listeners.pagehide();
+  const request = client.requests.find(x => x.options.keepalive === true);
+  assert.ok(request);
+  assert.equal(request.options.method, 'POST');
+  assert.deepEqual(JSON.parse(request.options.body), {
+    nativeBrowserQualityMode: 'text',
+    desktopFps: 30,
+  });
+});
+
+test('Native retries failed server read and applies recovered settings to active stream', async () => {
+  const client = createClient({
+    desktopResolution: '2560x1440', desktopFps: 45,
+    desktopScaleMode: 'fill', desktopAutoResize: true,
+    nativeDesktopQualityMode: 'smooth',
+    nativeDesktopIdleTimeoutSeconds: 1800,
+    nativeDesktopHudPinned: false,
+    nativeDesktopHudPosition: { x: 32, y: 64 },
+  }, { failGet: true });
+  await client.api.loadNativePreferences();
+  assert.ok([...client.timers.values()].some(t => t.ms === 1500), 'retry should be scheduled');
+  assert.equal(client.context.requestedFps, 60);
+  client.setGetOffline(false);
+  await client.api.loadNativePreferences();
+  assert.equal(client.context.requestedFps, 45);
+  assert.equal(client.context.requestedResolution, '2560x1440');
+  assert.equal(client.configureCalls, 1);
+  assert.equal(client.sessionSettingsCalls, 1);
+});
+
+test('late server response never overwrites user changes made while offline', async () => {
+  const client = createClient({
+    nativeBrowserResolution: '1920x1080', nativeBrowserFps: 15,
+    nativeBrowserScaleMode: 'sync',
+    nativeBrowserQualityMode: 'text',
+    nativeBrowserIdleTimeoutSeconds: 300,
+    nativeBrowserHudPinned: false,
+    nativeBrowserHudPosition: { x: 16, y: 24 },
+  }, { browser: true, failGet: true });
+  await client.api.loadNativePreferences();
+  client.context.requestedFps = 45;
+  client.context.requestedResolution = '2560x1440';
+  client.context.savedStreamPreferences = { fps: 45, resolution: '2560x1440' };
+  client.context.currentQualityMode = 'smooth';
+  client.api.queueNativePreferences({
+    nativeBrowserFps: 45,
+    nativeBrowserResolution: '2560x1440',
+    nativeBrowserQualityMode: 'smooth'
+  });
+  client.setGetOffline(false);
+  await client.api.loadNativePreferences();
+  assert.equal(client.context.requestedFps, 45);
+  assert.equal(client.context.requestedResolution, '2560x1440');
+  assert.equal(client.context.currentQualityMode, 'smooth');
+  assert.equal(client.context.sessionIdleTimeoutSeconds, 300);
 });

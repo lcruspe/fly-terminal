@@ -537,9 +537,10 @@
       }
 
       function saveStreamPreferences() {
-        safeStorageSet(streamPreferenceKey, JSON.stringify({
+        savedStreamPreferences = {
           resolution: requestedResolution, fps: requestedFps, scale: fitMode, autoResize: autoResizeEnabled
-        }));
+        };
+        safeStorageSet(streamPreferenceKey, JSON.stringify(savedStreamPreferences));
       }
 
       // Native WebRTC shares the durable UI preference store with Fly Terminal.
@@ -556,6 +557,12 @@
       let nativePreferencesSaving = false;
       let nativeRetryTimer = null;
       let nativeRetryBackoff = 1500;
+      let nativeInFlightPreferences = {};
+      let nativePreferencesLoaded = false;
+      let nativeLoadRetryTimer = null;
+      let nativeLoadRetryBackoff = 1500;
+      // Preserve user edits made while GET is slow/unavailable.
+      const nativeLocallyChangedKeys = new Set();
 
       function nativePreferencesFetch(options = {}) {
         const headers = { ...(options.headers || {}) };
@@ -570,7 +577,8 @@
         });
       }
 
-      function queueNativePreferences(patch) {
+      function queueNativePreferences(patch, migrating = false) {
+        if (!migrating) Object.keys(patch).forEach(key => nativeLocallyChangedKeys.add(key));
         Object.assign(nativePendingPreferences, patch);
         if (nativePreferencesSaving) return;
         clearTimeout(nativeRetryTimer);
@@ -581,6 +589,7 @@
         if (nativePreferencesSaving || !Object.keys(nativePendingPreferences).length) return;
         const patch = nativePendingPreferences;
         nativePendingPreferences = {};
+        nativeInFlightPreferences = patch;
         nativePreferencesSaving = true;
         let failed = false;
         const controller = new AbortController();
@@ -602,12 +611,33 @@
           console.warn("Unable to persist Native settings", error);
         } finally {
           clearTimeout(requestTimeout);
+          nativeInFlightPreferences = {};
           nativePreferencesSaving = false;
           if (Object.keys(nativePendingPreferences).length) {
             clearTimeout(nativeRetryTimer);
             nativeRetryTimer = setTimeout(flushNativePreferences, failed ? nativeRetryBackoff : 150);
           }
         }
+      }
+
+      window.addEventListener("pagehide", () => {
+        const patch = { ...nativeInFlightPreferences, ...nativePendingPreferences };
+        if (!Object.keys(patch).length) return;
+        nativePreferencesFetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+          keepalive: true
+        }).catch(() => {});
+      });
+
+      function scheduleNativePreferenceReload() {
+        if (nativePreferencesLoaded) return;
+        clearTimeout(nativeLoadRetryTimer);
+        nativeLoadRetryTimer = setTimeout(() => {
+          loadNativePreferences().catch(error => console.warn("Native preference retry failed", error));
+        }, nativeLoadRetryBackoff);
+        nativeLoadRetryBackoff = Math.min(nativeLoadRetryBackoff * 2, 30000);
       }
 
       function validNativePosition(value) {
@@ -626,14 +656,19 @@
           persisted = await response.json();
           if (!persisted || persisted.ok !== true) throw new Error("Invalid preference payload");
         } catch (error) {
-          console.warn("Native settings unavailable; using browser fallback", error);
+          console.warn("Native settings temporarily unavailable; retrying", error);
+          scheduleNativePreferenceReload();
           return; // Never push local defaults over existing server settings on GET failure.
         } finally {
           clearTimeout(timeout);
         }
 
+        const recoveredAfterOutage = nativeLoadRetryBackoff > 1500;
+        nativePreferencesLoaded = true;
+        clearTimeout(nativeLoadRetryTimer);
         const missing = {};
         const choose = (key, valid, fallback) => {
+          if (nativeLocallyChangedKeys.has(key)) return fallback;
           if (valid(persisted[key])) return persisted[key];
           missing[key] = fallback;
           return fallback;
@@ -684,7 +719,14 @@
         applyFitMode();
         saveStreamPreferences();
         // Seed only missing fields; existing server values always win.
-        if (Object.keys(missing).length) queueNativePreferences(missing);
+        if (Object.keys(missing).length) queueNativePreferences(missing, true);
+        // A reconnect may already be displaying video using cached defaults.
+        // Apply the recovered server profile to that live session as well.
+        if (recoveredAfterOutage && typeof configureStream === "function") {
+          configureStream(true);
+          sendSessionSettings(true);
+          displayAutoResize.schedule();
+        }
       }
 
       function clampHudPosition() {
