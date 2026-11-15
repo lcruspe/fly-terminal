@@ -74,6 +74,12 @@ class RoomAudioUiSmoke(unittest.TestCase):
                 result = {"items": phrases, "count": len(phrases)}
             elif path.endswith("/api/archive/speech"):
                 result = {"items": []}
+            elif path.endswith("/api/csrf-token"):
+                result = {"token": "a" * 64}
+            elif path.endswith("/api/alice/live/status"):
+                result = {"online": False, "connecting": False, "listeners": 0, "error": None}
+            elif path.endswith("/api/alice/archive"):
+                result = {"records": [], "transcripts": [], "day": now.strftime("%Y%m%d")}
             elif path.endswith("/api/media-token"):
                 result = {"token": "test-token", "expires_in": 3600}
             elif path.endswith("/api/recovery") and route.request.method == "POST":
@@ -164,6 +170,24 @@ class RoomAudioUiSmoke(unittest.TestCase):
                         context.close()
         finally:
             browser.close()
+
+    def test_selecting_alice_does_not_start_capture(self):
+        for width in (1280, 390):
+            with self.subTest(width=width):
+                context, page, errors, unexpected = self.build_page(width, online=False)
+                requests=[]
+                page.on("request",lambda request: requests.append(urlsplit(request.url).path))
+                try:
+                    page.locator("#sourceSelect").select_option("alice")
+                    page.wait_for_function("document.querySelector('#liveConnection').textContent.includes('Ожидает')")
+                    self.assertTrue(page.locator("#mp3").is_enabled())
+                    self.assertIn("запись включатся", page.locator("#sourceMessage").inner_text())
+                    self.assertNotIn("/roomaudio/alice-live.mp3",requests)
+                    self.assertFalse(page.evaluate("document.documentElement.scrollWidth > innerWidth"))
+                    self.assertEqual(errors, [])
+                    self.assertEqual(unexpected, [])
+                finally:
+                    context.close()
 
     def test_offline_recovery_queues_without_claiming_audio_is_restored(self):
         context, page, errors, unexpected = self.build_page(390, online=False)

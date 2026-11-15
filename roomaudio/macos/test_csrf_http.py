@@ -65,6 +65,22 @@ class CsrfHttpTests(unittest.TestCase):
             error.close()
             return error.code, None
 
+    def test_alice_source_requires_login_and_empty_archive_is_isolated(self):
+        self.assertEqual(self.call('/api/alice/live/status')[0], 401)
+        self.assertEqual(self.call('/api/alice/archive')[0], 401)
+        self.assertEqual(self.call('/alice-live.mp3')[0], 401)
+        cookie = self.module.SESSION_COOKIE + '=' + self.module.Handler.cookie_value()
+        self.assertEqual(self.call('/alice-live.mp3', cookie=cookie)[0], 403)
+        code, status = self.call('/api/alice/live/status', cookie=cookie)
+        self.assertEqual(code, 200)
+        self.assertFalse(status['online'])
+        self.assertEqual(status['listeners'], 0)
+        code, data = self.call('/api/alice/archive?day=20261115', cookie=cookie)
+        self.assertEqual(code, 200)
+        self.assertEqual(data['records'], [])
+        self.assertEqual(data['transcripts'], [])
+        self.assertEqual(self.call('/api/alice/archive?day=20261399', cookie=cookie)[0], 400)
+
     def test_cookie_bound_token_allows_schedule_over_any_proxy_origin(self):
         cookie = self.module.SESSION_COOKIE + '=' + self.module.Handler.cookie_value()
         code, result = self.call('/api/csrf-token', cookie=cookie)

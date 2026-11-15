@@ -2,6 +2,7 @@
 """RoomAudio ASR worker; preserves original audio, uses external whisper.cpp."""
 import datetime as dt
 import hashlib
+import fcntl
 import json
 import logging
 import audio_quality
@@ -17,15 +18,18 @@ import time
 
 APP = Path(__file__).resolve().parent
 CFG = json.loads((APP / "config.json").read_text())
-ROOT = Path(CFG["archive"])
+SOURCE = os.environ.get("ROOMAUDIO_SOURCE", "mate")
+if SOURCE not in ("mate", "alice"):
+    raise ValueError("Unknown RoomAudio source")
+ROOT = Path(CFG["archive"]) / "_alice" if SOURCE == "alice" else Path(CFG["archive"])
 MODEL = Path(CFG.get("transcription_model", "/Volumes/WD/RoomAudio/models/ggml-large-v3-turbo.bin"))
-DB = APP / "transcripts.sqlite3"
+DB = APP / ("transcripts-alice.sqlite3" if SOURCE == "alice" else "transcripts.sqlite3")
 FFMPEG = "/opt/homebrew/bin/ffmpeg"
 WHISPER = "/opt/homebrew/bin/whisper-cli"
 NAME = re.compile(r"^\d{8}T\d{6}\.mp3$")
 DATE = re.compile(r"^\d{8}$")
 GROUP_LENGTH = 120
-STATUS = APP / "transcriber-status.json"
+STATUS = APP / ("transcriber-alice-status.json" if SOURCE == "alice" else "transcriber-status.json")
 VAD_PY = APP / ".vad-venv/bin/python"
 VAD_SCRIPT = APP / "vad_inspect.py"
 
@@ -237,7 +241,11 @@ def loop(once=False):
                 report_status("processing",pending=len(remaining)-index,group=key)
                 try:
                     logging.info("Transcribing %s (%d fragments)", key, len(files))
-                    item = process(files, key)
+                    # One Whisper job at a time across Mate and Alice.
+                    with (APP / "transcriber-whisper.lock").open("a") as lock:
+                        fcntl.flock(lock, fcntl.LOCK_EX)
+                        try: item = process(files, key)
+                        finally: fcntl.flock(lock, fcntl.LOCK_UN)
                     conn.execute("INSERT OR IGNORE INTO transcripts VALUES(?,?,?,?,?,?,?,?)", item)
                     conn.commit()
                     logging.info("Finished %s: %d chars", key, len(item[4]))

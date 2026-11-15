@@ -128,10 +128,10 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
 <header><div class="brand"><div class="logo">≋</div><div><strong>RoomAudio</strong><small>Audio Intelligence</small></div></div>
 <nav aria-label="Основные разделы"><button data-tab="live" class="active" aria-pressed="true">Эфир</button><button data-tab="archive" aria-pressed="false">Архив</button></nav>
 <div class="head-right"><span class="status"><i class="dot" id="dot"></i><span id="online">Проверка</span></span><button class="iconbtn" id="theme" aria-label="Переключить тему">◐</button><form action="/roomaudio/logout" method="post"><button class="signout">Выйти</button></form></div></header>
-<p class="eyebrow" id="eyebrow">Mate · Room Audio</p><h1 id="title">Прямой эфир</h1><p class="lead" id="subtitle">Слушайте происходящее сейчас.</p>
+<p class="eyebrow" id="eyebrow">Room Audio</p><h1 id="title">Прямой эфир</h1><p class="lead" id="subtitle">Слушайте происходящее сейчас.</p>
 <section id="live-view" aria-label="Прямой эфир">
 <div class="livebox card">
-<div class="row"><div><p class="eyebrow">Источник</p><h2>Ноутбук Mate</h2></div><span class="pill" id="liveConnection">Проверяем соединение…</span></div>
+<div class="row"><div><p class="eyebrow">Источник</p><select id="sourceSelect" aria-label="Источник эфира"><option value="mate">Ноутбук Mate</option><option value="alice">Колонка Алиса</option></select></div><span class="pill" id="liveConnection">Проверяем соединение…</span></div>
 <p id="sourceMessage" role="status">Получаем состояние источника…</p><p class="hint" id="lastSeen">Последняя связь: проверяем…</p>
 <div class="export"><button id="mp3" class="btn primary">Слушать</button><button id="stopLive" class="btn" hidden>Остановить</button><button type="button" id="recoverLive" class="btn" hidden>Восстановить соединение</button></div>
 <audio id="liveAudio" controls playsinline preload="none" hidden aria-label="Плеер прямого эфира"></audio><p id="liveMsg" class="hint" role="status" aria-live="polite">Звук начнётся после нажатия «Слушать».</p><p id="recoveryMsg" class="hint" role="status" aria-live="polite"></p>
@@ -139,6 +139,7 @@ h1{font-size:clamp(30px,4vw,43px);letter-spacing:-.06em}h2{font-size:15px;font-w
 <p class="hint" id="captureSummary">Получаем режим записи…</p>
 </section>
 <section id="archive-view" hidden aria-label="Архив записей">
+<details class="card" id="aliceArchive"><summary>Архив колонки Алиса</summary><p class="hint">Записи создаются только во время прослушивания колонки. Расшифровка появляется после обработки.</p><label>Дата <input id="aliceArchiveDate" type="date"></label><button id="aliceArchiveRefresh" class="btn" type="button">Обновить</button><div id="aliceArchiveRecords"></div><audio id="aliceArchiveAudio" controls hidden></audio><div id="aliceArchiveText"></div></details>
 <div class="archive-range"><div class="row"><div class="preset"><button data-preset="1" class="active">1 час</button><button data-preset="3">3 часа</button><button data-preset="day">Весь день</button><button data-preset="custom">Свой период</button></div><div class="gap"><button class="btn" id="prevDay" aria-label="Предыдущий день">← День</button><button class="btn" id="nextDay" aria-label="Следующий день">День →</button><button class="btn" id="refreshArchive">Обновить</button></div></div>
 <div class="range"><div class="control"><label for="from">Начало периода</label><input type="datetime-local" id="from"></div><div class="control"><label for="to">Конец периода</label><input type="datetime-local" id="to"></div><button class="btn primary" id="apply">Показать</button></div><p class="hint" id="rangeStatus">Загрузка архива…</p>
 <div class="range"><div class="control"><label for="search">Поиск по тексту выбранного периода</label><input type="search" id="search" placeholder="Слова или фраза…"></div><details class="export-menu"><summary class="btn">Экспорт периода</summary><div class="export"><button id="downloadPeriod" class="btn">Аудио MP3</button><button id="copy" class="btn">Копировать текст</button><button id="txt" class="btn">TXT</button><button id="srt" class="btn">SRT</button></div><p class="hint">Аудио и полный текст выбранного периода, независимо от поиска.</p></details></div></div>
@@ -459,6 +460,7 @@ async function exportText(ext){if(!state.start)return;try{const blob=await api('
 async function copyText(){let text=state.texts.map(r=>'['+r.time.replace('T',' ')+'] '+r.text).join('\n');if(!text)return notice('Нет текста в выбранном периоде');try{await navigator.clipboard.writeText(text);notice('Текст скопирован')}catch(e){notice('Буфер обмена недоступен')}}
 $('copy').onclick=copyText;$('txt').onclick=()=>exportText('txt');$('srt').onclick=()=>exportText('srt');
 let liveDesired=null,liveReconnect=null,liveFailures=0;
+const selectedLivePath=()=> $('sourceSelect').value==='alice'?'/alice-live.mp3':'/live.mp3';
 function stopLive(){
  const wasActive=Boolean(liveDesired);
  liveDesired=null;
@@ -468,12 +470,12 @@ function stopLive(){
  if(wasActive)$('liveMsg').textContent='Остановлено';
 }
 function reconnectLive(){
- if(liveDesired!=='/live.mp3'||liveReconnect)return;
+ if(!['/live.mp3','/alice-live.mp3'].includes(liveDesired)||liveReconnect)return;
  const delay=Math.min(12000,1000*Math.pow(1.7,Math.min(liveFailures++,5)));
  $('liveMsg').textContent='Восстанавливаем соединение с эфиром…';
  liveReconnect=setTimeout(()=>{
    liveReconnect=null;
-   if(liveDesired==='/live.mp3')live('/live.mp3',true);
+   if(['/live.mp3','/alice-live.mp3'].includes(liveDesired))live(liveDesired,true);
  },delay);
 }
 async function live(path,reconnecting=false){
@@ -490,7 +492,7 @@ async function live(path,reconnecting=false){
        else{$('liveMsg').textContent='Эфир прерван, ожидаем восстановления потока…';reconnectLive();}
        return;
      }
-   }else{
+   }else if(path==='/live.m3u8'){
      const recent=await api('/api/archive/latest');
      if(liveDesired!==path)return;
      if(!recent.time||Date.now()-new Date(recent.time).getTime()>120000){
@@ -504,20 +506,32 @@ async function live(path,reconnecting=false){
    await a.play();
    if(liveDesired!==path)return;
    liveFailures=0;
-   $('liveMsg').textContent=path==='/live.mp3'?'Бесшовный эфир подключён':'Резервный HLS из архивных сегментов';
+   $('liveMsg').textContent=path==='/alice-live.mp3'?'Слушаете Алису. Запись включена.':path==='/live.mp3'?'Бесшовный эфир подключён':'Резервный HLS из архивных сегментов';
  }catch(e){
    if(liveDesired!==path)return;
    $('liveMsg').textContent='Нет соединения с эфиром.';
-   if(path==='/live.mp3')reconnectLive();else{stopLive();$('liveMsg').textContent='Не удалось запустить резервный архивный поток.'}
+   if(['/live.mp3','/alice-live.mp3'].includes(path))reconnectLive();else{stopLive();$('liveMsg').textContent='Не удалось запустить резервный архивный поток.'}
  }
 }
 $('liveAudio').addEventListener('ended',reconnectLive);
-$('liveAudio').addEventListener('playing',()=>{if(liveDesired)$('liveMsg').textContent=liveDesired==='/live.mp3'?'Слушаете прямой эфир':'Слушаете архивный поток с задержкой'});
-$('liveAudio').addEventListener('pause',()=>{if(liveDesired)$('liveMsg').textContent='Прослушивание на паузе'});
+$('liveAudio').addEventListener('playing',()=>{if(liveDesired)$('liveMsg').textContent=liveDesired==='/alice-live.mp3'?'Слушаете Алису. Запись включена.':liveDesired==='/live.mp3'?'Слушаете прямой эфир':'Слушаете архивный поток с задержкой'});
+$('liveAudio').addEventListener('pause',()=>{if(liveDesired==='/alice-live.mp3' && $('liveAudio').currentSrc.includes('/alice-live.mp3')){stopLive();$('liveMsg').textContent='Прослушивание и запись остановлены.'}else if(liveDesired)$('liveMsg').textContent='Прослушивание на паузе'});
 $('liveAudio').addEventListener('error',reconnectLive);
-$('mp3').onclick=()=>live('/live.mp3');
+$('mp3').onclick=()=>live(selectedLivePath());
+$('sourceSelect').onchange=()=>{stopLive();status()};
 $('hls').onclick=()=>live('/live.m3u8');
 $('stopLive').onclick=stopLive;
+$('aliceArchiveDate').value=local(new Date()).slice(0,10);
+async function refreshAliceArchive(){
+ const records=$('aliceArchiveRecords'),texts=$('aliceArchiveText');records.textContent='Загрузка…';texts.textContent='';
+ try{const d=$('aliceArchiveDate').value.replaceAll('-',''),result=await api('/api/alice/archive?day='+encodeURIComponent(d));records.replaceChildren();texts.replaceChildren();
+ const filtered=result.records.filter(item=>item.day===d);if(!filtered.length)records.textContent='Записей за этот день нет.';
+ for(const item of filtered){const b=document.createElement('button');b.className='btn';b.type='button';b.textContent=item.name.slice(9,11)+':'+item.name.slice(11,13)+':'+item.name.slice(13,15);b.onclick=async()=>{try{const a=$('aliceArchiveAudio');a.src=await media('/alice-segment/'+item.day+'/'+item.name);a.hidden=false;await a.play()}catch(e){notice('Не удалось открыть запись')}};records.append(b)}
+ for(const item of result.transcripts){const p=document.createElement('p');p.textContent=(item.time||'').replace('T',' ')+' — '+item.text;texts.append(p)}if(!result.transcripts.length)texts.textContent='Расшифровок за этот день пока нет.';
+ }catch(e){records.textContent='Не удалось загрузить архив Алисы.'}
+}
+$('aliceArchiveRefresh').onclick=refreshAliceArchive;$('aliceArchive').ontoggle=()=>{if($('aliceArchive').open)refreshAliceArchive()};
+
 let pendingRecoveryId=null;
 function recoveryProgress(capture,streamOnline){
  const id=capture.recovery_id;
@@ -570,15 +584,22 @@ async function recoverLivePipeline(){
 }
 $('recoverLive').onclick=recoverLivePipeline;
 
-async function status(){try{let s=await api('/api/status');const cap=s.capture||{};
+async function status(){try{let s=await api('/api/status');const cap=s.capture||{};let aliceState=null;
  const stream=await api('/api/live/status');
- $('liveConnection').textContent=stream.online?'Эфир доступен':cap.client_connected?'Mate на связи':'Источник недоступен';
- $('sourceMessage').textContent=stream.online?'Можно слушать непрерывный звук с Mate.':cap.client_connected&&cap.mode==='off'?'Микрофон выключен. Измените режим в настройках источника.':cap.client_connected?'Mate подключён, но свежий эфир не поступает. Попробуйте восстановить соединение.':'Нет связи с Mate. Проверьте питание и сеть ноутбука или отправьте команду восстановления.';
- $('recoverLive').hidden=!!stream.online;
- $('mp3').disabled=!stream.online;
- if(!stream.online&&!liveDesired)$('liveMsg').textContent='Для прослушивания требуется свежий поток от Mate.';
+ if($('sourceSelect').value==='alice'){
+  const alice=await api('/api/alice/live/status');aliceState=alice;
+  $('liveConnection').textContent=alice.online?'Эфир Алисы доступен':alice.connecting?'Подключаем Алису…':'Ожидает запуска';
+  $('sourceMessage').textContent=alice.error||'Микрофон и запись включатся при нажатии «Слушать» и отключатся после остановки.';
+  $('recoverLive').hidden=true;$('mp3').disabled=false;$('captureSummary').hidden=true;$('recoveryMsg').hidden=true;
+  if(!liveDesired)$('liveMsg').textContent='Нажмите «Слушать», чтобы включить микрофон колонки.';
+ }else{
+  $('liveConnection').textContent=stream.online?'Эфир доступен':cap.client_connected?'Mate на связи':'Источник недоступен';
+  $('sourceMessage').textContent=stream.online?'Можно слушать непрерывный звук с Mate.':cap.client_connected&&cap.mode==='off'?'Микрофон выключен. Измените режим в настройках источника.':cap.client_connected?'Mate подключён, но свежий эфир не поступает. Попробуйте восстановить соединение.':'Нет связи с Mate. Проверьте питание и сеть ноутбука или отправьте команду восстановления.';
+  $('recoverLive').hidden=!!stream.online;$('mp3').disabled=!stream.online;$('captureSummary').hidden=false;$('recoveryMsg').hidden=false;
+  if(!stream.online&&!liveDesired)$('liveMsg').textContent='Для прослушивания требуется свежий поток от Mate.';
+ }
  recoveryProgress(cap,!!stream.online);
- const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('liveConnection').textContent='Сервер недоступен';$('sourceMessage').textContent='Не удалось получить состояние источника. Проверьте соединение и повторите попытку.';$('recoverLive').hidden=false;$('mp3').disabled=true;$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
+ const configured=cap.client_connected&&cap.active_mode===cap.mode;const waiting=configured&&cap.mode==='voice'&&!s.audio_recent;const stopped=configured&&cap.mode==='off';$('online').textContent=stopped?'Запись выключена':s.mic_silent?'Микрофон без сигнала':waiting?'Ожидание речи':s.source_online?'Источник подключён':'Источник не отвечает';$('dot').classList.toggle('on',!!s.source_online&&!s.mic_silent&&!stopped);$('dot').title=waiting?'Mate подключён, запись ждёт голос':s.mic_silent?'Поступает цифровая тишина: проверьте встроенный микрофон':'Статус подключения';if(aliceState){$('online').textContent=aliceState.online?'Алиса: эфир':aliceState.connecting?'Алиса: подключение':'Алиса: ожидание';$('dot').classList.toggle('on',!!aliceState.online);$('dot').title='Состояние потока Алисы'}$('pipelineTransfer').textContent=waiting?'Mate на связи · ожидание речи':s.source_online?'Связь установлена':'Нет данных от Mate';const asr=s.asr||{};const fresh=asr.updated&&Date.now()-asr.updated*1000<480000;$('pipelineAsr').textContent=!s.asr_model_ready?'Нет модели':!fresh?'Нет обновлений':asr.state==='processing'?'В очереди: '+asr.pending:asr.state==='idle'?'Очередь пуста':'Проверить Whisper'}catch(e){$('online').textContent='Нет соединения';$('liveConnection').textContent='Сервер недоступен';$('sourceMessage').textContent='Не удалось получить состояние источника. Проверьте соединение и повторите попытку.';$('recoverLive').hidden=false;$('mp3').disabled=true;$('pipelineTransfer').textContent='Сервер недоступен';$('pipelineAsr').textContent='Нет связи'}}
 
 // Local weekly editor. The server is the only authority for current mode.
 const weekNames=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
@@ -680,7 +701,7 @@ async function captureStatus(){
     (s.client_connected?'Запрос: '+labels[s.mode]+' · Mate переключает режим…':
      'Запрос: '+labels[s.mode]+' · Mate пока не подтвердил');
   $('captureSummary').textContent=(s.schedule?.enabled?'По расписанию: ':'Архив: ')+$('modeStatus').textContent;
-  $('lastSeen').textContent=s.client_last_seen?'Последняя связь: '+new Date(s.client_last_seen*1000).toLocaleString('ru-RU'):'Последняя связь: нет данных после перезапуска сервера';
+  $('lastSeen').textContent=$('sourceSelect').value==='alice'?'Колонка: запись только во время прослушивания':s.client_last_seen?'Последняя связь: '+new Date(s.client_last_seen*1000).toLocaleString('ru-RU'):'Последняя связь: нет данных после перезапуска сервера';
   recoveryProgress(s,false);
   $('modeStatus').style.color=applied?'var(--green)':'var(--muted)';$('pipelineCapture').textContent=!s.client_connected?'Mate не отвечает':s.mode==='off'?'Запись выключена':applied?(s.mode==='voice'?'По голосу':'Постоянно'):'Переключение…';
  }catch(e){$('captureSummary').textContent='Режим записи временно недоступен';$('lastSeen').textContent='Последняя связь: не удалось проверить';$('modeStatus').textContent='Состояние режима временно недоступно';$('pipelineCapture').textContent='Нет данных'}

@@ -17,6 +17,7 @@ import recording_settings
 import control_csrf
 import speech_index
 import live_relay
+import alice_source
 import storage_paths
 import subprocess
 import threading
@@ -26,6 +27,8 @@ from pathlib import Path
 from http.cookies import SimpleCookie, CookieError
 from urllib.parse import urlsplit, parse_qs
 import secrets
+import select
+import socket
 
 BASE = Path(__file__).resolve().parent
 CONFIG = json.loads((BASE / "config.json").read_text())
@@ -49,6 +52,7 @@ state = {"last_received": None, "last_name": None,
 if not os.path.ismount("/Volumes/WD"):
     raise RuntimeError("Archive disk /Volumes/WD is not mounted")
 ROOT.mkdir(parents=True, exist_ok=True)
+ALICE = alice_source.AliceSource(CONFIG, ROOT)
 
 def segment_files(day):
     folder = ROOT / day
@@ -81,14 +85,17 @@ def cleanup():
     cutoff = dt.datetime.now().date() - dt.timedelta(days=int(CONFIG.get("retention_days", 30)))
     if not ROOT.is_dir():
         return
-    for folder in ROOT.iterdir():
-        if folder.is_dir() and DAY_RE.fullmatch(folder.name):
-            try:
-                d = dt.datetime.strptime(folder.name, "%Y%m%d").date()
-                if d < cutoff:
-                    shutil.rmtree(folder)
-            except (ValueError, OSError):
-                pass
+    for source_root in (ROOT, ROOT / "_alice"):
+        if not source_root.is_dir():
+            continue
+        for folder in source_root.iterdir():
+            if folder.is_dir() and DAY_RE.fullmatch(folder.name):
+                try:
+                    d = dt.datetime.strptime(folder.name, "%Y%m%d").date()
+                    if d < cutoff:
+                        shutil.rmtree(folder)
+                except (ValueError, OSError):
+                    pass
 
 def maintenance():
     while True:
@@ -182,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def is_media_path(path):
-        return path in ("/live.mp3", "/live.m3u8") or path.startswith(("/archive/", "/clip/", "/segment/", "/period/"))
+        return path in ("/live.mp3", "/live.m3u8", "/alice-live.mp3") or path.startswith(("/archive/", "/clip/", "/segment/", "/period/", "/alice-segment/"))
 
     @staticmethod
     def media_token(path):
@@ -456,6 +463,26 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_reply(recording_settings.status())
         if path == "/api/live/status":
             return self.json_reply(live_relay.hub.status())
+        if path == "/api/alice/live/status":
+            return self.json_reply(ALICE.status())
+        if path == "/api/alice/archive":
+            day=query.get("day",[dt.datetime.now().strftime("%Y%m%d")])[0]
+            if not DAY_RE.fullmatch(day): return self.reply(400,"Invalid day")
+            try: start=dt.datetime.strptime(day,"%Y%m%d")
+            except ValueError: return self.reply(400,"Invalid day")
+            end=start+dt.timedelta(days=1); records=[]; folder=ROOT/"_alice"/day
+            if folder.is_dir():
+                for f in sorted(folder.glob("*.mp3"),reverse=True):
+                    try:
+                        if SEGMENT_RE.fullmatch(f.name) and f.stat().st_size>200:
+                            records.append({"day":day,"name":f.name})
+                    except OSError: continue
+            transcripts=archive_api.transcript_rows(BASE/"transcripts-alice.sqlite3",start,end)
+            return self.json_reply({"records":records,"transcripts":transcripts,"day":day})
+        if path.startswith("/alice-segment/"):
+            match=re.fullmatch(r"/alice-segment/(\d{8})/(\d{8}T\d{6}\.mp3)",path)
+            if not match or match.group(1)!=match.group(2)[:8]: return self.reply(400,"Invalid audio")
+            return self.send_file(ROOT/"_alice"/match.group(1)/match.group(2),"audio/mpeg")
         if path == "/api/media-token":
             target = query.get("path", [""])[0]
             if not self.authorized() or not self.is_media_path(target):
@@ -546,6 +573,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, "\n".join(lines) + "\n", "application/vnd.apple.mpegurl")
         if path == "/live.mp3":
             return self.live_stream()
+        if path == "/alice-live.mp3":
+            # Starting a microphone is a side effect. Require a session-issued
+            # media token even when a browser has a valid login cookie.
+            if not self.valid_media_token(path, query.get("mt", [""])[0]):
+                return self.reply(403, "Media token required")
+            def disconnected():
+                try:
+                    ready,_,_=select.select([self.connection],[],[],0)
+                    return bool(ready and self.connection.recv(1,socket.MSG_PEEK|socket.MSG_DONTWAIT)==b'')
+                except (BlockingIOError,InterruptedError): return False
+                except OSError: return True
+            if not ALICE.acquire(cancelled=disconnected):
+                if not disconnected(): return self.reply(503,"Alice source unavailable")
+                return
+            try: return self.live_stream(ALICE.hub)
+            finally: ALICE.release()
         if path.startswith("/clip/"):
             key = path.removeprefix("/clip/")
             if not re.fullmatch(r"\d{8}T\d{6}\.mp3", key):
@@ -641,8 +684,9 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def live_stream(self):
-        current = live_relay.hub.subscribe()
+    def live_stream(self, hub=None):
+        hub = hub or live_relay.hub
+        current = hub.subscribe()
         if current is None:
             return self.reply(503, "Continuous live audio is not connected")
         generation, seq = current
@@ -654,9 +698,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
         self.close_connection = True
+        self.connection.settimeout(8)
         try:
             while True:
-                result = live_relay.hub.read(generation, seq)
+                result = hub.read(generation, seq)
                 if result is None:
                     return
                 frames, seq = result
@@ -667,7 +712,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
             pass
         finally:
-            live_relay.hub.unsubscribe()
+            hub.unsubscribe()
 
 if __name__ == "__main__":
     threading.Thread(target=maintenance, daemon=True).start()
