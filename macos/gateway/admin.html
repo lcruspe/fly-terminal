@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow">
   <meta name="theme-color" content="#0d1118">
+  <script>
+    try {
+      document.documentElement.dataset.gatewayTheme =
+        localStorage.getItem("fly-gateway-theme-v1") === "light" ? "light" : "dark";
+      if (document.documentElement.dataset.gatewayTheme === "light")
+        document.querySelector('meta[name="theme-color"]').content = "#f5f7fb";
+    } catch { document.documentElement.dataset.gatewayTheme = "dark"; }
+  </script>
   <title>Fly Gateway · Сервисы Mac mini</title>
   <link rel="stylesheet" href="/gateway.css">
 </head>
@@ -37,6 +45,15 @@
           <button type="button" data-view-mode="tiles" aria-pressed="true">Плитки</button>
           <button type="button" data-view-mode="table" aria-pressed="false">Таблица</button>
         </div>
+        <button type="button" class="theme-toggle" id="gatewayThemeToggle"
+                aria-label="Включить светлую тему" title="Светлая тема" aria-pressed="false">
+          <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>
+          </svg>
+          <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.9 13a9 9 0 0 1-10-10A9 9 0 1 0 20.9 13Z"/>
+          </svg>
+        </button>
       </div>
     </div>
     <p class="catalog-message" role="status" aria-live="polite"></p>

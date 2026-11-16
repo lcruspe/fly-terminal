@@ -15,11 +15,13 @@ function mount(fetch) {
   }));
   const router = { textContent: "" };
   const message = { textContent: "" };
+  const themeToggle = { setAttribute() {}, addEventListener() {} };
   const dashboard = {
     dataset: { view: "tiles" },
     querySelector(selector) {
       if (selector === ".catalog-message") return message;
       if (selector === ".router-status") return router;
+      if (selector === "#gatewayThemeToggle") return themeToggle;
       return null;
     },
     querySelectorAll(selector) {
@@ -29,6 +31,7 @@ function mount(fetch) {
   };
   let polls = 0;
   const document = {
+    documentElement: { dataset: { gatewayTheme: "dark" } },
     querySelectorAll() { return []; },
     querySelector(selector) { return selector === "[data-dashboard]" ? dashboard : null; },
     createElement() {

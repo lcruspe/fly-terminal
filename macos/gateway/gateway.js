@@ -35,6 +35,24 @@
   if (!dashboard) return; // The restricted Sprut.Hub page has no admin controls.
   const message = dashboard.querySelector(".catalog-message");
   const storageKey = "fly-gateway-view-v1";
+  const themeStorageKey = "fly-gateway-theme-v1";
+  const themeToggle = dashboard.querySelector("#gatewayThemeToggle");
+  function applyTheme(mode, persist = false) {
+    const light = mode === "light";
+    document.documentElement.dataset.gatewayTheme = light ? "light" : "dark";
+    themeToggle.setAttribute("aria-pressed", String(light));
+    themeToggle.setAttribute("aria-label", light ? "Включить тёмную тему" : "Включить светлую тему");
+    themeToggle.title = light ? "Тёмная тема" : "Светлая тема";
+    const color = document.querySelector('meta[name="theme-color"]');
+    if (color) color.content = light ? "#f5f7fb" : "#0d1118";
+    if (persist) {
+      try { localStorage.setItem(themeStorageKey, light ? "light" : "dark"); } catch {}
+    }
+  }
+  applyTheme(document.documentElement.dataset.gatewayTheme);
+  themeToggle.addEventListener("click", () => {
+    applyTheme(document.documentElement.dataset.gatewayTheme === "light" ? "dark" : "light", true);
+  });
   const modes = ["tiles", "table"];
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };

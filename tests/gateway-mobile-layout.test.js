@@ -9,17 +9,21 @@ const html = fs.readFileSync(path.join(dir, "admin.html"), "utf8");
 const css = fs.readFileSync(path.join(dir, "gateway.css"), "utf8");
 const js = fs.readFileSync(path.join(dir, "gateway.js"), "utf8");
 
-test("catalog starts with the view switch and has no decorative heading", () => {
-  assert.match(html, /<body class="dashboard-page">\s*<main[^>]+>\s*<div class="session-toolbar">[\s\S]*?<div class="view-switch"/);
-  assert.doesNotMatch(html, /<h1>Сервисы<\/h1>|Терминал, браузеры и управление подключениями/);
+test("catalog includes header, view switch and theme control", () => {
+  assert.match(html, /<header class="gateway-header">/);
+  assert.match(html, /<div class="view-switch"/);
+  assert.match(html, /<button type="button" class="theme-toggle" id="gatewayThemeToggle"/);
   assert.match(html, /<section class="services" aria-label="Каталог сервисов">/);
 });
 
-test("mobile cards have a top-aligned layout without an empty message gap", () => {
-  assert.match(css, /\.catalog-message:empty\s*\{\s*display:none;/);
-  assert.match(css, /@media\(max-width:600px\)[\s\S]*body\.dashboard-page\s*\{\s*display:block;/);
-  assert.match(css, /\[data-dashboard\] \.services\s*\{\s*grid-template-columns:1fr;\s*gap:8px;\s*margin-top:8px;/);
-  assert.match(css, /body:not\(\.dashboard-page\)\s*\{\s*padding:20px 12px;/);
+test("mobile cards remain compact while table has independent three-column layout", () => {
+  assert.match(css, /\.catalog-message:empty\s*\{\s*display:\s*none;/);
+  assert.match(css, /@media \(max-width: 650px\)/);
+  assert.match(css, /body\.dashboard-page \.services \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/s);
+  assert.match(css, /body\.dashboard-page \.catalog-group-heading \{ display: none; \}/);
+  assert.match(css, /body\.dashboard-page \.service-table tbody tr \{[^}]*grid-template-columns: minmax\(0, 1\.1fr\) minmax\(0, 1fr\) 44px;/s);
+  assert.match(css, /body\.dashboard-page \.service-table tbody tr \{[^}]*align-items: center;/s);
+  assert.match(css, /body\.dashboard-page \.action-menu-trigger \{[^}]*width: 44px;[^}]*height: 44px;/s);
 });
 
 function selectedMode({mobile, stored}) {
@@ -28,21 +32,31 @@ function selectedMode({mobile, stored}) {
   const buttons = ["tiles", "table"].map(viewMode => ({
     dataset: {viewMode}, setAttribute(name, value) { this[name] = value; }, addEventListener() {}
   }));
+  const themeToggle = {setAttribute() {}, addEventListener() {}};
   const dashboard = {
     dataset: {view: "tiles"},
-    querySelector(sel) { return sel === ".catalog-message" ? {} : null; },
+    querySelector(sel) {
+      if (sel === "#gatewayThemeToggle") return themeToggle;
+      return sel === ".catalog-message" ? {} : null;
+    },
     querySelectorAll(sel) { return sel === "[data-view-mode]" ? buttons : []; }
   };
   const document = {
+    documentElement: {dataset: {gatewayTheme: "dark"}},
     querySelectorAll() { return []; },
-    querySelector(sel) { return sel === "[data-dashboard]" ? dashboard : null; }
+    querySelector(sel) {
+      if (sel === "[data-dashboard]") return dashboard;
+      if (sel === 'meta[name="theme-color"]') return {content: "#0d1118"};
+      return null;
+    }
   };
   const window = {
     location: {hostname: "localhost", protocol: "http:", port: "8080"},
     matchMedia() { return {matches: mobile}; }
   };
   const localStorage = {
-    getItem() { return stored === undefined ? null : JSON.stringify(stored); }
+    getItem(key) { return key === "fly-gateway-view-v1" && stored !== undefined ? JSON.stringify(stored) : null; },
+    setItem() {}
   };
   vm.runInNewContext(init, { document, window, localStorage });
   return {active: dashboard.dataset.view, pressed: buttons.filter(b => b["aria-pressed"] === "true").map(b => b.dataset.viewMode)};
