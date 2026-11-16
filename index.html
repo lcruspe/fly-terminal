@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Terminal</title>
   <style>
     :root {
@@ -1953,6 +1953,282 @@
       .terminal {
         min-height: 70vh;
       }
+    }
+
+    /* iPhone 13 Pro Max / compact touch workspace.
+       Safe-area insets follow the physical rounded corners, notch and Home indicator.
+       Desktop and tablet layouts are intentionally unchanged. */
+    @media (pointer: coarse) and (max-width: 760px),
+           (pointer: coarse) and (max-height: 530px) {
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+
+      .shell {
+        width: 100%;
+        height: var(--fly-mobile-visual-height, 100dvh);
+        min-height: 0;
+        max-height: 100dvh;
+        padding:
+          max(8px, env(safe-area-inset-top))
+          max(9px, env(safe-area-inset-right))
+          max(10px, env(safe-area-inset-bottom))
+          max(9px, env(safe-area-inset-left));
+        gap: 7px;
+        overflow: hidden;
+      }
+
+      .terminal-container {
+        min-width: 0;
+        min-height: 0;
+        height: auto;
+        flex: 1 1 0;
+        gap: 7px;
+      }
+
+      .terminal-frame-wrapper {
+        border-radius: 14px;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .terminal-topbar {
+        min-height: 52px;
+        padding: 4px 6px 4px 10px;
+        gap: 8px;
+      }
+
+      .terminal-heading {
+        min-width: 0;
+      }
+
+      .terminal-heading strong {
+        font-size: 13px;
+      }
+
+      .terminal-heading span {
+        display: none;
+      }
+
+      .terminal-actions {
+        gap: 4px;
+        flex: 0 0 auto;
+      }
+
+      .frame-control, a.frame-control, .frame-view-mode-btn {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        padding: 0;
+        justify-content: center;
+        touch-action: manipulation;
+      }
+
+      .bottom-panel {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        flex: 0 0 auto;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .tab-bar {
+        min-height: 50px;
+        flex: 0 0 auto;
+        padding: 3px 5px;
+        gap: 5px;
+        scroll-padding-inline: 8px;
+      }
+
+      .tab {
+        min-height: 44px;
+        padding: 0 10px;
+        gap: 5px;
+        touch-action: manipulation;
+      }
+
+      .tab .tab-name {
+        display: inline-block;
+        max-width: min(30vw, 190px);
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .tab .tab-close {
+        opacity: 1;
+        pointer-events: auto;
+        flex: 0 0 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        min-height: 44px;
+        margin: 0 -9px 0 0;
+        padding: 0;
+        background: transparent;
+        color: inherit;
+        font: 700 14px/1 system-ui, sans-serif;
+        border: 0;
+        border-radius: 9px;
+        cursor: pointer;
+      }
+
+      .tab .tab-close:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+
+      .tab.new-tab-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0;
+        justify-content: center;
+        flex: 0 0 44px;
+      }
+
+      .toolbar {
+        min-width: 0;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        min-height: 56px;
+        padding: 5px 6px;
+        flex-wrap: nowrap;
+        border-radius: 14px;
+      }
+
+      .toolbar-primary {
+        display: flex;
+        width: auto;
+        min-width: 0;
+        flex: 0 0 auto;
+        padding: 0;
+        border: 0;
+      }
+
+      .toolbar-primary .brand {
+        display: none;
+      }
+
+      .session-meta .badge {
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px 7px;
+        font-size: 10px;
+      }
+
+      .controls {
+        width: auto;
+        flex: 1 1 auto;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .control-group {
+        display: inline-flex;
+        flex-direction: row;
+        width: auto;
+        gap: 4px;
+        align-items: center;
+      }
+
+      #toolbarControls > .control-group > button,
+      #toolbarControls > .control-group > a.button,
+      #toolbarControls > details > summary.button,
+      #toolbarControls #overflowMenu > summary.button,
+      .toolbar #togglePanel,
+      .toolbar #openKeyboard {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 8px;
+        justify-content: center;
+        touch-action: manipulation;
+      }
+
+      #toolbarControls button.toolbar-icon-only,
+      #toolbarControls a.button.toolbar-icon-only,
+      #toolbarControls details.toolbar-icon-only > summary.button {
+        min-width: 44px;
+        min-height: 44px;
+      }
+
+      .shell #overflowMenu > summary.button {
+        min-width: 44px;
+        min-height: 44px;
+      }
+
+      /* Keep primary keyboard and panel actions directly reachable with 44px taps.
+         A label hidden only on compact touch layouts frees space for menu overflow. */
+      .shell #togglePanel, .shell #openKeyboard {
+        width: 44px !important;
+        min-width: 44px !important;
+        flex: 0 0 44px;
+        padding: 0 !important;
+      }
+      .shell #openKeyboard > .toolbar-action-label,
+      .shell #togglePanel > .toolbar-action-label {
+        display: none !important;
+      }
+      .shell #openKeyboard svg,
+      .shell #togglePanel svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .bottom-panel.collapsed {
+        position: fixed;
+        right: max(10px, env(safe-area-inset-right));
+        bottom: max(12px, env(safe-area-inset-bottom));
+        width: auto;
+        max-width: calc(100% - 20px);
+        z-index: 1000;
+      }
+
+      /* Full-screen frame must not cover the notch, rounded corners or Home indicator. */
+      .terminal-frame-wrapper.fullscreen {
+        inset:
+          max(7px, env(safe-area-inset-top))
+          max(8px, env(safe-area-inset-right))
+          max(10px, env(safe-area-inset-bottom))
+          max(8px, env(safe-area-inset-left));
+        border: 1px solid var(--terminal-edge);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+
+      .settings-panel, .dropdown-menu, .apps-flyout, .apps-flyout-submenu {
+        max-height: min(78dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
+
+      .menu-backdrop {
+        touch-action: manipulation;
+      }
+    }
+
+    @media (pointer: coarse) and (max-width: 360px) {
+      .session-meta .badge {
+        font-size: 9px;
+        padding-inline: 5px;
+      }
+      .toolbar { gap: 4px; padding-inline: 4px; }
+      .controls { gap: 3px; }
     }
 
     /* Layout presets for Split Mode */
@@ -4255,29 +4531,58 @@
       return { left: 0, top: 0 };
     }
 
+    function readTouchSafeAreaInsets() {
+      // iOS Safari resolves CSS env() in computed padding; Chromium without
+      // a display cutout correctly returns zero. Probe only while opening a sheet.
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;" +
+        "padding:env(safe-area-inset-top) env(safe-area-inset-right) " +
+        "env(safe-area-inset-bottom) env(safe-area-inset-left)";
+      document.body.appendChild(probe);
+      const style = getComputedStyle(probe);
+      const safe = {
+        top: parseFloat(style.paddingTop) || 0,
+        right: parseFloat(style.paddingRight) || 0,
+        bottom: parseFloat(style.paddingBottom) || 0,
+        left: parseFloat(style.paddingLeft) || 0
+      };
+      probe.remove();
+      return safe;
+    }
+
+    function touchMenuBounds(width, height, safe) {
+      const left = Math.max(8, safe.left + 8);
+      const right = Math.max(8, safe.right + 8);
+      const top = Math.max(8, safe.top + 8);
+      const bottom = Math.max(8, safe.bottom + 8);
+      return {
+        left, top, bottom,
+        width: Math.max(1, width - left - right),
+        height: Math.max(1, Math.min(height * 0.78, height - top - bottom))
+      };
+    }
+
     function positionTouchMenuSurface(menu) {
       if (!menu || menu.hidden) return;
-      const viewportPad = 8;
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const bounds = touchMenuBounds(viewportWidth, viewportHeight, readTouchSafeAreaInsets());
       const fixedBase = fixedPositionBaseFor(menu);
       menu.style.minWidth = "";
       menu.classList.remove("menu-narrow");
-      const maxHeight = Math.min(viewportHeight * 0.78, viewportHeight - viewportPad * 2);
-      const maxWidth = Math.max(1, viewportWidth - viewportPad * 2);
 
       menu.style.position = "fixed";
-      menu.style.left = `${Math.round(viewportPad - fixedBase.left)}px`;
+      menu.style.left = `${Math.round(bounds.left - fixedBase.left)}px`;
       menu.style.right = "auto";
-      menu.style.top = `${Math.round(viewportPad - fixedBase.top)}px`;
+      menu.style.top = `${Math.round(bounds.top - fixedBase.top)}px`;
       menu.style.bottom = "auto";
-      menu.style.maxHeight = `${Math.floor(maxHeight)}px`;
-      menu.style.maxWidth = `${Math.floor(maxWidth)}px`;
+      menu.style.maxHeight = `${Math.floor(bounds.height)}px`;
+      menu.style.maxWidth = `${Math.floor(bounds.width)}px`;
 
       const fittedRect = menu.getBoundingClientRect();
-      const fittedHeight = Math.min(fittedRect.height, maxHeight);
-      const top = viewportHeight - viewportPad - fittedHeight;
-      menu.style.top = `${Math.round(top - fixedBase.top)}px`;
+      const fittedHeight = Math.min(fittedRect.height, bounds.height);
+      const top = viewportHeight - bounds.bottom - fittedHeight;
+      menu.style.top = `${Math.round(Math.max(bounds.top, top) - fixedBase.top)}px`;
       menu.style.transformOrigin = "bottom center";
     }
 
@@ -4450,6 +4755,7 @@
         directLink,
         reloadActiveBtn,
         copySelectionBtn,
+        openKeyboardBtn,
         settingsMenu?.querySelector(":scope > summary"),
         toolsMenu?.querySelector(":scope > summary"),
         overflowMenu?.querySelector(":scope > summary")
@@ -4512,14 +4818,18 @@
       const visibleItems = responsiveToolbarItems.filter(({ element }) => {
         return !element.hidden && getComputedStyle(element).display !== "none";
       });
-      if (!toolbarControlsOverflow()) return;
-
-      setResponsiveToolbarIconOnly(true);
+      if (compactTouchLayout.matches) {
+        setResponsiveToolbarIconOnly(true);
+      } else {
+        if (!toolbarControlsOverflow()) return;
+        setResponsiveToolbarIconOnly(true);
+      }
       if (!toolbarControlsOverflow()) return;
 
       overflowMenu.hidden = false;
       for (let index = visibleItems.length - 1; index >= 0 && toolbarControlsOverflow(); index -= 1) {
         const element = visibleItems[index].element;
+        if (compactTouchLayout.matches && element === openKeyboardBtn) continue;
         element.classList.remove("toolbar-icon-only");
         if (element.open) element.open = false;
         overflowMenuList.prepend(element);
@@ -5977,7 +6287,7 @@
         btn.dataset.index = index;
         btn.innerHTML = `
           <span class="tab-name">${t.customLabel || t.label}</span>
-          <span class="tab-close" title="Закрыть">✕</span>
+          <button type="button" class="tab-close" title="Закрыть вкладку" aria-label="Закрыть вкладку">✕</button>
         `;
 
         btn.ondragstart = (e) => {
@@ -6025,7 +6335,16 @@
       newTabBtn.className = "tab new-tab-btn";
       newTabBtn.innerHTML = `+`;
       newTabBtn.title = "Новая вкладка";
+      newTabBtn.setAttribute("role", "button");
+      newTabBtn.setAttribute("tabindex", "0");
+      newTabBtn.setAttribute("aria-label", "Новая вкладка");
       newTabBtn.onclick = () => addTab();
+      newTabBtn.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          addTab();
+        }
+      };
       tabBar.appendChild(newTabBtn);
     }
 
@@ -6350,19 +6669,46 @@
     const toolbarOrientationSelect = document.getElementById("toolbarOrientation");
     const shellEl = document.querySelector(".shell");
 
+    const compactTouchLayout = window.matchMedia(
+      "(pointer: coarse) and (max-width: 760px), (pointer: coarse) and (max-height: 530px)"
+    );
+    function syncMobileVisualViewport() {
+      if (compactTouchLayout.matches && window.visualViewport) {
+        document.documentElement.style.setProperty(
+          "--fly-mobile-visual-height",
+          Math.round(window.visualViewport.height) + "px"
+        );
+      } else {
+        document.documentElement.style.removeProperty("--fly-mobile-visual-height");
+      }
+    }
+    window.visualViewport?.addEventListener("resize", syncMobileVisualViewport, { passive: true });
+    window.addEventListener("resize", syncMobileVisualViewport, { passive: true });
+    compactTouchLayout.addEventListener?.("change", syncMobileVisualViewport);
+    syncMobileVisualViewport();
     function applyToolbarOrientation(orientation) {
       if (!shellEl) return;
+      const mobile = compactTouchLayout.matches;
+      const effectiveOrientation = mobile ? "horizontal" : orientation;
       shellEl.classList.remove("orientation-vertical-left", "orientation-vertical-right");
-      if (orientation === "vertical-left") {
+      if (effectiveOrientation === "vertical-left") {
         shellEl.classList.add("orientation-vertical-left");
-      } else if (orientation === "vertical-right") {
+      } else if (effectiveOrientation === "vertical-right") {
         shellEl.classList.add("orientation-vertical-right");
+      }
+      if (toolbarOrientationSelect) {
+        toolbarOrientationSelect.value = effectiveOrientation;
+        toolbarOrientationSelect.disabled = mobile;
+        toolbarOrientationSelect.title = mobile ? "На узком экране доступна только горизонтальная панель" : "";
       }
       applyPanelCollapsedPref();
       scheduleResponsiveToolbarLayout();
       requestAnimationFrame(() => { positionOpenFloatingMenus(); positionOpenAppsMenus(); });
     }
 
+    compactTouchLayout.addEventListener?.("change", () =>
+      applyToolbarOrientation(preferences.toolbarOrientation || "horizontal")
+    );
     if (toolbarOrientationSelect) {
       toolbarOrientationSelect.value = preferences.toolbarOrientation || "horizontal";
       applyToolbarOrientation(preferences.toolbarOrientation);

@@ -1,5 +1,12 @@
 # Mobile UX audit — 2026-10-25
 
+## Update — 2026-11-17: iPhone 13 Pro Max
+
+Main shell adaptations address the previous mobile findings: notch and rounded-corner-safe layout (including fullscreen and bottom-sheet menus), horizontal toolbar on compact touch screens without overwriting preference, visible touch tab-close (44px), direct 44px keyboard action, and compact 116px bottom panel. The software keyboard triggers a visualViewport height update. Overflow Settings remains navigable at 320px and 390px.
+
+Verified with 44 Chrome CDP/browser checks at 428×926, 926×428, 390×844 and 320×568, using local mock endpoints. Live Safari, hardware keyboard, ttyd, RDC and WebSocket still require physical-device QA. The original 2026-10-25 findings below describe the pre-change implementation.
+
+
 ## Scope and method
 - Repository: `lcruspe/fly-terminal`, branch `main`, initial checkout commit `57eafe4`.
 - Chrome 155 headless/CDP, device and touch emulation (retested after updating to upstream 454768b): 320×568, 375×667, 390×844, 844×390 CSS px.
