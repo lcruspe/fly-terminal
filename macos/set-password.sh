@@ -45,6 +45,15 @@ env_path.write_text("\n".join(result) + "\n")
 PY
 
 chmod 600 "${ENV_FILE}"
+
+# A password change invalidates all existing fixed-lifetime sessions.
+python3 - "${CONFIG_DIR}/sessions.sqlite3" <<'PY'
+import pathlib, sqlite3, sys
+path = pathlib.Path(sys.argv[1])
+if path.is_file():
+    with sqlite3.connect(str(path), timeout=10) as db:
+        db.execute("DELETE FROM sessions")
+PY
 launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.ttyd"
 launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.caddy"
 launchctl kickstart -k "gui/${UID_VALUE}/ai.kruspe.fly-terminal.browser" 2>/dev/null || true

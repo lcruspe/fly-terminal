@@ -3,47 +3,77 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+
 const script = fs.readFileSync(path.join(__dirname, "../macos/gateway/gateway.js"), "utf8");
 
 function mount(fetch) {
   const cards = ["terminal", "native", "fallback", "roomaudio", "yt", "spruthub"].map(key => ({
-    dataset: { health: key },
-    append(node) { this.indicator = node; },
-    querySelector() { return { textContent: key }; }
+    dataset: { health: key }, textContent: key,
+    hasAttribute() { return false; },
+    append(dot) { this.indicator = dot; dot.parentElement = this; },
+    querySelector() { return null; },
   }));
-  const timers = new Map();
-  let id = 0;
+  const router = { textContent: "" };
+  const message = { textContent: "" };
+  const dashboard = {
+    dataset: { view: "tiles" },
+    querySelector(selector) {
+      if (selector === ".catalog-message") return message;
+      if (selector === ".router-status") return router;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === "[data-health]") return cards;
+      return [];
+    },
+  };
+  let polls = 0;
   const document = {
-    querySelectorAll(selector) { return selector === ".service" ? cards : []; },
-    createElement() { return { dataset: {}, setAttribute(name, value) { this[name] = value; } }; }
+    querySelectorAll() { return []; },
+    querySelector(selector) { return selector === "[data-dashboard]" ? dashboard : null; },
+    createElement() {
+      return { dataset: {}, setAttribute(name, value) { this[name] = value; } };
+    },
+    addEventListener() {},
   };
   const ctx = vm.createContext({
-    document, window: { location: { hostname: "example.com" } }, fetch,
-    AbortController, setTimeout(fn) { timers.set(++id, fn); return id; },
-    clearTimeout(key) { timers.delete(key); }
+    document, fetch, AbortSignal,
+    localStorage: { getItem() { return null; }, setItem() {} },
+    window: {
+      location: { hostname: "example.com", protocol: "https:", port: "" },
+      addEventListener() {},
+    },
+    setInterval() { polls++; },
   });
   vm.runInContext(script, ctx);
-  return { cards, timers };
+  return { cards, router, message, get polls() { return polls; } };
 }
+
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-test("one request updates all six indicator states", async () => {
+test("one gateway control request populates all service indicators", async () => {
   const urls = [];
-  const { cards, timers } = mount(async url => {
+  const ui = mount(async url => {
     urls.push(url);
-    return { ok: true, json: async () => ({ ok: true, services: {
-      terminal: "up", native: "down", fallback: "up", roomaudio: "down", yt: "up", spruthub: "up"
-    } }) };
+    if (url === "/network-map/healthz")
+      return { ok: true, json: async () => ({ ok: true }) };
+    return { ok: true, json: async () => ({
+      ok: true, csrf: "test-csrf", actions: {}, openwrt: { reachable: true, connected: false },
+      services: { terminal: "up", native: "down", fallback: "up", roomaudio: "down", yt: "up", spruthub: "up" },
+    }) };
   });
   await settle();
-  assert.deepEqual(urls, ["/gateway-status"]);
-  assert.deepEqual(cards.map(card => card.indicator.dataset.state),
+  assert.deepEqual(urls.sort(), ["/gateway-control/status", "/network-map/healthz"].sort());
+  assert.deepEqual(ui.cards.map(card => card.indicator.dataset.state),
     ["up", "down", "up", "down", "up", "up"]);
-  assert.equal(timers.size, 0);
+  assert.match(ui.router.textContent, /VPN отключён/);
+  assert.equal(ui.polls, 1);
 });
 
-test("request error is unknown, not offline", async () => {
-  const { cards } = mount(async () => { throw Error("offline"); });
+test("request error leaves service status unknown, never offline", async () => {
+  const ui = mount(async () => { throw Error("offline"); });
   await settle();
-  assert.deepEqual(cards.map(card => card.indicator.dataset.state), Array(6).fill("unknown"));
+  assert.deepEqual(ui.cards.map(card => card.indicator.dataset.state),
+    Array(6).fill("unknown"));
+  assert.equal(ui.polls, 1);
 });

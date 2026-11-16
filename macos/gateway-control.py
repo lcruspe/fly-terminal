@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import secrets
+from session_auth import session_for_request
 import subprocess
 import threading
 import time
@@ -157,7 +158,12 @@ class Handler(BaseHTTPRequestHandler):
     def authenticated(self):
         user, password = os.environ.get("TERMINAL_USER", ""), os.environ.get("TERMINAL_PASSWORD", "")
         expected = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
-        return bool(user and password) and hmac.compare_digest(self.headers.get("Authorization", "").encode(), expected.encode())
+        if bool(user and password) and hmac.compare_digest(self.headers.get("Authorization", "").encode(), expected.encode()):
+            return True
+        # The gateway already checked the cookie; repeat verification here to
+        # protect the control API even against direct loopback access.
+        session = session_for_request(self.headers)
+        return bool(session and session[0] == user)
 
     def do_GET(self):
         if not self.authenticated():

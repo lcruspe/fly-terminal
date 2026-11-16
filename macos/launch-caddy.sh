@@ -16,6 +16,12 @@ set -a
 set +a
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+AUTH_SECRET_FILE="${CONFIG_DIR}/session-auth.secret"
+if [ ! -s "${AUTH_SECRET_FILE}" ]; then
+  echo "Missing session-auth secret; run install-session-auth.sh" >&2
+  exit 1
+fi
+export FLY_AUTH_SECRET="$(cat "${AUTH_SECRET_FILE}")"
 export FLY_TERMINAL_REPO_ROOT="${REPO_ROOT}"
 export XDG_DATA_HOME="${HOME}/.local/share/caddy"
 mkdir -p "${XDG_DATA_HOME}"

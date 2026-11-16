@@ -10,7 +10,7 @@ const css = fs.readFileSync(path.join(dir, "gateway.css"), "utf8");
 const js = fs.readFileSync(path.join(dir, "gateway.js"), "utf8");
 
 test("catalog starts with the view switch and has no decorative heading", () => {
-  assert.match(html, /<body class="dashboard-page">\s*<main[^>]+>\s*<div class="view-switch"/);
+  assert.match(html, /<body class="dashboard-page">\s*<main[^>]+>\s*<div class="session-toolbar">[\s\S]*?<div class="view-switch"/);
   assert.doesNotMatch(html, /<h1>Сервисы<\/h1>|Терминал, браузеры и управление подключениями/);
   assert.match(html, /<section class="services" aria-label="Каталог сервисов">/);
 });

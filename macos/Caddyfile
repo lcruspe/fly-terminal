@@ -3,9 +3,28 @@
 	admin off
 }
 
+# These paths are available on all three origins. The issue endpoint is
+# separate: Caddy alone verifies existing bcrypt credentials.
+(auth_shared) {
+	# BasicAuth errors must not invoke Safari's native password dialog.
+	handle_errors 401 {
+		header -WWW-Authenticate
+		respond "Invalid credentials" 401
+	}
+	@authPublic path /auth/login /auth/login.js /auth/login.css /auth/session-ui.js
+	handle @authPublic {
+		reverse_proxy 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685}
+	}
+	@authActions path /auth/logout /auth/revoke-all /auth/session
+	handle @authActions {
+		reverse_proxy 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685}
+	}
+}
+
 # Порт по умолчанию: только защищённый каталог доступных сервисов.
 :{$CADDY_PORT:8080} {
 	root * {$FLY_TERMINAL_REPO_ROOT}/macos/gateway
+	import auth_shared
 
 	# The legacy Tailscale IP/HTTP entry must use HTTPS to persist Secure session cookies.
 	@legacyTailGateway host 100.125.224.119
@@ -25,11 +44,24 @@
 	}
 	@mailMcp443 path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
 	# RoomAudio authenticates requests with its own Basic Auth realm.
-	@gatewayProtected not path /roomaudio /roomaudio/* /archive/* /segment/* /clip/* /live.mp3 /live.m3u8 /yt-transcriber /yt-transcriber/* /yt-login /yt-transcriber/apple-touch-icon.png /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
+	@gatewayProtected not path /roomaudio /roomaudio/* /archive/* /segment/* /clip/* /live.mp3 /live.m3u8 /yt-transcriber /yt-transcriber/* /yt-transcriber/apple-touch-icon.png /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health /auth/login /auth/login.js /auth/login.css /auth/session-ui.js /auth/issue /auth/logout /auth/revoke-all /auth/session
+	forward_auth @gatewayProtected 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
+		uri /auth/check/any
+		copy_headers X-Fly-Auth-User
+		header_up X-Fly-Auth-Secret {$FLY_AUTH_SECRET}
+	}
 
-	basic_auth @gatewayProtected {
-		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
+	@authIssue path /auth/issue
+	handle @authIssue {
+		basic_auth {
+			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
+			{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
+		}
+		reverse_proxy 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
+			header_up X-Fly-Auth-Secret {$FLY_AUTH_SECRET}
+			header_up X-Fly-Verified-User {http.auth.user.id}
+			header_up -Authorization
+		}
 	}
 
 	@roomAudioLegacy path /archive/* /segment/* /clip/* /live.mp3 /live.m3u8
@@ -47,7 +79,7 @@
 		Pragma "no-cache"
 		Expires "0"
 	}
-	@spruthubUser expression `{http.auth.user.id} == "{$CADDY_SPRUTHUB_AUTH_USER}"`
+	@spruthubUser expression `{http.request.header.X-Fly-Auth-User} == "{$CADDY_SPRUTHUB_AUTH_USER}"`
 
 	handle @mailMcp443 {
 		reverse_proxy 127.0.0.1:7691
@@ -59,13 +91,9 @@
 	}
 
 	handle @ytLogin {
-		basic_auth {
-			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-			{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
-		}
 		rewrite * /session/bootstrap
 		reverse_proxy 127.0.0.1:8787 {
-			header_up X-Authenticated-User {http.auth.user.id}
+			header_up X-Authenticated-User {http.request.header.X-Fly-Auth-User}
 			header_up X-YT-Bootstrap-Secret {$YT_BOOTSTRAP_SECRET}
 		}
 	}
@@ -97,7 +125,7 @@
 
 	# Service controls are available only to the primary administrator.
 	handle /gateway-control/* {
-		@gatewayControlDenied expression `{http.auth.user.id} != "{$CADDY_BASIC_AUTH_USER}"`
+		@gatewayControlDenied expression `{http.request.header.X-Fly-Auth-User} != "{$CADDY_BASIC_AUTH_USER}"`
 		respond @gatewayControlDenied "Forbidden" 403
 		reverse_proxy 127.0.0.1:{$FLY_GATEWAY_CONTROL_PORT:7684}
 	}
@@ -115,7 +143,6 @@
 		}
 	}
 	redir @roomAudioLegacy /roomaudio{uri} 307
-
 
 	handle @assets {
 		file_server
@@ -135,12 +162,25 @@
 # Порт 8443: прямой доступ к Fly Terminal.
 :{$CADDY_TERMINAL_PORT:8081} {
 	root * {$FLY_TERMINAL_REPO_ROOT}
+	import auth_shared
 
 	@mailMcp path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
-	@terminalProtected not path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
-
-	basic_auth @terminalProtected {
-		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
+	@terminalProtected not path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health /auth/login /auth/login.js /auth/login.css /auth/session-ui.js /auth/issue /auth/logout /auth/revoke-all /auth/session
+	forward_auth @terminalProtected 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
+		uri /auth/check/admin
+		copy_headers X-Fly-Auth-User
+		header_up X-Fly-Auth-Secret {$FLY_AUTH_SECRET}
+	}
+	@authIssue path /auth/issue
+	handle @authIssue {
+		basic_auth {
+			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
+		}
+		reverse_proxy 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
+			header_up X-Fly-Auth-Secret {$FLY_AUTH_SECRET}
+			header_up X-Fly-Verified-User {http.auth.user.id}
+			header_up -Authorization
+		}
 	}
 
 	@terminalRoot path /terminal
@@ -240,15 +280,30 @@
 	}
 }
 
-# Порт 10000: прямой защищённый доступ к Sprut.Hub.
+# Порт 10000: доступ к Sprut.Hub по общей фиксированной сессии.
 :{$CADDY_SPRUTHUB_PORT:8082} {
-	basic_auth {
-		{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
-		{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
+	import auth_shared
+	@authIssue path /auth/issue
+	handle @authIssue {
+		basic_auth {
+			{$CADDY_BASIC_AUTH_USER} {$CADDY_BASIC_AUTH_HASH}
+			{$CADDY_SPRUTHUB_AUTH_USER} {$CADDY_SPRUTHUB_AUTH_HASH}
+		}
+		reverse_proxy 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
+			header_up X-Fly-Auth-Secret {$FLY_AUTH_SECRET}
+			header_up X-Fly-Verified-User {http.auth.user.id}
+			header_up -Authorization
+		}
 	}
-
-	reverse_proxy 127.0.0.1:{$FLY_SPRUTHUB_FORWARD_PORT:7693} {
-		header_up -Authorization
-		header_up Host {$FLY_SPRUTHUB_TARGET_HOST:192.168.1.100}
+	handle {
+		forward_auth 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
+			uri /auth/check/any
+			copy_headers X-Fly-Auth-User
+			header_up X-Fly-Auth-Secret {$FLY_AUTH_SECRET}
+		}
+		reverse_proxy 127.0.0.1:{$FLY_SPRUTHUB_FORWARD_PORT:7693} {
+			header_up -Authorization
+			header_up Host {$FLY_SPRUTHUB_TARGET_HOST:192.168.1.100}
+		}
 	}
 }

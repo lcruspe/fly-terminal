@@ -202,6 +202,7 @@ else
   printf 'FLY_BROWSER_BASIC_AUTH=%s\n' "${browser_basic_auth}" >>"${ENV_FILE}"
 fi
 
+chmod +x "${SCRIPT_DIR}/launch-session-auth.sh" "${SCRIPT_DIR}/install-session-auth.sh" "${SCRIPT_DIR}/rollback-session-auth.sh"
 chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIPT_DIR}/launch-browser.sh" "${SCRIPT_DIR}/launch-native-browser.sh" "${SCRIPT_DIR}/launch-native-browser-streamer.sh" "${SCRIPT_DIR}/launch-websockify.sh" "${SCRIPT_DIR}/launch-streamer.sh" "${SCRIPT_DIR}/build-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-native-browser-webrtc-bridge.sh" "${SCRIPT_DIR}/launch-spruthub-forwarder.sh" "${SCRIPT_DIR}/launch-oracle-relay.sh" "${SCRIPT_DIR}/spruthub-forwarder.py" "${SCRIPT_DIR}/ensure-betterdisplay-remote.sh" "${SCRIPT_DIR}/ensure-betterdisplay-browser.sh" "${SCRIPT_DIR}/set-password.sh"
 
 # WebRTC bridge собирается на этапе установки/обновления. LaunchAgent только запускает
@@ -578,6 +579,8 @@ launchctl bootout "gui/${UID_VALUE}/${NATIVE_BROWSER_WEBRTC_LABEL}" 2>/dev/null 
 launchctl bootout "gui/${UID_VALUE}/${SPRUTHUB_LABEL}" 2>/dev/null || true
 launchctl bootout "gui/${UID_VALUE}/${ORACLE_RELAY_LABEL}" 2>/dev/null || true
 
+# Session verifier must be running before Caddy accepts traffic.
+"${SCRIPT_DIR}/install-session-auth.sh"
 bootstrap_agent "${TTYD_LABEL}" "${TTYD_PLIST}"
 bootstrap_agent "${CADDY_LABEL}" "${CADDY_PLIST}"
 bootstrap_agent "${BROWSER_LABEL}" "${BROWSER_PLIST}"

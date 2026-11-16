@@ -2,6 +2,7 @@ import base64
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import threading
 import unittest
@@ -9,6 +10,7 @@ from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'macos'))
 spec = importlib.util.spec_from_file_location('gateway_control', Path(__file__).resolve().parents[1] / 'macos/gateway-control.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

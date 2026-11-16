@@ -16,7 +16,7 @@ Oracle VM используется только как публичный HTTPS/
 
 Relay SSH-ключ на Oracle не получает shell. Запись `authorized_keys` ограничена `restrict`, `port-forwarding`, `command="/usr/bin/false"` и тремя `permitlisten`: `127.0.0.1:18080`, `127.0.0.1:18081`, `127.0.0.1:18082`.
 
-Публичные `443/tcp`, `8443/tcp` и `10000/tcp` должны быть разрешены одновременно в двух местах: OCI Security List и `firewalld`. Caddy не снимает Basic Auth: авторизация остаётся на Caddy Mac mini за SSH-туннелем.
+Публичные `443/tcp`, `8443/tcp` и `10000/tcp` должны быть разрешены одновременно в двух местах: OCI Security List и `firewalld`. Caddy на Oracle не обрабатывает пароли и сессии: проверка существующего пароля при входе и 30-дневных cookie-сессий выполняется Caddy и сервисом авторизации на Mac mini за SSH-туннелем.
 
 TURN работает отдельным `fly-turn.service` и не связан с HTTP reverse proxy.
 
@@ -32,4 +32,4 @@ TURN работает отдельным `fly-turn.service` и не связан
 
 На Oracle должны слушаться `443`, `8443`, `10000` и только на loopback — `18080`, `18081`, `18082`. Если стартовая страница открывается, а карточки сервисов зависают, сначала проверять наличие всех трёх reverse-forward и OCI ingress для `8443/10000`.
 
-Нормальный unauthenticated health-check каждого публичного HTTPS origin возвращает `401` с `WWW-Authenticate: Basic`. После Basic Auth ожидается `200` для шлюза, Terminal и Sprut.Hub; `/yt-login` штатно отвечает `302` и создаёт сессию транскрайбера.
+Без cookie HTML-навигация с `Accept: text/html` возвращает `302` на `/auth/login`, а API/WebSocket-запросы — `401` без Basic Auth challenge. После входа существующим паролем cookie применяется ко всем трём портам. `/yt-login` после проверки cookie создаёт отдельную сессию транскрайбера.
