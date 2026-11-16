@@ -160,6 +160,38 @@
   const labels = { start: "Запустить", stop: "Остановить", restart: "Перезапустить", "vpn-connect": "Подключить VPN", "vpn-disconnect": "Отключить VPN" };
   const names = { native: "браузер Native", fallback: "браузер Fallback", roomaudio: "сервер RoomAudio", yt: "YT Transcript", spruthub: "подключение к Sprut.Hub", openwrt: "Amnezia VPN" };
   const indicators = new Map();
+  const overview = dashboard.querySelector(".gateway-overview");
+  const overviewText = dashboard.querySelector("#gateway-overview-text");
+  const overviewHint = dashboard.querySelector("#gateway-overview-hint");
+  const servicesForOverview = [
+    ["terminal"], ["native", "fallback"], ["roomaudio", "roomaudio_source"],
+    ["yt"], ["networkmap"], ["spruthub"], ["openwrt"]
+  ];
+  function updateOverview() {
+    if (!overview) return;
+    let available = 0, failures = 0, partial = 0, unchecked = 0;
+    for (const keys of servicesForOverview) {
+      const states = keys.map(key => indicators.get(key)?.dataset.state || "checking");
+      const up = states.some(state => state === "up");
+      const down = states.some(state => state === "down");
+      if (up) {
+        available++;
+        if (down) partial++;
+      } else if (states.some(state => state === "checking" || state === "unknown")) {
+        unchecked++;
+      } else {
+        failures++;
+      }
+    }
+    const total = servicesForOverview.length;
+    overview.dataset.overviewState = unchecked ? "checking" : failures || partial ? "attention" : "up";
+    overviewText.textContent = unchecked === total ? "Проверяем сервисы" : `${available} из ${total} сервисов доступны`;
+    overviewHint.textContent = unchecked === total ? "Получаем текущие состояния" : unchecked
+      ? `Проверяем: ${unchecked}`
+      : failures || partial
+        ? `Недоступны: ${failures} · частично: ${partial}`
+        : "Все сервисы доступны";
+  }
   dashboard.querySelectorAll("[data-health]").forEach(node => {
     if (node.hasAttribute("data-health-label")) {
       const label = document.createElement("span");
@@ -182,6 +214,7 @@
     if (label) label.textContent = state === "up" ? "Работает" : text;
     dot.title = text;
     dot.setAttribute("aria-label", `${label ? key : dot.parentElement.textContent.trim() || key}: ${text}`);
+    updateOverview();
   }
   indicators.forEach((_, key) => indicator(key, "checking"));
   const controls = [];

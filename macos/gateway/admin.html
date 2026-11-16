@@ -2,35 +2,63 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow">
-  <title>Gateway</title>
+  <meta name="theme-color" content="#0d1118">
+  <title>Fly Gateway · Сервисы Mac mini</title>
   <link rel="stylesheet" href="/gateway.css">
 </head>
 <body class="dashboard-page">
   <main data-dashboard data-view="tiles">
-    <div class="session-toolbar">
-      <div class="session-actions" data-session-actions aria-label="Сессия"></div>
-      <div class="view-switch" role="group" aria-label="Вид сервисов">
-        <button type="button" data-view-mode="tiles" aria-pressed="true">Плитки</button>
-        <button type="button" data-view-mode="table" aria-pressed="false">Таблица</button>
+    <header class="gateway-header">
+      <div class="gateway-brand">
+        <span class="gateway-mark" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M6 8h16M6 14h12M6 20h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="22" cy="14" r="2.5" fill="currentColor"/>
+          </svg>
+        </span>
+        <div class="gateway-heading">
+          <p class="gateway-eyebrow">MAC MINI / CONTROL CENTER</p>
+          <h1>Fly Gateway</h1>
+          <p class="gateway-subtitle">Сервисы и управление подключениями</p>
+        </div>
+      </div>
+      <div class="gateway-overview" data-overview-state="checking" role="status" aria-live="polite" aria-atomic="true">
+        <span class="overview-indicator" aria-hidden="true"></span>
+        <div class="overview-copy">
+          <strong id="gateway-overview-text">Проверяем сервисы</strong>
+          <span id="gateway-overview-hint">Получаем текущие состояния</span>
+        </div>
+      </div>
+    </header>
+    <div class="catalog-controls">
+      <div class="catalog-intro">
+        <h2>Сервисы</h2>
+        <p>Быстрый доступ и управление</p>
+      </div>
+      <div class="catalog-toolbar">
+        <div class="session-actions" data-session-actions aria-label="Сессия"></div>
+        <div class="view-switch" role="group" aria-label="Вид сервисов">
+          <button type="button" data-view-mode="tiles" aria-pressed="true">Плитки</button>
+          <button type="button" data-view-mode="table" aria-pressed="false">Таблица</button>
+        </div>
       </div>
     </div>
     <p class="catalog-message" role="status" aria-live="polite"></p>
     <section class="services" aria-label="Каталог сервисов">
-      <article class="service" data-service="networkmap">
-        <div class="service-heading"><a class="service-main" href="/network-map/"><span class="service-icon icon-network" aria-hidden="true"></span><strong>Network Map</strong></a></div>
-        <div class="service-status"><span data-health="networkmap" data-health-label></span></div>
-        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Network Map" aria-haspopup="dialog" aria-controls="actions-networkmap" popovertarget="actions-networkmap" aria-expanded="false" title="Действия: Network Map"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-networkmap" popover="auto" role="dialog" aria-label="Действия: Network Map"><a class="action-link" href="/network-map/">Открыть мониторинг</a></div></div>
-      </article>
-      <article class="service" data-service="terminal">
+      <div class="catalog-group-heading">
+        <div class="catalog-group-title"><span class="group-index" aria-hidden="true">01</span><h3>Рабочие сервисы</h3></div>
+        <span class="group-description">Терминал, браузер и инструменты</span>
+      </div>
+<article class="service" data-service="terminal">
         <div class="service-heading"><a class="service-main" data-port="8443" href="#"><span class="service-icon icon-terminal" aria-hidden="true"></span><strong>Fly Terminal</strong></a></div>
         <div class="service-status"><span data-health="terminal" data-health-label></span></div>
         <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Fly Terminal" aria-haspopup="dialog" aria-controls="actions-terminal" popovertarget="actions-terminal" aria-expanded="false" title="Действия: Fly Terminal"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-terminal" popover="auto" role="dialog" aria-label="Действия: Fly Terminal">
           <a class="action-link" data-port="8443" href="#">Открыть терминал</a>
         </div></div>
       </article>
-      <article class="service" data-service="browser">
+<article class="service" data-service="browser">
         <div class="service-heading"><a class="service-main" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#"><span class="service-icon icon-globe2" aria-hidden="true"></span><strong>Браузер</strong></a></div>
         <div class="service-status"><a class="browser-mode-link" data-health="native" data-port="8443" data-path="/desktop/webrtc.html?path=native-browser-stream-ws&amp;autoconnect=true&amp;client=browser&amp;resolution=1920x1080&amp;fps=60&amp;scale=contain&amp;display=Fly%20Browser" href="#" title="Открыть Native">Native</a><a class="browser-mode-link" data-health="fallback" data-port="8443" data-path="/browser/" href="#" title="Открыть Fallback">Fallback</a></div>
         <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Браузер" aria-haspopup="dialog" aria-controls="actions-browser" popovertarget="actions-browser" aria-expanded="false" title="Действия: Браузер"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-browser" popover="auto" role="dialog" aria-label="Действия: Браузер">
@@ -38,22 +66,31 @@
           <section class="action-group"><h2>Fallback</h2><a class="action-link" data-port="8443" data-path="/browser/" href="#">Открыть Fallback</a><div data-controls="fallback"></div></section>
         </div></div>
       </article>
-      <article class="service" data-service="roomaudio">
+<article class="service" data-service="roomaudio">
         <div class="service-heading"><a class="service-main" href="/roomaudio/"><span class="service-icon icon-soundwave" aria-hidden="true"></span><strong>RoomAudio</strong></a></div>
         <div class="service-status"><span data-health="roomaudio">Mac</span><span data-health="roomaudio_source">Источник</span></div>
         <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: RoomAudio" aria-haspopup="dialog" aria-controls="actions-roomaudio" popovertarget="actions-roomaudio" aria-expanded="false" title="Действия: RoomAudio"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-roomaudio" popover="auto" role="dialog" aria-label="Действия: RoomAudio"><a class="action-link" href="/roomaudio/">Открыть аудиоархив</a><div data-controls="roomaudio"></div></div></div>
       </article>
-      <article class="service" data-service="yt">
+<article class="service" data-service="yt">
         <div class="service-heading"><a class="service-main" href="/yt-transcriber/"><span class="service-icon icon-youtube" aria-hidden="true"></span><strong>YT Transcript</strong></a></div>
         <div class="service-status"><span data-health="yt" data-health-label></span></div>
         <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: YT Transcript" aria-haspopup="dialog" aria-controls="actions-yt" popovertarget="actions-yt" aria-expanded="false" title="Действия: YT Transcript"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-yt" popover="auto" role="dialog" aria-label="Действия: YT Transcript"><a class="action-link" href="/yt-transcriber/">Открыть расшифровки</a><div data-controls="yt"></div></div></div>
       </article>
-      <article class="service" data-service="spruthub">
+      <div class="catalog-group-heading catalog-group-system">
+        <div class="catalog-group-title"><span class="group-index" aria-hidden="true">02</span><h3>Инфраструктура</h3></div>
+        <span class="group-description">Мониторинг, дом и сеть</span>
+      </div>
+<article class="service" data-service="networkmap">
+        <div class="service-heading"><a class="service-main" href="/network-map/"><span class="service-icon icon-network" aria-hidden="true"></span><strong>Network Map</strong></a></div>
+        <div class="service-status"><span data-health="networkmap" data-health-label></span></div>
+        <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Network Map" aria-haspopup="dialog" aria-controls="actions-networkmap" popovertarget="actions-networkmap" aria-expanded="false" title="Действия: Network Map"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-networkmap" popover="auto" role="dialog" aria-label="Действия: Network Map"><a class="action-link" href="/network-map/">Открыть мониторинг</a></div></div>
+      </article>
+<article class="service" data-service="spruthub">
         <div class="service-heading"><a class="service-main" data-port="10000" href="#"><span class="service-icon icon-house-door" aria-hidden="true"></span><strong>Sprut.Hub</strong></a></div>
         <div class="service-status"><span data-health="spruthub" data-health-label></span></div>
         <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: Sprut.Hub" aria-haspopup="dialog" aria-controls="actions-spruthub" popovertarget="actions-spruthub" aria-expanded="false" title="Действия: Sprut.Hub"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-spruthub" popover="auto" role="dialog" aria-label="Действия: Sprut.Hub"><a class="action-link" data-port="10000" href="#">Открыть хаб</a><div data-controls="spruthub"></div></div></div>
       </article>
-      <article class="service" data-service="openwrt">
+<article class="service" data-service="openwrt">
         <div class="service-heading"><a class="service-main" href="http://192.168.1.115/"><span class="service-icon icon-router" aria-hidden="true"></span><strong>OpenWrt</strong></a></div>
         <div class="service-status"><span data-health="openwrt"><span class="router-status"></span></span></div>
         <div class="service-menu"><button type="button" class="action-menu-trigger" aria-label="Действия: OpenWrt" aria-haspopup="dialog" aria-controls="actions-openwrt" popovertarget="actions-openwrt" aria-expanded="false" title="Действия: OpenWrt"><span class="menu-icon" aria-hidden="true"></span></button><div class="service-actions" id="actions-openwrt" popover="auto" role="dialog" aria-label="Действия: OpenWrt"><a class="action-link" href="http://192.168.1.115/">Панель роутера</a><a class="action-link" href="http://192.168.1.115/cgi-bin/luci/admin/services/amnezia-locations">Amnezia VPN</a><div data-controls="openwrt"></div></div></div>
