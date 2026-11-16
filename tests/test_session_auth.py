@@ -118,6 +118,10 @@ class SessionTests(unittest.TestCase):
         status, _, body = self.request("/auth/login")
         self.assertEqual(status, 200)
         self.assertIn(b'autocomplete="current-password"', body)
+        status, headers, body = self.request("/auth/login", method="HEAD")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"")
+        self.assertIn("Content-Length", headers)
         self.assertEqual(auth.safe_next("//another.host"), "/")
         self.assertEqual(auth.safe_next("/terminal/?x=1"), "/terminal/?x=1")
 

@@ -193,6 +193,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.respond(200, headers=(("X-Fly-Auth-User", username),))
 
+    def do_HEAD(self):
+        # Link previewers and network monitors use HEAD before navigation.
+        # respond() suppresses the body while preserving GET response headers.
+        self.do_GET()
+
     def do_GET(self):
         path = urlsplit(self.path).path
         if path.startswith("/auth/check/"):
