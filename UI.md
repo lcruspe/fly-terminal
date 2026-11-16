@@ -23,6 +23,14 @@ Responsive layout is recalculated on toolbar/window resize and when toolbar item
 
 When adding new top-level toolbar actions, include them in the responsive toolbar item set and provide a representative icon plus a meaningful `title`/`aria-label`. Do not introduce fixed breakpoint-specific hiding for individual actions; capacity is determined from the actual rendered width.
 
+## Mobile console without card framing (2026-11-17)
+
+For the iPhone and similarly compact touch viewports, Fly Terminal uses a single full-bleed working surface. This is the successor to the first iPhone shell adaptation described below. The old separate cards (terminal frame, tab bar, and toolbar) are **not used** on compact touch screens: there are no outer borders, drop shadows, large corner radii or inter-panel gaps. A one-pixel inset divider separates the terminal header, tab strip and actions; accent color is reserved for the active view/tab and existing functional state. All colors come from existing theme variables, so user-selected light and dark themes continue to work. Desktop layout remains unchanged.
+
+The terminal header is 44 CSS px high, tabs are 44 px and toolbar 48 px; the combined lower panel is 92 px. At 428×926 simulated viewport, terminal working wrapper increases from 785 px (the preceding card design) to **834 px**, +49 px. At 926×428 the wrapper becomes 336 px, previously 287 px. Touch controls remain at least 44×44 px and the on-screen keyboard stays directly accessible; less frequent commands automatically move into the existing overflow menu when needed. Tab close, tab add, settings and actions have unchanged behavior.
+
+`viewport-fit=cover`, shell/fullscreen `safe-area-inset-*`, dynamic `visualViewport`, and safe floating-menu bounds remain active for the iPhone 13 Pro Max's rounded display corners, top cutout and Home indicator. The page fills only the unobstructed CSS viewport; do not reintroduce arbitrary external padding on touch layouts. Tests exercise 428×926, 926×428, 390×844 and 320×568 with a local terminal mock; these measurements are not proof of correct live Safari keyboard or RDC/video behavior.
+
 ## iPhone 13 Pro Max — mobile shell adaptation (2026-11-17)
 
 The target mobile viewport is 428×926 CSS pixels (portrait), 926×428 (landscape). The main shell uses viewport-fit=cover plus safe-area-inset-{top,right,bottom,left}. These clearances protect interactive elements from rounded corners, display notch and Home indicator; fullscreen frames and Settings/Tools/Apps sheets honor the same insets. The layout height follows visualViewport on touch screens as the iOS keyboard opens/closes.

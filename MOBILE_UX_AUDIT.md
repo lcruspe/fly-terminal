@@ -1,5 +1,11 @@
 # Mobile UX audit — 2026-10-25
 
+## Update — 2026-11-17: compact console follow-up
+
+Based on the actual iPhone 13 Pro Max screenshot, the mobile shell was flattened: no card borders/shadows/rounding around the terminal, tab bar or toolbar; header 44px; tabs 44px; toolbar 48px. The workspace is 834 CSS px at simulated 428×926 (+49px vs the first iPhone version). Safe area and 44px touch targets remain. The visual design applies the global UI/UX Pro Max minimalism-and-swiss-style guidelines while preserving existing Fly Terminal themes and keyboard/menu logic.
+
+Local Chromium CDP mock tests cover 44 interactions at four viewport sizes with both light and dark themes, including direct keyboard opening, tab add/close and nested overflow Settings. Browser/device-level Safari, live terminal stream and Native RDC still require validation on the physical phone.
+
 ## Update — 2026-11-17: iPhone 13 Pro Max
 
 Main shell adaptations address the previous mobile findings: notch and rounded-corner-safe layout (including fullscreen and bottom-sheet menus), horizontal toolbar on compact touch screens without overwriting preference, visible touch tab-close (44px), direct 44px keyboard action, and compact 116px bottom panel. The software keyboard triggers a visualViewport height update. Overflow Settings remains navigable at 320px and 390px.

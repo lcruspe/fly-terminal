@@ -1955,9 +1955,8 @@
       }
     }
 
-    /* iPhone 13 Pro Max / compact touch workspace.
-       Safe-area insets follow the physical rounded corners, notch and Home indicator.
-       Desktop and tablet layouts are intentionally unchanged. */
+    /* Compact touch console. One continuous workspace, not a stack of cards.
+       iPhone safe-area insets still protect rounded corners and display cutouts. */
     @media (pointer: coarse) and (max-width: 760px),
            (pointer: coarse) and (max-height: 530px) {
       html, body {
@@ -1967,104 +1966,170 @@
         overscroll-behavior: none;
       }
 
+      body {
+        background: var(--terminal-shell);
+      }
+
       .shell {
         width: 100%;
         height: var(--fly-mobile-visual-height, 100dvh);
-        min-height: 0;
         max-height: 100dvh;
-        padding:
-          max(8px, env(safe-area-inset-top))
-          max(9px, env(safe-area-inset-right))
-          max(10px, env(safe-area-inset-bottom))
-          max(9px, env(safe-area-inset-left));
-        gap: 7px;
+        min-height: 0;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+        gap: 0;
         overflow: hidden;
+        background: var(--terminal-shell);
       }
 
       .terminal-container {
+        height: auto;
         min-width: 0;
         min-height: 0;
-        height: auto;
         flex: 1 1 0;
-        gap: 7px;
+        gap: 1px;
+        background: var(--terminal-edge);
       }
 
       .terminal-frame-wrapper {
-        border-radius: 14px;
         min-width: 0;
         min-height: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        outline-offset: -2px;
       }
 
-      .terminal-topbar {
-        min-height: 52px;
-        padding: 4px 6px 4px 10px;
-        gap: 8px;
+      .terminal-topbar,
+      .terminal-frame-wrapper.fullscreen .terminal-topbar {
+        box-sizing: border-box;
+        height: 44px;
+        min-height: 44px;
+        padding: 0 2px 0 12px;
+        gap: 4px;
+        background: var(--terminal-topbar-bg);
+        border-bottom: 0;
+        box-shadow: inset 0 -1px 0 var(--terminal-edge);
+        backdrop-filter: none;
       }
 
       .terminal-heading {
         min-width: 0;
+        overflow: hidden;
       }
 
       .terminal-heading strong {
         font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .terminal-heading span {
-        display: none;
-      }
+      .terminal-heading span { display: none; }
+      .terminal-actions { gap: 0; flex: 0 0 auto; }
 
-      .terminal-actions {
-        gap: 4px;
-        flex: 0 0 auto;
+      .frame-view-switch {
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        gap: 0;
+        padding: 0;
       }
 
       .frame-control, a.frame-control, .frame-view-mode-btn {
+        box-sizing: border-box;
         width: 44px;
         min-width: 44px;
         height: 44px;
         min-height: 44px;
         padding: 0;
         justify-content: center;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: transparent;
         touch-action: manipulation;
+        transform: none;
+      }
+
+      .frame-view-mode-btn.active {
+        border-radius: 5px;
+        background: var(--accent);
+        color: var(--active-btn-ink);
       }
 
       .bottom-panel {
         position: relative;
         display: flex;
+        flex: 0 0 auto;
         flex-direction: column;
         width: 100%;
-        flex: 0 0 auto;
-        gap: 6px;
         min-width: 0;
+        gap: 0;
+        border-top: 0;
+        background: var(--panel-solid);
+        box-shadow: inset 0 1px 0 var(--border);
       }
 
       .tab-bar {
-        min-height: 50px;
-        flex: 0 0 auto;
-        padding: 3px 5px;
-        gap: 5px;
-        scroll-padding-inline: 8px;
+        box-sizing: border-box;
+        height: 44px;
+        min-height: 44px;
+        max-height: 44px;
+        flex: 0 0 44px;
+        padding: 0 2px;
+        gap: 2px;
+        scroll-padding-inline: 4px;
+        border: 0;
+        border-bottom: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: inset 0 -1px 0 var(--border);
+        backdrop-filter: none;
       }
 
       .tab {
+        box-sizing: border-box;
         min-height: 44px;
-        padding: 0 10px;
-        gap: 5px;
+        height: 44px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        padding: 0 8px;
+        gap: 2px;
+        background: transparent;
+        color: var(--button-ink);
         touch-action: manipulation;
+        transform: none;
+      }
+
+      .tab:hover,
+      .tab.active:hover {
+        background: transparent;
+        transform: none;
+      }
+
+      .tab.active {
+        color: var(--button-ink);
+        border: 0;
+        border-bottom: 2px solid var(--accent);
+        background: var(--control);
       }
 
       .tab .tab-name {
         display: inline-block;
-        max-width: min(30vw, 190px);
         min-width: 0;
+        max-width: min(36vw, 190px);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
+        font-size: 12px;
       }
 
       .tab .tab-close {
         opacity: 1;
         pointer-events: auto;
+        box-sizing: border-box;
         flex: 0 0 44px;
         display: inline-flex;
         align-items: center;
@@ -2072,80 +2137,98 @@
         width: 44px;
         height: 44px;
         min-height: 44px;
-        margin: 0 -9px 0 0;
+        margin: 0 -7px 0 0;
         padding: 0;
+        border: 0;
+        border-radius: 0;
         background: transparent;
         color: inherit;
         font: 700 14px/1 system-ui, sans-serif;
-        border: 0;
-        border-radius: 9px;
         cursor: pointer;
       }
 
       .tab .tab-close:focus-visible {
         outline: 2px solid var(--accent);
-        outline-offset: -2px;
+        outline-offset: -3px;
       }
 
       .tab.new-tab-btn {
+        flex: 0 0 44px;
+        width: 44px;
         min-width: 44px;
+        height: 44px;
         min-height: 44px;
         padding: 0;
         justify-content: center;
-        flex: 0 0 44px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        opacity: 0.9;
       }
 
       .toolbar {
+        box-sizing: border-box;
         min-width: 0;
+        width: 100%;
+        height: 48px;
+        min-height: 48px;
+        padding: 0 2px;
         display: flex;
         flex-direction: row;
-        align-items: center;
-        gap: 6px;
-        min-height: 56px;
-        padding: 5px 6px;
         flex-wrap: nowrap;
-        border-radius: 14px;
+        align-items: center;
+        gap: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
       }
 
       .toolbar-primary {
         display: flex;
-        width: auto;
-        min-width: 0;
         flex: 0 0 auto;
+        min-width: 0;
+        width: auto;
         padding: 0;
         border: 0;
       }
 
-      .toolbar-primary .brand {
-        display: none;
-      }
-
+      .toolbar-primary .brand { display: none; }
       .session-meta .badge {
-        min-height: 36px;
+        box-sizing: border-box;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 5px 7px;
+        min-height: 44px;
+        max-width: 105px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
         font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .controls {
-        width: auto;
+        display: flex;
         flex: 1 1 auto;
         flex-direction: row;
         flex-wrap: nowrap;
+        width: auto;
+        min-width: 0;
         align-items: center;
         justify-content: flex-end;
-        gap: 4px;
-        min-width: 0;
+        gap: 0;
       }
 
       .control-group {
         display: inline-flex;
+        align-items: center;
         flex-direction: row;
         width: auto;
-        gap: 4px;
-        align-items: center;
+        gap: 0;
       }
 
       #toolbarControls > .control-group > button,
@@ -2153,62 +2236,68 @@
       #toolbarControls > details > summary.button,
       #toolbarControls #overflowMenu > summary.button,
       .toolbar #togglePanel,
-      .toolbar #openKeyboard {
-        min-width: 44px;
-        min-height: 44px;
-        padding: 0 8px;
-        justify-content: center;
-        touch-action: manipulation;
-      }
-
+      .toolbar #openKeyboard,
       #toolbarControls button.toolbar-icon-only,
       #toolbarControls a.button.toolbar-icon-only,
-      #toolbarControls details.toolbar-icon-only > summary.button {
-        min-width: 44px;
-        min-height: 44px;
-      }
-
+      #toolbarControls details.toolbar-icon-only > summary.button,
       .shell #overflowMenu > summary.button {
-        min-width: 44px;
-        min-height: 44px;
-      }
-
-      /* Keep primary keyboard and panel actions directly reachable with 44px taps.
-         A label hidden only on compact touch layouts frees space for menu overflow. */
-      .shell #togglePanel, .shell #openKeyboard {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 44px;
         width: 44px !important;
         min-width: 44px !important;
-        flex: 0 0 44px;
+        height: 44px;
+        min-height: 44px;
         padding: 0 !important;
+        gap: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        touch-action: manipulation;
+        transform: none;
       }
+
+      #toolbarControls button:hover,
+      #toolbarControls a.button:hover,
+      #toolbarControls details > summary.button:hover {
+        background: var(--control);
+        transform: none;
+      }
+
       .shell #openKeyboard > .toolbar-action-label,
-      .shell #togglePanel > .toolbar-action-label {
-        display: none !important;
-      }
+      .shell #togglePanel > .toolbar-action-label { display: none !important; }
+
       .shell #openKeyboard svg,
-      .shell #togglePanel svg {
-        width: 19px;
-        height: 19px;
-      }
+      .shell #togglePanel svg { width: 19px; height: 19px; }
 
       .bottom-panel.collapsed {
         position: fixed;
-        right: max(10px, env(safe-area-inset-right));
-        bottom: max(12px, env(safe-area-inset-bottom));
+        right: max(8px, env(safe-area-inset-right));
+        bottom: max(8px, env(safe-area-inset-bottom));
         width: auto;
-        max-width: calc(100% - 20px);
+        max-width: calc(100% - 16px);
+        border: 0;
+        background: transparent;
         z-index: 1000;
       }
 
-      /* Full-screen frame must not cover the notch, rounded corners or Home indicator. */
+      .bottom-panel.collapsed #togglePanel {
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        background: var(--panel-solid);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+      }
+
+      /* Fullscreen is still confined to the unobstructed iPhone viewport. */
       .terminal-frame-wrapper.fullscreen {
-        inset:
-          max(7px, env(safe-area-inset-top))
-          max(8px, env(safe-area-inset-right))
-          max(10px, env(safe-area-inset-bottom))
-          max(8px, env(safe-area-inset-left));
-        border: 1px solid var(--terminal-edge);
-        border-radius: 14px;
+        inset: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
         overflow: hidden;
       }
 
@@ -2217,18 +2306,11 @@
         padding-bottom: max(16px, env(safe-area-inset-bottom));
       }
 
-      .menu-backdrop {
-        touch-action: manipulation;
-      }
+      .menu-backdrop { touch-action: manipulation; }
     }
 
     @media (pointer: coarse) and (max-width: 360px) {
-      .session-meta .badge {
-        font-size: 9px;
-        padding-inline: 5px;
-      }
-      .toolbar { gap: 4px; padding-inline: 4px; }
-      .controls { gap: 3px; }
+      .session-meta .badge { font-size: 9px; padding-inline: 3px; }
     }
 
     /* Layout presets for Split Mode */
