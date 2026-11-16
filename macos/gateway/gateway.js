@@ -185,7 +185,7 @@
     }
     const total = servicesForOverview.length;
     overview.dataset.overviewState = unchecked ? "checking" : failures || partial ? "attention" : "up";
-    overviewText.textContent = unchecked === total ? "Проверяем сервисы" : `${available} из ${total} сервисов доступны`;
+    overviewText.textContent = unchecked === total ? "Проверка…" : `${available}/${total} доступны`;
     overviewHint.textContent = unchecked === total ? "Получаем текущие состояния" : unchecked
       ? `Проверяем: ${unchecked}`
       : failures || partial

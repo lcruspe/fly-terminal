@@ -20,12 +20,14 @@ test('gateway keeps all seven service targets and existing control hooks', () =>
 
 test('gateway exposes primary/infrastructure groups and a live overview', () => {
   assert.match(html, /<h1>Fly Gateway<\/h1>/);
-  assert.match(html, /<h3>Рабочие сервисы<\/h3>/);
-  assert.match(html, /<h3>Инфраструктура<\/h3>/);
+  assert.match(html, /<h3>Приложения<\/h3>/);
+  assert.match(html, /<h3>Система<\/h3>/);
   assert.match(html, /id="gateway-overview-text"/);
   assert.match(html, /data-overview-state="checking"/);
   assert.match(js, /function updateOverview\(/);
   assert.match(js, /overview\.dataset\.overviewState/);
+  assert.match(js, /\$\{available\}\/\$\{total\} доступны/);
+  assert.doesNotMatch(html, /MAC MINI \/ CONTROL CENTER|Быстрый доступ и управление|Сервисы и управление подключениями/);
 });
 
 test('gateway retains stateful tile/table switch and action safety', () => {
@@ -47,4 +49,8 @@ test('mobile controls are reachable, and table mode stacks without horizontal sc
   assert.match(css, /\.service-table tbody tr\s*\{[^}]*display: grid;/s);
   assert.match(css, /\.service-table \{ display: block; min-width: 0;/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(css, /body\.dashboard-page \.services \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /body\.dashboard-page \.catalog-group-heading \{ display: none; \}/);
+  assert.match(css, /body\.dashboard-page \.catalog-toolbar \{[^}]*flex-wrap: wrap;/);
+  assert.match(css, /body\.dashboard-page \.action-menu-trigger \{[^}]*width: 44px;[^}]*height: 44px;/);
 });

@@ -513,6 +513,103 @@ body.dashboard-page {
   [data-dashboard] .service { transition: none; }
 }
 
+/* Personal gateway: compact utility layout, not a product landing page. */
+body.dashboard-page .gateway-header { padding-bottom: 16px; }
+body.dashboard-page .gateway-mark { width: 42px; height: 42px; flex-basis: 42px; border-radius: 12px; }
+body.dashboard-page .gateway-brand { gap: 11px; }
+body.dashboard-page .gateway-header h1 { font-size: 22px; letter-spacing: -.5px; }
+body.dashboard-page .catalog-controls { justify-content: flex-end; margin: 12px 0 4px; }
+body.dashboard-page .catalog-group-heading { margin-top: 9px; }
+body.dashboard-page .catalog-group-system { margin-top: 10px; padding-top: 15px; }
+body.dashboard-page .gateway-overview { min-width: 185px; padding: 10px 12px; }
+@media (max-width: 650px) {
+  body.dashboard-page { padding: max(8px, env(safe-area-inset-top)) 10px max(8px, env(safe-area-inset-bottom)); }
+  body.dashboard-page .gateway-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0 8px;
+  }
+  body.dashboard-page .gateway-brand { gap: 7px; flex: 1 1 auto; min-width: 0; }
+  body.dashboard-page .gateway-mark { width: 32px; height: 32px; flex-basis: 32px; border-radius: 9px; }
+  body.dashboard-page .gateway-mark svg { width: 20px; height: 20px; }
+  body.dashboard-page .gateway-header h1 { font-size: 17px; white-space: nowrap; }
+  body.dashboard-page .gateway-overview { flex: 0 1 auto; width: auto; min-width: 0; padding: 7px 9px; gap: 6px; border-radius: 9px; }
+  body.dashboard-page .overview-copy strong { font-size: 11px; white-space: nowrap; }
+  body.dashboard-page .overview-detail { display: none; }
+  body.dashboard-page .overview-indicator { flex-basis: 7px; width: 7px; height: 7px; }
+  body.dashboard-page .catalog-controls { display: block; margin: 6px 0 8px; }
+  body.dashboard-page .catalog-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  body.dashboard-page .view-switch { order: 0; width: auto; flex: 0 0 auto; padding: 2px; }
+  body.dashboard-page .view-switch button { min-height: 38px; padding: 8px 12px; font-size: 11px; }
+  body.dashboard-page .session-actions { order: 1; flex: 0 1 auto; flex-wrap: nowrap; gap: 5px; }
+  body.dashboard-page .session-actions > span { display: none; }
+  body.dashboard-page .session-actions button { min-height: 42px; padding: 6px 7px; font-size: 11px; line-height: 1.1; }
+  body.dashboard-page .services {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  body.dashboard-page .catalog-group-heading { display: none; }
+  body.dashboard-page .services > .service,
+  body.dashboard-page .catalog-group-system ~ .service { grid-column: auto; }
+  body.dashboard-page .service {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-rows: 44px minmax(22px, auto);
+    align-content: space-between;
+    height: 94px;
+    min-height: 0;
+    padding: 7px;
+    gap: 3px 2px;
+    border-radius: 11px;
+  }
+  body.dashboard-page .service-heading, body.dashboard-page .service-main { min-width: 0; }
+  body.dashboard-page .service-main { gap: 5px; min-height: 44px; }
+  body.dashboard-page .service-main strong { font-size: 12px; font-weight: 650; line-height: 1.15; overflow-wrap: anywhere; }
+  body.dashboard-page .service-icon { flex: 0 0 26px; width: 26px; height: 26px; border-radius: 7px; }
+  body.dashboard-page .service-icon::before { width: 15px; height: 15px; }
+  body.dashboard-page .action-menu-trigger {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+  }
+  body.dashboard-page .service-status { min-width: 0; min-height: 22px; height: auto; gap: 3px; font-size: 10px; flex-wrap: nowrap; }
+  body.dashboard-page .service-status > [data-health] { min-width: 0; max-width: 100%; height: 22px; padding: 0 5px; border-radius: 6px; gap: 3px; }
+  body.dashboard-page .service-status > .browser-mode-link { min-height: 22px; }
+  body.dashboard-page .service-health { flex: 0 0 6px; width: 6px; height: 6px; }
+  body.dashboard-page .health-label { font-size: 10px; white-space: nowrap; }
+  body.dashboard-page .router-status { font-size: 9px; max-width: 110px; }
+  body.dashboard-page .catalog-message { margin: 5px 0; }
+  body.dashboard-page .service-table-scroll { margin-top: 0; }
+  body.dashboard-page .service-table tbody { gap: 5px; }
+  body.dashboard-page .service-table tbody tr {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-rows: auto;
+    padding: 4px 8px;
+    gap: 3px;
+    min-height: 54px;
+  }
+  body.dashboard-page .service-table tbody th { grid-column: 1; grid-row: 1; align-self: start; }
+  body.dashboard-page .service-table tbody td:nth-child(2) { grid-column: 1; grid-row: 1; align-self: end; padding-left: 31px; }
+  body.dashboard-page .service-table tbody td:nth-child(3) { grid-column: 2; grid-row: 1; align-self: center; }
+  body.dashboard-page .service-table .service-main { min-height: 27px; gap: 5px; }
+  body.dashboard-page .service-table .service-icon { flex-basis: 24px; width: 24px; height: 24px; }
+  body.dashboard-page .service-table .service-main strong { font-size: 11px; }
+  body.dashboard-page .service-table .service-status { min-height: 20px; }
+  body.dashboard-page .service-table .action-menu-trigger { height: 44px; width: 44px; }
+}
+@media (max-width: 350px) {
+  body.dashboard-page .gateway-mark { display: none; }
+  body.dashboard-page .gateway-header h1 { font-size: 16px; }
+  body.dashboard-page .gateway-overview { padding: 6px; }
+  body.dashboard-page .overview-copy strong { font-size: 10px; }
+  body.dashboard-page .service-icon { display: none; }
+  body.dashboard-page .service-main strong { font-size: 12px; }
+  body.dashboard-page .services { gap: 6px; }
+  body.dashboard-page .service-status > [data-health] { padding: 0 3px; }
+}
 /* Bootstrap Icons v1.11.3, MIT; see BOOTSTRAP-ICONS-LICENSE.txt. Embedded for offline use. */
 .icon-terminal { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0iY3VycmVudENvbG9yIiBjbGFzcz0iYmkgYmktdGVybWluYWwiIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPHBhdGggZD0iTTYgOWEuNS41IDAgMCAxIC41LS41aDNhLjUuNSAwIDAgMSAwIDFoLTNBLjUuNSAwIDAgMSA2IDlNMy44NTQgNC4xNDZhLjUuNSAwIDEgMC0uNzA4LjcwOEw0Ljc5MyA2LjUgMy4xNDYgOC4xNDZhLjUuNSAwIDEgMCAuNzA4LjcwOGwyLTJhLjUuNSAwIDAgMCAwLS43MDh6Ii8+CiAgPHBhdGggZD0iTTIgMWEyIDIgMCAwIDAtMiAydjEwYTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlYzYTIgMiAwIDAgMC0yLTJ6bTEyIDFhMSAxIDAgMCAxIDEgMXYxMGExIDEgMCAwIDEtMSAxSDJhMSAxIDAgMCAxLTEtMVYzYTEgMSAwIDAgMSAxLTF6Ii8+Cjwvc3ZnPg=="); }
 .icon-globe2 { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0iY3VycmVudENvbG9yIiBjbGFzcz0iYmkgYmktZ2xvYmUyIiB2aWV3Qm94PSIwIDAgMTYgMTYiPgogIDxwYXRoIGQ9Ik0wIDhhOCA4IDAgMSAxIDE2IDBBOCA4IDAgMCAxIDAgOG03LjUtNi45MjNjLS42Ny4yMDQtMS4zMzUuODItMS44ODcgMS44NTVxLS4yMTUuNDAzLS4zOTUuODcyYy43MDUuMTU3IDEuNDcyLjI1NyAyLjI4Mi4yODd6TTQuMjQ5IDMuNTM5cS4yMTQtLjU3Ny40ODEtMS4wNzhhNyA3IDAgMCAxIC41OTctLjkzM0E3IDcgMCAwIDAgMy4wNTEgMy4wNXEuNTQ0LjI3NyAxLjE5OC40OXpNMy41MDkgNy41Yy4wMzYtMS4wNy4xODgtMi4wODcuNDM2LTMuMDA4YTkgOSAwIDAgMS0xLjU2NS0uNjY3QTYuOTYgNi45NiAwIDAgMCAxLjAxOCA3LjV6bTEuNC0yLjc0MWExMi4zIDEyLjMgMCAwIDAtLjQgMi43NDFINy41VjUuMDkxYy0uOTEtLjAzLTEuNzgzLS4xNDUtMi41OTEtLjMzMk04LjUgNS4wOVY3LjVoMi45OWExMi4zIDEyLjMgMCAwIDAtLjM5OS0yLjc0MWMtLjgwOC4xODctMS42ODEuMzAxLTIuNTkxLjMzMnpNNC41MSA4LjVjLjAzNS45ODcuMTc2IDEuOTE0LjM5OSAyLjc0MUExMy42IDEzLjYgMCAwIDEgNy41IDEwLjkxVjguNXptMy45OSAwdjIuNDA5Yy45MS4wMyAxLjc4My4xNDUgMi41OTEuMzMyLjIyMy0uODI3LjM2NC0xLjc1NC40LTIuNzQxem0tMy4yODIgMy42OTZxLjE4LjQ2OS4zOTUuODcyYy41NTIgMS4wMzUgMS4yMTggMS42NSAxLjg4NyAxLjg1NVYxMS45MWMtLjgxLjAzLTEuNTc3LjEzLTIuMjgyLjI4N3ptLjExIDIuMjc2YTcgNyAwIDAgMS0uNTk4LS45MzMgOSA5IDAgMCAxLS40ODEtMS4wNzkgOC40IDguNCAwIDAgMC0xLjE5OC40OSA3IDcgMCAwIDAgMi4yNzYgMS41MjJ6bS0xLjM4My0yLjk2NEExMy40IDEzLjQgMCAwIDEgMy41MDggOC41aC0yLjQ5YTYuOTYgNi45NiAwIDAgMCAxLjM2MiAzLjY3NWMuNDctLjI1OC45OTUtLjQ4MiAxLjU2NS0uNjY3bTYuNzI4IDIuOTY0YTcgNyAwIDAgMCAyLjI3NS0xLjUyMSA4LjQgOC40IDAgMCAwLTEuMTk3LS40OSA5IDkgMCAwIDEtLjQ4MSAxLjA3OCA3IDcgMCAwIDEtLjU5Ny45MzNNOC41IDExLjkwOXYzLjAxNGMuNjctLjIwNCAxLjMzNS0uODIgMS44ODctMS44NTVxLjIxNi0uNDAzLjM5NS0uODcyQTEyLjYgMTIuNiAwIDAgMCA4LjUgMTEuOTF6bTMuNTU1LS40MDFjLjU3LjE4NSAxLjA5NS40MDkgMS41NjUuNjY3QTYuOTYgNi45NiAwIDAgMCAxNC45ODIgOC41aC0yLjQ5YTEzLjQgMTMuNCAwIDAgMS0uNDM3IDMuMDA4TTE0Ljk4MiA3LjVhNi45NiA2Ljk2IDAgMCAwLTEuMzYyLTMuNjc1Yy0uNDcuMjU4LS45OTUuNDgyLTEuNTY1LjY2Ny4yNDguOTIuNCAxLjkzOC40MzcgMy4wMDh6TTExLjI3IDIuNDYxcS4yNjYuNTAyLjQ4MiAxLjA3OGE4LjQgOC40IDAgMCAwIDEuMTk2LS40OSA3IDcgMCAwIDAtMi4yNzUtMS41MmMuMjE4LjI4My40MTguNTk3LjU5Ny45MzJtLS40ODggMS4zNDNhOCA4IDAgMCAwLS4zOTUtLjg3MkM5LjgzNSAxLjg5NyA5LjE3IDEuMjgyIDguNSAxLjA3N1Y0LjA5Yy44MS0uMDMgMS41NzctLjEzIDIuMjgyLS4yODd6Ii8+Cjwvc3ZnPg=="); }
