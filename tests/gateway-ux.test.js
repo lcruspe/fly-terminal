@@ -54,3 +54,10 @@ test('mobile controls are reachable, and table mode stacks without horizontal sc
   assert.match(css, /body\.dashboard-page \.catalog-toolbar \{[^}]*flex-wrap: wrap;/);
   assert.match(css, /body\.dashboard-page \.action-menu-trigger \{[^}]*width: 44px;[^}]*height: 44px;/);
 });
+
+test('mobile table keeps service names, status and actions in separate grid areas', () => {
+  assert.match(css, /body\.dashboard-page \.service-table tbody tr \{[^}]*grid-template-rows: minmax\(24px, auto\) minmax\(22px, auto\);/s);
+  assert.match(css, /body\.dashboard-page \.service-table tbody th \{[^}]*grid-row: 1;/s);
+  assert.match(css, /body\.dashboard-page \.service-table tbody td:nth-child\(2\) \{[^}]*grid-row: 2;/s);
+  assert.match(css, /body\.dashboard-page \.service-table tbody td:nth-child\(3\) \{[^}]*grid-row: 1 \/ 3;/s);
+});
