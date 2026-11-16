@@ -278,6 +278,8 @@ Cookie сессии привязана к имени хоста, а не к по
 
 Для доступа через Oracle используется та же схема портов: `https://129-158-49-130.sslip.io/`, `:8443` и `:10000`. Oracle не запускает копию Fly Terminal: Caddy на VM проксирует три loopback-порта reverse SSH обратно на Mac mini. Полная схема, ограничения SSH-ключа и диагностика описаны в [ORACLE_RELAY.md](ORACLE_RELAY.md).
 
+Отдельный Tailscale Funnel `commander-hub.tail1c55c5.ts.net`: порт `443` зарезервирован для Commander Hub/MCP, `8443` публикует каталог Fly Terminal (терминал по пути `/fly/`), `10000` — Sprut.Hub. Порты `8443` и `10000` проходят через TCP-прокси в Lima VM `ts` к Mac mini по `host.lima.internal`, без фиксированного LAN-IP. Схема, диагностика, откат: [docs/COMMANDER_FUNNEL.md](docs/COMMANDER_FUNNEL.md).
+
 ---
 
 ## Безопасность
