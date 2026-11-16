@@ -622,7 +622,7 @@ body.dashboard-page .gateway-overview { min-width: 185px; padding: 10px 12px; }
   }
   body.dashboard-page .service-table .service-status {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     align-content: center;
     flex-wrap: wrap;
@@ -636,6 +636,9 @@ body.dashboard-page .gateway-overview { min-width: 185px; padding: 10px 12px; }
   }
   body.dashboard-page .service-table .service-status > [data-health] {
     flex: 0 1 auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
     width: auto;
     min-width: 0;
     max-width: 100%;
@@ -646,6 +649,9 @@ body.dashboard-page .gateway-overview { min-width: 185px; padding: 10px 12px; }
     overflow: visible;
     text-align: center;
   }
+  /* Health indicators are appended after their labels in the DOM;
+     render the dot first for left-to-right reading and wrapped status text. */
+  body.dashboard-page .service-table .service-health { order: -1; }
   body.dashboard-page .service-table .router-status {
     max-width: none;
     overflow: visible;

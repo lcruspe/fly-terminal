@@ -72,3 +72,9 @@ test('light and dark Gateway theme use a persistent accessible control', () => {
   assert.match(css, /html\[data-gateway-theme="light"\] body\.dashboard-page/);
   assert.match(css, /color-scheme: light;/);
 });
+
+test('mobile table status chips and indicator dots align to the left of the middle column', () => {
+  assert.match(css, /body\.dashboard-page \.service-table \.service-status \{[^}]*justify-content: flex-start;/s);
+  assert.match(css, /body\.dashboard-page \.service-table \.service-status > \[data-health\] \{[^}]*flex-direction: row;[^}]*justify-content: flex-start;[^}]*text-align: left;/s);
+  assert.match(css, /body\.dashboard-page \.service-table \.service-health \{ order: -1; \}/);
+});
