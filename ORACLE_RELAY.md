@@ -33,3 +33,7 @@ TURN работает отдельным `fly-turn.service` и не связан
 На Oracle должны слушаться `443`, `8443`, `10000` и только на loopback — `18080`, `18081`, `18082`. Если стартовая страница открывается, а карточки сервисов зависают, сначала проверять наличие всех трёх reverse-forward и OCI ingress для `8443/10000`.
 
 Без cookie HTML-навигация с `Accept: text/html` возвращает `302` на `/auth/login`, а API/WebSocket-запросы — `401` без Basic Auth challenge. После входа существующим паролем cookie применяется ко всем трём портам. `/yt-login` после проверки cookie создаёт отдельную сессию транскрайбера.
+
+## Терминальный сервер и лимит файлов
+
+`ttyd` обслуживает долгоживущие WebSocket-подключения. При стандартном soft `RLIMIT_NOFILE=256` соединения могут циклически переподключаться с `pty_spawn: 24 (Too many open files)`. `macos/launch-ttyd.sh` устанавливает soft-limit 8192 перед запуском всего ttyd-стека. Проверка: `launchctl list | grep fly-terminal.ttyd`, `lsof -n -p $(pgrep -x ttyd | head -1) | wc -l`, `tail -50 ~/Library/Logs/fly-terminal/ttyd.err.log`. При повторном росте FD следует исследовать утечку дескрипторов, а не бесконечно увеличивать лимит.

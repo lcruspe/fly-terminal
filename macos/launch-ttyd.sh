@@ -25,6 +25,10 @@ export FLY_TERMINAL_CONTROL_SCRIPT="${REPO_ROOT}/session-control.py"
 export FLY_TERMINAL_SESSION_SCRIPT="${REPO_ROOT}/zsh-terminal-session.sh"
 export TTYD_BIN="/opt/homebrew/bin/ttyd"
 
+# launchd defaults to 256 descriptors; sustained WebSocket connections exhaust it.
+# Raise the soft limit for the entire ttyd stack without changing system limits.
+ulimit -n 8192
+
 mkdir -p "${FLY_TERMINAL_HISTORY_DIR}"
 
 exec "${REPO_ROOT}/run-ttyd-stack.sh"
