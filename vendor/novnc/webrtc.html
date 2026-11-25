@@ -305,6 +305,17 @@
       border-color: var(--accent);
     }
 
+    #mobileKeyboardInput {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      font-size: 16px;
+    }
+
     #clipboardSink {
       position: fixed;
       left: -10000px;
@@ -360,6 +371,7 @@
     <video id="screenVideo" autoplay playsinline muted></video>
     <canvas id="screenCanvas"></canvas>
     <div id="inputLayer" tabindex="0" aria-label="Удалённый экран"></div>
+    <input id="mobileKeyboardInput" type="password" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-label="Ввод с клавиатуры iOS">
     <textarea id="clipboardSink" aria-hidden="true" tabindex="-1"></textarea>
 
     <div id="hudDock">
@@ -385,6 +397,7 @@
         <div class="hud-divider"></div>
         <button type="button" class="hud-btn" id="spotlightBtn" title="Spotlight (Cmd+Пробел)">⌘ Space</button>
         <button type="button" class="hud-btn" id="appSwitcherBtn" title="Переключение окон (Cmd+Tab)">⌘ Tab</button>
+        <button type="button" class="hud-btn hud-icon-btn" id="mobileKeyboardBtn" title="Показать экранную клавиатуру" aria-label="Экранная клавиатура" aria-pressed="false">⌨</button>
         <button type="button" class="hud-btn" id="pasteBtn" title="Вставить текст в Mac">Вставка</button>
         <div class="hud-divider"></div>
         <select id="qualityMode" title="Приоритет качества">
@@ -882,12 +895,71 @@
       setHudPinned(hudPinned);
       syncHudChip();
 
+      const mobileKeyboardInput = document.getElementById("mobileKeyboardInput");
+      const mobileKeyboardBtn = document.getElementById("mobileKeyboardBtn");
+      const keyboardSentinel = " ";
+      function resetMobileKeyboardInput() {
+        mobileKeyboardInput.value = keyboardSentinel;
+        mobileKeyboardInput.setSelectionRange(1, 1);
+      }
+      function focusRemoteInput() {
+        if (document.activeElement !== mobileKeyboardInput) inputLayer.focus({ preventScroll: true });
+      }
       window.flyOpenKeyboard = () => {
-        clipboardModal.classList.remove("hidden");
-        clipboardText.value = "";
-        clipboardText.focus({ preventScroll: true });
-        return document.activeElement === clipboardText;
+        resetMobileKeyboardInput();
+        mobileKeyboardInput.focus({ preventScroll: true });
+        return document.activeElement === mobileKeyboardInput;
       };
+      mobileKeyboardBtn.addEventListener("pointerdown", event => {
+        // Keep the focused input until click decides whether to close it.
+        if (document.activeElement === mobileKeyboardInput) event.preventDefault();
+      });
+      mobileKeyboardBtn.addEventListener("click", () => {
+        if (document.activeElement === mobileKeyboardInput) mobileKeyboardInput.blur();
+        else window.flyOpenKeyboard();
+      });
+      mobileKeyboardInput.addEventListener("focus", () => {
+        mobileKeyboardBtn.setAttribute("aria-pressed", "true");
+      });
+      mobileKeyboardInput.addEventListener("blur", () => {
+        mobileKeyboardInput.value = "";
+        mobileKeyboardBtn.setAttribute("aria-pressed", "false");
+      });
+      function sendMobileKey(code, key = code) {
+        registerInput({ type: "keydown", code, key, modifiers: {} });
+        registerInput({ type: "keyup", code, key, modifiers: {} });
+      }
+      mobileKeyboardInput.addEventListener("keydown", event => {
+        if (event.isComposing || !["Enter", "Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        sendMobileKey(event.key === "Enter" ? "Enter" : event.key);
+        resetMobileKeyboardInput();
+      });
+      mobileKeyboardInput.addEventListener("beforeinput", event => {
+        if (event.isComposing || !event.cancelable) return;
+        if (event.inputType === "deleteContentBackward" || event.inputType === "deleteContentForward") {
+          event.preventDefault();
+          sendMobileKey(event.inputType === "deleteContentBackward" ? "Backspace" : "Delete");
+        } else if (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") {
+          event.preventDefault();
+          sendMobileKey("Enter");
+        } else if (event.inputType.startsWith("insert") && typeof event.data === "string") {
+          event.preventDefault();
+          registerInput({ type: "text", text: event.data });
+        } else return;
+        resetMobileKeyboardInput();
+      });
+      mobileKeyboardInput.addEventListener("input", event => {
+        if (event.isComposing) return;
+        const value = mobileKeyboardInput.value;
+        if (event.inputType === "deleteContentBackward" || value === "") sendMobileKey("Backspace");
+        else if (event.inputType === "deleteContentForward") sendMobileKey("Delete");
+        else {
+          const text = value.startsWith(keyboardSentinel) ? value.slice(1) : value;
+          if (text) registerInput({ type: "text", text });
+        }
+        resetMobileKeyboardInput();
+      });
 
       let socket = null;
       let peerConnection = null;
@@ -1388,7 +1460,7 @@
           const text = await navigator.clipboard?.readText?.();
           if (text != null && text !== "") registerInput({ type: "clipboard", text });
         } catch (_) {}
-        inputLayer.focus({ preventScroll: true });
+        focusRemoteInput();
       }
 
       async function handleNativePaste(event) {
@@ -1411,7 +1483,7 @@
           console.warn("Clipboard paste failed:", error);
         } finally {
           clipboardSink.value = "";
-          inputLayer.focus({ preventScroll: true });
+          focusRemoteInput();
         }
       }
 
@@ -1680,7 +1752,7 @@
                 updateOverlay(false);
                 statusBadge.textContent = "H.264 готов";
                 statusBadge.className = "hud-badge badge-status";
-                inputLayer.focus({ preventScroll: true });
+                focusRemoteInput();
               }
 
               frameCount++;
@@ -2065,7 +2137,7 @@
         updateOverlay(false);
         statusBadge.textContent = "WebRTC готов";
         statusBadge.className = "hud-badge badge-status";
-        inputLayer.focus({ preventScroll: true });
+        focusRemoteInput();
         startVideoFrameObserver();
         startWebRtcStats();
         sendProbe();
@@ -2396,7 +2468,8 @@
       });
 
       inputLayer.addEventListener("pointerdown", (e) => {
-        inputLayer.focus({ preventScroll: true });
+        if (document.activeElement === mobileKeyboardInput) e.preventDefault();
+        focusRemoteInput();
         e.preventDefault();
         const button = e.pointerType === "touch" ? 0 : e.button;
         activePointerButtons.set(e.pointerId, button);
@@ -2495,7 +2568,7 @@
         if (!swallowedClipboardCode || e.code !== swallowedClipboardCode) return;
         e.preventDefault();
         swallowedClipboardCode = "";
-        inputLayer.focus({ preventScroll: true });
+        focusRemoteInput();
       }, true);
 
       function resetRemoteInput() {
@@ -2528,7 +2601,9 @@
             if (text && registerInput({ type: "clipboard", text })) return;
           }
         } catch (e) {}
-        window.flyOpenKeyboard();
+        clipboardModal.classList.remove("hidden");
+        clipboardText.value = "";
+        clipboardText.focus({ preventScroll: true });
       };
 
       document.getElementById("clipboardCancelBtn").onclick = () => {
@@ -2541,7 +2616,7 @@
         if (text) registerInput({ type: "clipboard", text });
         clipboardText.value = "";
         clipboardModal.classList.add("hidden");
-        inputLayer.focus({ preventScroll: true });
+        focusRemoteInput();
       };
 
       document.getElementById("scaleModeBtn").onclick = (e) => {
