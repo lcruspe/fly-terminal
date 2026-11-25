@@ -29,6 +29,7 @@ class NativePreferencesTests(unittest.TestCase):
             "nativeBrowserHudPinned": False,
             "nativeDesktopHudPosition": {"x": 120, "y": 200},
             "nativeBrowserHudPosition": {"x": 16.5, "y": 30},
+            "nativeBrowserDisplay": "main",
             "nativeBrowserResolution": "1600x900",
             "nativeBrowserFps": 45,
             "nativeBrowserScaleMode": "fill",
@@ -43,6 +44,7 @@ class NativePreferencesTests(unittest.TestCase):
         self.assertFalse(normalized["nativeBrowserHudPinned"])
         self.assertEqual(normalized["nativeDesktopHudPosition"], {"x": 120.0, "y": 200.0})
         self.assertEqual(normalized["nativeBrowserHudPosition"], {"x": 16.5, "y": 30.0})
+        self.assertEqual(normalized["nativeBrowserDisplay"], "main")
         self.assertEqual(normalized["nativeBrowserResolution"], "1600x900")
         self.assertEqual(normalized["nativeBrowserFps"], 45)
         self.assertEqual(normalized["nativeBrowserScaleMode"], "fill")

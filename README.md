@@ -409,3 +409,5 @@ HUD содержит режимы «Звук: выкл.», «Только кли
 Native RDC capture (5905) is supervised exclusively by its dedicated macOS streamer LaunchAgent. The ttyd stack must not start a duplicate capture process; its optional streamer script is opt-in only outside the macOS launcher.
 
 В Gateway → Браузер → меню действий доступен отдельный пункт «Открыть RDC VNC»: штатный noVNC-маршрут основного рабочего стола Mac, независимый от Native Browser и Browser Fallback.
+
+Native Browser сохраняет последний выбранный дисплей в серверной настройке nativeBrowserDisplay (main / Fly Browser), отдельно от RDC. Обычные ссылки Gateway не задают display; при первом входе без сохранённой настройки используется Fly Browser. Явная ссылка с display=main или display=Fly%20Browser имеет приоритет для текущего открытия, не меняя сохранённый выбор до ручного переключения HUD.

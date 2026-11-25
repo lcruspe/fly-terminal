@@ -33,3 +33,10 @@ test('Browser actions include the existing main desktop VNC route',()=>{
   assert.equal(url.searchParams.get('path'),'desktop-ws');
   assert.equal(url.searchParams.get('autoconnect'),'true');
 });
+
+test('Gateway Native Browser links restore the saved display',()=>{
+  const html=fs.readFileSync(require('node:path').join(__dirname,'../macos/gateway/admin.html'),'utf8');
+  const links=[...html.matchAll(/data-path="([^"]*native-browser-stream-ws[^"]*)"/g)];
+  assert.equal(links.length,3);
+  for(const link of links) assert.equal(new URL(link[1].replaceAll('&amp;','&'),'https://example.test').searchParams.has('display'),false);
+});

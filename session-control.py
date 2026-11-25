@@ -2182,6 +2182,10 @@ def normalize_ui_preferences(payload):
         if timeout in {60, 180, 300, 600, 900, 1800, 3600}:
             preferences[f"{prefix}IdleTimeoutSeconds"] = timeout
 
+    browser_display = payload.get("nativeBrowserDisplay")
+    if isinstance(browser_display, str) and browser_display in {"main", "Fly Browser"}:
+        preferences["nativeBrowserDisplay"] = browser_display
+
     browser_resolution = payload.get("nativeBrowserResolution")
     if isinstance(browser_resolution, str) and browser_resolution in VALID_DESKTOP_RESOLUTIONS:
         preferences["nativeBrowserResolution"] = browser_resolution

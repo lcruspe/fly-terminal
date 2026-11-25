@@ -459,6 +459,14 @@
       const explicitClientRole = urlParams.get("client");
       const clientRole = explicitClientRole === "browser" ? "browser" : "desktop";
       const isBrowserClient = clientRole === "browser";
+      const nativeBrowserDisplayKey = "nativeBrowserDisplay";
+      let explicitBrowserDisplay = isBrowserClient && urlParams.has("display") &&
+        ["", "main", "Fly Browser"].includes(displayParam);
+      if (isBrowserClient) {
+        const cachedDisplay = safeStorageGet(nativeBrowserDisplayKey);
+        requestedDisplayName = explicitBrowserDisplay ? (displayParam === "Fly Browser" ? "Fly Browser" : "")
+          : (cachedDisplay === "main" ? "" : "Fly Browser");
+      }
       const streamPreferenceKey = `flyNativeStreamPreferences:${clientRole}`;
       let savedStreamPreferences = {};
       try { savedStreamPreferences = JSON.parse(safeStorageGet(streamPreferenceKey) || "{}"); } catch (_) {}
@@ -706,6 +714,12 @@
         const validFps = value => VALID_FPS_LIMITS.includes(value);
         const validScale = value => ["contain", "fill", "sync"].includes(value);
 
+        if (isBrowserClient && !explicitBrowserDisplay) {
+          const selected = choose(nativeBrowserDisplayKey, value => ["main", "Fly Browser"].includes(value),
+            requestedDisplayName === "Fly Browser" ? "Fly Browser" : "main");
+          requestedDisplayName = selected === "Fly Browser" ? "Fly Browser" : "";
+          safeStorageSet(nativeBrowserDisplayKey, selected);
+        }
         preferredAudioMode = choose(nativeAudioKey, value => ["off","client","both"].includes(value), preferredAudioMode);
         safeStorageSet(nativeAudioKey, preferredAudioMode);
         currentQualityMode = choose(nativeQualityKey, validQuality, currentQualityMode);
@@ -2558,7 +2572,14 @@
         requestedDisplayName = value;
         if (autoResizeEnabled && value !== "Fly Remote") setAutoResizeEnabled(false);
         const url = new URL(window.location.href);
-        if (value) url.searchParams.set("display", value);
+        if (isBrowserClient) {
+          explicitBrowserDisplay = false;
+          const selected = value || "main";
+          safeStorageSet(nativeBrowserDisplayKey, selected);
+          queueNativePreferences({ [nativeBrowserDisplayKey]: selected });
+          // Generic entry points always restore the saved selection.
+          url.searchParams.delete("display");
+        } else if (value) url.searchParams.set("display", value);
         else url.searchParams.delete("display");
         history.replaceState(history.state, "", url);
         resetClientIdleClock();

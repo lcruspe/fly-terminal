@@ -20,6 +20,7 @@ function createClient(saved, { browser = false, local = {}, failGet = false } = 
   let sessionSettingsCalls = 0;
   const context = {
     isBrowserClient: browser,
+    nativeBrowserDisplayKey: "nativeBrowserDisplay", explicitBrowserDisplay: false, requestedDisplayName: "Fly Browser",
     window: {
       location: { username: '', password: '' },
       addEventListener: (name, callback) => { listeners[name] = callback; }
@@ -127,6 +128,7 @@ test('browser and desktop native sessions read distinct profiles', async () => {
     nativeBrowserFps: 15,
     nativeBrowserScaleMode: 'sync',
     nativeBrowserAudioMode: 'off',
+    nativeBrowserDisplay: 'main',
     nativeBrowserQualityMode: 'text',
     nativeBrowserIdleTimeoutSeconds: 180,
     nativeBrowserHudPinned: false,
@@ -138,6 +140,7 @@ test('browser and desktop native sessions read distinct profiles', async () => {
   assert.equal(client.context.requestedFps, 15);
   assert.equal(client.context.fitMode, 'sync');
   assert.equal(client.context.qualityModeSelect.value, 'text');
+  assert.equal(client.context.requestedDisplayName, '');
   await client.api.flushNativePreferences();
   assert.equal(client.requests.filter(x => x.options.method === 'POST').length, 0);
 });
@@ -231,4 +234,14 @@ test('late server response never overwrites user changes made while offline', as
   assert.equal(client.context.requestedResolution, '2560x1440');
   assert.equal(client.context.currentQualityMode, 'smooth');
   assert.equal(client.context.sessionIdleTimeoutSeconds, 300);
+});
+
+test('Native Browser restores last main display and respects an explicit override', async () => {
+  const client = createClient({nativeBrowserDisplay:'main'}, {browser:true});
+  await client.api.loadNativePreferences();
+  assert.equal(client.context.requestedDisplayName,'');
+  const explicit = createClient({nativeBrowserDisplay:'main'}, {browser:true});
+  explicit.context.explicitBrowserDisplay=true;
+  await explicit.api.loadNativePreferences();
+  assert.equal(explicit.context.requestedDisplayName,'Fly Browser');
 });
