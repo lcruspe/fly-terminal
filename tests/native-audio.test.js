@@ -16,9 +16,9 @@ function setup(mode='client',reject=false,ws=false) {
     createBuffer(){const channels=[new Float32Array(960),new Float32Array(960)];samples.push(channels);return {getChannelData:i=>channels[i]};}
     createBufferSource(){return {connect(){},start:t=>starts.push(t),stop(){}};}
   }
-  const ctx=vm.createContext({document:{visibilityState:'visible',getElementById:id=>({remoteAudio:audio,audioMode:select,audioStatusBtn:status})[id],addEventListener:(n,f)=>listeners[n]=f},
+  const ctx=vm.createContext({document:{visibilityState:'visible',getElementById:id=>({remoteAudio:audio,audioMode:select,audioStatusBtn:status,mediaPriority:element()})[id],addEventListener:(n,f)=>listeners[n]=f},
     window:{AudioContext,addEventListener:(n,f)=>listeners[n]=f},usingWebRtc:!ws,socket:{readyState:1},WebSocket:{OPEN:1},performance:{now:()=>100},reliableChannel:{},dataChannelOpen:()=>true,peerConnection:{connectionState:'connected'},
-    preferredAudioMode:mode,nativeAudioKey:'nativeDesktopAudioMode',safeStorageSet(){},queueNativePreferences(){},sendTransportMessage:m=>{messages.push(JSON.parse(JSON.stringify(m)));return true;},
+    mediaPriority:'audio',preferredAudioMode:mode,nativeAudioKey:'nativeDesktopAudioMode',safeStorageSet(){},queueNativePreferences(){},sendTransportMessage:m=>{messages.push(JSON.parse(JSON.stringify(m)));return true;},
     setInterval:f=>timers.push(f),setTimeout(){}});
   vm.runInContext(source+'\naudioOwner=true;audioTrackAvailable=true;audioPcmAvailable=true;',ctx);
   return {ctx,messages,audio,select,status,listeners,timers,samples,starts};
@@ -68,4 +68,15 @@ test('WebSocket without server audio capability remains disabled',()=>{
   const {ctx,select,messages}=setup('client',false,true);
   vm.runInContext('audioPcmAvailable=false;',ctx);ctx.refreshAudioControl();
   assert.equal(select.disabled,true);ctx.activatePreferredAudio();assert.equal(messages.length,0);
+});
+
+test('audio priority buffers half a second and video priority stays responsive', async()=>{
+  for(const [mode,delay] of [['audio',0.5],['balanced',0.16],['video',0.04]]) {
+    const {ctx,starts}=setup('both',false,true);
+    ctx.mediaPriority=mode;
+    ctx.activatePreferredAudio();
+    ctx.receivePcmPacket(new ArrayBuffer(3845));
+    assert.ok(Math.abs(starts[0]-1-delay)<1e-9);
+    await new Promise(setImmediate);
+  }
 });

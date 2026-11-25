@@ -339,6 +339,7 @@
     #streamResolution,
     #captureDisplay,
     #audioMode,
+    #mediaPriority,
     #idleTimeout {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -390,6 +391,7 @@
         <select id="fpsLimit" title="Ограничение FPS" aria-label="Ограничение FPS">
           <option value="15">≤15 FPS</option><option value="30">≤30 FPS</option><option value="45">≤45 FPS</option><option value="60">≤60 FPS</option>
         </select>
+        <select id="mediaPriority" title="Приоритет трансляции" aria-label="Приоритет трансляции"><option value="audio">Приоритет: звук</option><option value="balanced">Приоритет: баланс</option><option value="video">Приоритет: видео</option></select>
         <select id="audioMode" title="Системный звук Mac" aria-label="Системный звук Mac" disabled><option value="off">Звук: выкл.</option><option value="client">Только клиент</option><option value="both">Клиент + Mac</option></select>
         <button type="button" class="hud-btn" id="audioStatusBtn" title="Состояние звука" hidden>Звук</button>
         <select id="captureDisplay" title="Экран Mac" aria-label="Экран Mac"><option value="">Основной экран</option><option value="Fly Remote">Fly Remote</option><option value="Fly Browser">Fly Browser</option></select>
@@ -582,6 +584,8 @@
       const nativePreferencePrefix = isBrowserClient ? "nativeBrowser" : "nativeDesktop";
       const nativeQualityKey = nativePreferencePrefix + "QualityMode";
       const nativeAudioKey = nativePreferencePrefix + "AudioMode";
+      const nativeMediaPriorityKey = nativePreferencePrefix + "MediaPriority";
+      let mediaPriority = ["audio","balanced","video"].includes(safeStorageGet(nativeMediaPriorityKey)) ? safeStorageGet(nativeMediaPriorityKey) : "audio";
       let preferredAudioMode = ["off","client","both"].includes(safeStorageGet(nativeAudioKey)) ? safeStorageGet(nativeAudioKey) : "off";
       const nativeTimeoutKey = nativePreferencePrefix + "IdleTimeoutSeconds";
       const nativePinKey = nativePreferencePrefix + "HudPinned";
@@ -720,6 +724,8 @@
           requestedDisplayName = selected === "Fly Browser" ? "Fly Browser" : "";
           safeStorageSet(nativeBrowserDisplayKey, selected);
         }
+        mediaPriority = choose(nativeMediaPriorityKey, value => ["audio","balanced","video"].includes(value), mediaPriority);
+        safeStorageSet(nativeMediaPriorityKey, mediaPriority);
         preferredAudioMode = choose(nativeAudioKey, value => ["off","client","both"].includes(value), preferredAudioMode);
         safeStorageSet(nativeAudioKey, preferredAudioMode);
         currentQualityMode = choose(nativeQualityKey, validQuality, currentQualityMode);
@@ -768,6 +774,7 @@
         // Apply the recovered server profile to that live session as well.
         if (recoveredAfterOutage && typeof configureStream === "function") {
           configureStream(true);
+          if (typeof applyMediaPriority === "function") applyMediaPriority();
           sendSessionSettings(true);
           displayAutoResize.schedule();
         }
@@ -1625,6 +1632,13 @@
       }
 
       function qualityProfile() {
+        const profile = baseQualityProfile();
+        if (mediaPriority === "audio" && preferredAudioMode !== "off") {
+          return {...profile, minBitrate:300_000, maxBitrate:Math.min(profile.maxBitrate, 1_500_000), fps:Math.min(profile.fps, 30)};
+        }
+        return profile;
+      }
+      function baseQualityProfile() {
         if (currentQualityMode === "text") return { minBitrate: 1_500_000, maxBitrate: 7_000_000, fps: Math.min(30, requestedFps), baseScale: 1 };
         if (currentQualityMode === "smooth") return { minBitrate: 1_000_000, maxBitrate: 6_000_000, fps: requestedFps, baseScale: 0.9 };
         if (currentQualityMode === "data") return { minBitrate: 450_000, maxBitrate: 1_600_000, fps: Math.min(30, requestedFps), baseScale: 0.65 };
@@ -1903,6 +1917,9 @@
           keepRecent(diagnostics.encodeMs, latestServerStats.encodeMs);
         } else if (msg.type === "transport_stats") {
           latestServerStats = { ...latestServerStats, ...msg };
+          const dropped = Number(msg.audioDropped || 0);
+          if (mediaPriority === "audio" && preferredAudioMode !== "off" && dropped > previousAudioDropped) setTargetBitrate(currentBitrate * 0.65);
+          previousAudioDropped = dropped;
         } else if (msg.type === "input_ack") {
           const action = pendingActions.get(Number(msg.seq));
           if (action) {
@@ -1924,7 +1941,7 @@
           audioOwner = !!msg.owner;
           if (!audioOwner && audioLeaseMode !== "off") stopAudioLease("Звук недоступен");
           refreshAudioControl();
-          if (!wasOwner && audioOwner) sendSessionSettings(false);
+          if (!wasOwner && audioOwner) { sendSessionSettings(false); applyMediaPriority(); }
           if (!wasOwner && audioOwner && preferredAudioMode !== "off" && audioTransportAvailable()) activatePreferredAudio();
           if (!msg.owner && decodedFrameSeen) {
             statusBadge.textContent = "Только просмотр";
@@ -2100,6 +2117,29 @@
       // Native system audio: preference is distinct from the active lease.
       const remoteAudio = document.getElementById("remoteAudio");
       const audioModeSelect = document.getElementById("audioMode");
+      const mediaPrioritySelect = document.getElementById("mediaPriority");
+      let pcmUnderruns = 0, previousAudioDropped = 0;
+      function pcmBufferPolicy() {
+        return mediaPriority === "audio" ? {target:0.5, max:1.2}
+          : mediaPriority === "balanced" ? {target:0.16,max:0.55} : {target:0.04,max:0.24};
+      }
+      function applyMediaPriority() {
+        mediaPrioritySelect.value = mediaPriority;
+        sendTransportMessage({type:"media_priority",priority:mediaPriority});
+        if (typeof qualityProfile === "function") currentBitrate = Math.min(currentBitrate, qualityProfile().maxBitrate);
+        if (typeof configureStream === "function") configureStream();
+        if (typeof audioReceiver !== "undefined" && audioReceiver) {
+          try { if ("jitterBufferTarget" in audioReceiver) audioReceiver.jitterBufferTarget = mediaPriority === "audio" ? 500 : mediaPriority === "balanced" ? 150 : 40; } catch (_) {}
+        }
+      }
+      let audioReceiver = null;
+      mediaPrioritySelect.addEventListener("change", () => {
+        if (!["audio","balanced","video"].includes(mediaPrioritySelect.value)) return;
+        mediaPriority = mediaPrioritySelect.value;
+        safeStorageSet(nativeMediaPriorityKey, mediaPriority);
+        queueNativePreferences({[nativeMediaPriorityKey]:mediaPriority});
+        applyMediaPriority();
+      });
       const audioStatusBtn = document.getElementById("audioStatusBtn");
       let audioLeaseMode = "off", audioActualMode = "off", audioOwner = false, audioEpoch = 0;
       let audioTrackAvailable = false, audioActivationPending = false;
@@ -2134,12 +2174,17 @@
         if (buffer.byteLength !== 3845 || usingWebRtc || audioLeaseMode === "off" ||
             !pcmContext || pcmContext.state !== "running") return;
         const now = pcmContext.currentTime;
-        if (pcmNextTime < now || pcmNextTime > now + 0.24) {
-          if (pcmNextTime > now + 0.24) {
+        const policy = pcmBufferPolicy();
+        if (pcmNextTime && pcmNextTime < now) {
+          pcmUnderruns++;
+          if (mediaPriority === "audio" && typeof setTargetBitrate === "function") setTargetBitrate(currentBitrate * 0.65);
+        }
+        if (pcmNextTime < now || pcmNextTime > now + policy.max) {
+          if (pcmNextTime > now + policy.max) {
             for (const source of pcmSources) { try { source.stop(); } catch (_) {} }
             pcmSources.clear();
           }
-          pcmNextTime = now + 0.04;
+          pcmNextTime = now + policy.target;
         }
         const packet = new DataView(buffer);
         const samples = pcmContext.createBuffer(2,960,48000);
@@ -2207,6 +2252,7 @@
         }, 12000);
       }
       function refreshAudioControl() {
+        mediaPrioritySelect.value = mediaPriority;
         audioModeSelect.value = preferredAudioMode;
         audioModeSelect.disabled = !audioTransportAvailable() || !audioOwner;
       }
@@ -2216,6 +2262,7 @@
         preferredAudioMode = mode;
         safeStorageSet(nativeAudioKey, mode);
         queueNativePreferences({[nativeAudioKey]:mode});
+        applyMediaPriority();
         stopAudioLease();
         activatePreferredAudio();
       });
@@ -2242,6 +2289,7 @@
       async function closeWebRtc(notifyServer = true) {
         stopAudioLease();
         audioOwner = audioTrackAvailable = audioPcmAvailable = false;
+        audioReceiver = null;
         remoteAudio.srcObject = null;
         clearInterval(webRtcStatsTimer);
         webRtcStatsTimer = null;
@@ -2296,6 +2344,8 @@
         const firstFrame = new Promise((resolve) => { firstFrameResolve = resolve; });
         pc.ontrack = (event) => {
           if (event.track.kind === "audio") {
+            audioReceiver = event.receiver;
+            applyMediaPriority();
             remoteAudio.srcObject = new MediaStream([event.track]);
             audioTrackAvailable = true;
             refreshAudioControl();
@@ -2464,7 +2514,7 @@
           width: settings.width,
           height: settings.height,
           fps: settings.fps,
-          bitrate: currentBitrate,
+          bitrate: Math.min(currentBitrate, qualityProfile().maxBitrate || currentBitrate),
           displayName: autoResizeEnabled ? "Fly Remote" : requestedDisplayName,
           force
         });

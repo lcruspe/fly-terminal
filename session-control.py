@@ -2153,6 +2153,9 @@ def normalize_ui_preferences(payload):
     # Native WebRTC uses the same durable, authenticated preference store as
     # the terminal UI. Browser and desktop streams have independent profiles.
     for prefix in ("nativeDesktop", "nativeBrowser"):
+        priority = payload.get(f"{prefix}MediaPriority")
+        if isinstance(priority, str) and priority in {"audio", "balanced", "video"}:
+            preferences[f"{prefix}MediaPriority"] = priority
         audio = payload.get(f"{prefix}AudioMode")
         if isinstance(audio, str) and audio in {"off", "client", "both"}:
             preferences[f"{prefix}AudioMode"] = audio

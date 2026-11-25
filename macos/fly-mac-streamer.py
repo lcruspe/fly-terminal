@@ -458,6 +458,8 @@ class ClientState:
     media_bridge: bool = False
     last_reliable_seq: int = 0
     clipboard_transfer: Optional[dict] = None
+    media_priority: str = "audio"
+    audio_dropped: int = 0
     audio_pcm: bool = False
     audio_mode: str = "off"
     audio_deadline: float = 0
@@ -523,9 +525,7 @@ class StreamServer:
                 # 20 ms of 48 kHz PCM per packet; RTP clock does not depend on pipe jitter.
                 timestamp = state.audio_timestamp
                 state.audio_timestamp = (timestamp + 960) & 0xffffffff
-                if sum(item.kind == "audio" for item in state.queue) < 8:
-                    state.queue.append(OutboundMessage("audio", (b"\x41" if state.audio_pcm else b"\x40")+struct.pack(">I", timestamp)+packet, time.monotonic_ns()))
-                    state.queue_event.set()
+                self._queue_audio(state, (b"\x41" if state.audio_pcm else b"\x40")+struct.pack(">I", timestamp)+packet)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -590,6 +590,24 @@ class StreamServer:
         state.waiting_for_keyframe = True
         return dropped
 
+    def _queue_audio(self, state, payload):
+        limit = {"audio": 40, "balanced": 16, "video": 8}[state.media_priority]
+        queued = [item for item in state.queue if item.kind == "audio"]
+        if len(queued) >= limit:
+            state.queue.remove(queued[0])
+            state.audio_dropped += 1
+        state.queue.append(OutboundMessage("audio", payload, time.monotonic_ns()))
+        state.queue_event.set()
+
+    def _next_outbound(self, state):
+        if state.audio_mode != "off" and state.media_priority == "audio":
+            # Preserve control messages and audio FIFO; bypass queued video.
+            item = next((item for item in state.queue if item.kind != "video"), None)
+            if item is not None:
+                state.queue.remove(item)
+                return item
+        return state.queue.popleft()
+
     def _queue_video(self, state: ClientState, payload: bytes, metadata: dict):
         now_ns = time.monotonic_ns()
         oldest_video = next((item for item in state.queue if item.kind == "video"), None)
@@ -622,6 +640,7 @@ class StreamServer:
             "queueDelayMaxMs": round(state.queue_delay_max_ms, 2),
             "droppedFrames": state.dropped_frames,
             "sentFrames": state.sent_frames,
+            "audioDropped": state.audio_dropped,
         }, separators=(",", ":"))
         try:
             await asyncio.wait_for(state.websocket.send(payload), timeout=STREAM_SEND_TIMEOUT_SECONDS)
@@ -641,8 +660,10 @@ class StreamServer:
                     state.queue_event.clear()
                     await state.queue_event.wait()
                     continue
-                item = state.queue.popleft()
-                if item.kind == "audio" and time.monotonic_ns() - item.enqueued_ns > 200_000_000:
+                item = self._next_outbound(state)
+                audio_max_age = {"audio": 800, "balanced": 320, "video": 200}[state.media_priority]
+                if item.kind == "audio" and time.monotonic_ns() - item.enqueued_ns > audio_max_age * 1_000_000:
+                    state.audio_dropped += 1
                     continue
                 if item.kind == "video":
                     state.queue_bytes = max(0, state.queue_bytes - item.size)
@@ -1222,6 +1243,11 @@ class StreamServer:
                         await self.set_audio_mode(state, data.get("mode"), data.get("format") == "pcm16")
                         continue
                     if msg_type == "bridge_keepalive" and state.media_bridge:
+                        continue
+                    if msg_type == "media_priority":
+                        priority = data.get("priority")
+                        if priority in ("audio", "balanced", "video") and self._is_control_owner(state):
+                            state.media_priority = priority
                         continue
                     if msg_type == "session_settings":
                         if isinstance(data.get("idleQualityReduction"), bool):
