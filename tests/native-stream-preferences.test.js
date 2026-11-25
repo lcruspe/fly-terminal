@@ -64,3 +64,27 @@ test('server init does not replace the selected FPS with a previous encoder sett
   const handler = html.slice(html.indexOf('      async function handleServerText('), html.indexOf('      async function connectWebRtc('));
   assert.doesNotMatch(handler, /requestedFps\s*=\s*Number\(msg\.fpsCap\)/);
 });
+
+test('HUD exposes capture display selection and labels Sync resolution explicitly', () => {
+  assert.match(html, /<select id="captureDisplay"/);
+  assert.match(html, /<option value="sync" disabled>По экрану \(Sync\)/);
+  assert.match(html, /streamResolutionSelect\.value = sync \? "sync" : requestedResolution/);
+  assert.match(html, /captureDisplaySelect\.addEventListener\("change", \(\) => applyCaptureDisplay/);
+  const code = html.slice(html.indexOf('      function applyCaptureDisplay('), html.indexOf('      captureDisplaySelect.addEventListener'));
+  const calls = [];
+  const ctx = {
+    isBrowserClient: false, requestedDisplayName: 'Fly Remote', autoResizeEnabled: true,
+    URL, window: { location: { href: 'https://example.test/desktop/webrtc.html?display=Fly%20Remote', origin: 'https://example.test' } },
+    history: { replaceState: (_, __, url) => calls.push(url.search) },
+    setAutoResizeEnabled: value => calls.push(value), resetClientIdleClock() {},
+    sendTransportMessage: message => calls.push(message), configureStream: force => calls.push(force),
+  };
+  ctx.window.parent = ctx.window;
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  ctx.applyCaptureDisplay('');
+  assert.equal(ctx.requestedDisplayName, '');
+  assert.deepEqual(calls.slice(0, 2), [false, '']);
+  ctx.applyCaptureDisplay('Fly Browser');
+  assert.equal(ctx.requestedDisplayName, '');
+});

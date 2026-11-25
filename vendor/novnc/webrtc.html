@@ -373,8 +373,9 @@
         <select id="fpsLimit" title="Ограничение FPS" aria-label="Ограничение FPS">
           <option value="15">≤15 FPS</option><option value="30">≤30 FPS</option><option value="45">≤45 FPS</option><option value="60">≤60 FPS</option>
         </select>
+        <select id="captureDisplay" title="Экран Mac" aria-label="Экран Mac"><option value="">Основной экран</option><option value="Fly Remote">Fly Remote</option><option value="Fly Browser">Fly Browser</option></select>
         <select id="streamResolution" title="Разрешение потока" aria-label="Разрешение потока">
-          <option value="1280x720">1280×720</option><option value="1600x900">1600×900</option><option value="1920x1080">1920×1080</option><option value="2560x1440">2560×1440</option>
+          <option value="sync" disabled>По экрану (Sync)</option><option value="1280x720">1280×720</option><option value="1600x900">1600×900</option><option value="1920x1080">1920×1080</option><option value="2560x1440">2560×1440</option>
         </select>
         <button type="button" class="hud-btn" id="autoResizeBtn" title="Подстраивать дисплей под окно RDC" aria-pressed="false">Авто дисплей</button>
         <select id="idleTimeout" title="Отключение при бездействии" aria-label="Отключение при бездействии">
@@ -433,7 +434,7 @@
       const VALID_FPS_LIMITS = [15, 30, 45, 60];
       const IDLE_TIMEOUT_OPTIONS = [60, 180, 300, 600, 900, 1800, 3600];
       const displayParam = urlParams.get("display") || "";
-      const requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
+      let requestedDisplayName = ["Fly Remote", "Fly Browser"].includes(displayParam) ? displayParam : "";
       const explicitClientRole = urlParams.get("client");
       const clientRole = explicitClientRole === "browser" ? "browser" : "desktop";
       const isBrowserClient = clientRole === "browser";
@@ -502,8 +503,12 @@
       const qualityModeSelect = document.getElementById("qualityMode");
       const fpsLimitSelect = document.getElementById("fpsLimit");
       const streamResolutionSelect = document.getElementById("streamResolution");
+      const captureDisplaySelect = document.getElementById("captureDisplay");
       const autoResizeBtn = document.getElementById("autoResizeBtn");
       autoResizeBtn.hidden = isBrowserClient;
+      for (const option of captureDisplaySelect.options) {
+        if (option.value && option.value !== (isBrowserClient ? "Fly Browser" : "Fly Remote")) option.remove();
+      }
       const idleTimeoutSelect = document.getElementById("idleTimeout");
       const diagnosticsBtn = document.getElementById("diagnosticsBtn");
       const diagnosticsPanel = document.getElementById("diagnosticsPanel");
@@ -2244,6 +2249,22 @@
         }
       }
 
+      function applyCaptureDisplay(value) {
+        if (!["", isBrowserClient ? "Fly Browser" : "Fly Remote"].includes(value)) return;
+        requestedDisplayName = value;
+        if (autoResizeEnabled && value !== "Fly Remote") setAutoResizeEnabled(false);
+        const url = new URL(window.location.href);
+        if (value) url.searchParams.set("display", value);
+        else url.searchParams.delete("display");
+        history.replaceState(history.state, "", url);
+        resetClientIdleClock();
+        sendTransportMessage({ type: "session_activity" });
+        configureStream(true);
+        if (!isBrowserClient && window.parent !== window) {
+          window.parent.postMessage({ type: "fly-desktop-display", display: value }, window.location.origin);
+        }
+      }
+      captureDisplaySelect.addEventListener("change", () => applyCaptureDisplay(captureDisplaySelect.value));
       fpsLimitSelect.value = String(requestedFps);
       streamResolutionSelect.value = requestedResolution;
       autoResizeBtn.setAttribute("aria-pressed", String(autoResizeEnabled));
@@ -2279,6 +2300,8 @@
       function applyFitMode() {
         const button = document.getElementById("scaleModeBtn");
         const sync = fitMode === "sync";
+        streamResolutionSelect.value = sync ? "sync" : requestedResolution;
+        captureDisplaySelect.value = autoResizeEnabled ? "Fly Remote" : requestedDisplayName;
         const objectFit = autoResizeEnabled || fitMode === "fill" ? "fill" : "contain";
         canvas.style.objectFit = objectFit;
         screenVideo.style.objectFit = objectFit;

@@ -6911,7 +6911,14 @@
       const ownsSource = tabs.some(tab => (tab.type === "desktop" || tab.type === "mac-app")
         && tab.wrapper?.querySelector("iframe")?.contentWindow === event.source);
       if (!ownsSource) return;
-      if (event.data?.type === "fly-desktop-scale-mode" && ["contain", "fill", "sync"].includes(event.data.mode)) {
+      if (event.data?.type === "fly-desktop-display" && ["", "Fly Remote"].includes(event.data.display)) {
+        const tab = tabs.find(tab => tab.wrapper?.querySelector("iframe")?.contentWindow === event.source);
+        if (tab) {
+          tab.targetDisplay = event.data.display || "main";
+          const link = tab.wrapper?.querySelector(".frame-control[target='_blank']");
+          if (link) link.href = buildDesktopUrl(tab.targetDisplay);
+        }
+      } else if (event.data?.type === "fly-desktop-scale-mode" && ["contain", "fill", "sync"].includes(event.data.mode)) {
         preferences.desktopScaleMode = event.data.mode;
         if (desktopScaleModeSelect) desktopScaleModeSelect.value = event.data.mode;
         savePreferences();
