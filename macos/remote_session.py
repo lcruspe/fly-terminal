@@ -25,6 +25,7 @@ def clamp_idle_timeout_seconds(value, fallback: int = DEFAULT_IDLE_TIMEOUT_SECON
 class RemoteSessionIdleGuard:
     def __init__(self, timeout_seconds: int = DEFAULT_IDLE_TIMEOUT_SECONDS, now: float | None = None):
         self.timeout_seconds = max(1, int(timeout_seconds))
+        self.reduce_quality = True
         self.last_activity = time.monotonic() if now is None else float(now)
 
     def mark_activity(self, now: float | None = None) -> None:
@@ -41,4 +42,4 @@ class RemoteSessionIdleGuard:
         return max(0.0, self.timeout_seconds - self.idle_for(now))
 
     def should_reduce_fps(self, after_seconds: int = DEFAULT_IDLE_FPS_AFTER_SECONDS, now: float | None = None) -> bool:
-        return self.idle_for(now) >= max(1, int(after_seconds))
+        return self.reduce_quality and self.idle_for(now) >= max(1, int(after_seconds))

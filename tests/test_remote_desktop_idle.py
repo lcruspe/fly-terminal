@@ -18,6 +18,12 @@ class RemoteDesktopIdleTests(unittest.TestCase):
         self.assertFalse(guard.should_reduce_fps(now=1029.9))
         self.assertTrue(guard.should_reduce_fps(now=1030))
 
+    def test_touch_clients_keep_quality_but_still_expire(self):
+        guard = module.RemoteSessionIdleGuard(timeout_seconds=300, now=1000)
+        guard.reduce_quality = False
+        self.assertFalse(guard.should_reduce_fps(now=1100))
+        self.assertEqual(guard.remaining(now=1300), 0)
+
     def test_only_user_input_refreshes_idle_deadline(self):
         self.assertFalse(module.is_user_activity_message("configure"))
         self.assertFalse(module.is_user_activity_message("bridge_keepalive"))

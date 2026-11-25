@@ -458,6 +458,10 @@ class ClientState:
     media_bridge: bool = False
     last_reliable_seq: int = 0
     clipboard_transfer: Optional[dict] = None
+    audio_mode: str = "off"
+    audio_deadline: float = 0
+    audio_timestamp: int = 0
+    audio_task: Optional[asyncio.Task] = None
 
 
 # MARK: - Server & Encoder Orchestration
@@ -491,6 +495,67 @@ class StreamServer:
         self.last_keyframe_request_ns = 0
         self.last_frame_telemetry_ns = 0
         self.control_owner_id: Optional[str] = None
+
+    async def audio_capture(self, state, mode):
+        proc = None
+        error = None
+        try:
+            binary = Path.home() / "Applications/FlyAudioCapture.app/Contents/MacOS/FlyAudioCapture"
+            proc = await asyncio.create_subprocess_exec(str(binary), mode, stdin=asyncio.subprocess.PIPE,
+                                                       stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            ready = await asyncio.wait_for(proc.stderr.readline(), 8)
+            if ready.strip() != b"audio_ready":
+                raise RuntimeError(ready.decode(errors="replace").strip() or "audio_capture_failed")
+            if not self._is_control_owner(state) or state.audio_deadline <= time.monotonic():
+                return
+            self._enqueue_json(state, {"type":"audio_status", "mode":mode, "requestedMode":mode})
+            while state.audio_deadline > time.monotonic() and self._is_control_owner(state):
+                try:
+                    header = await asyncio.wait_for(proc.stdout.readexactly(2), 1)
+                except asyncio.TimeoutError:
+                    continue
+                size = int.from_bytes(header, "big")
+                if not 0 < size <= 1275:
+                    raise RuntimeError("invalid_audio_packet")
+                packet = await asyncio.wait_for(proc.stdout.readexactly(size), 1)
+                # 20 ms of 48 kHz PCM per packet; RTP clock does not depend on pipe jitter.
+                timestamp = state.audio_timestamp
+                state.audio_timestamp = (timestamp + 960) & 0xffffffff
+                if sum(item.kind == "audio" for item in state.queue) < 8:
+                    state.queue.append(OutboundMessage("audio", b"\x40"+struct.pack(">I", timestamp)+packet, time.monotonic_ns()))
+                    state.queue_event.set()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("System audio capture stopped: %s", exc)
+            error = str(exc) or type(exc).__name__
+        finally:
+            if proc:
+                if proc.stdin:
+                    proc.stdin.close()
+                try:
+                    await asyncio.wait_for(proc.wait(), 1)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+            state.audio_mode = "off"
+            self._enqueue_json(state, {"type":"audio_status", "mode":"off", "requestedMode":mode, "error":error})
+
+    async def set_audio_mode(self, state, mode):
+        if mode not in {"off","client","both"} or not state.media_bridge or not self._is_control_owner(state):
+            return
+        state.audio_deadline = time.monotonic()+8
+        if state.audio_task and not state.audio_task.done() and mode == state.audio_mode:
+            return
+        if state.audio_task and not state.audio_task.done():
+            state.audio_task.cancel()
+            await asyncio.gather(state.audio_task, return_exceptions=True)
+        state.queue = deque(item for item in state.queue if item.kind != "audio")
+        state.audio_mode = mode
+        if mode != "off":
+            state.audio_task = asyncio.create_task(self.audio_capture(state, mode))
+        else:
+            self._enqueue_json(state, {"type":"audio_status","mode":"off","requestedMode":"off"})
 
     def _effective_display_name(self):
         if self.follow_main_when_locked and self.screen_locked:
@@ -574,6 +639,8 @@ class StreamServer:
                     await state.queue_event.wait()
                     continue
                 item = state.queue.popleft()
+                if item.kind == "audio" and time.monotonic_ns() - item.enqueued_ns > 200_000_000:
+                    continue
                 if item.kind == "video":
                     state.queue_bytes = max(0, state.queue_bytes - item.size)
                     age_ms = (time.monotonic_ns() - item.enqueued_ns) / 1_000_000
@@ -1112,7 +1179,7 @@ class StreamServer:
                     logger.info("Remote desktop session closed after %ds of inactivity", idle_guard.timeout_seconds)
                     break
                 wait_timeout = remaining
-                if self._is_control_owner(state) and not self.idle_profile_active:
+                if self._is_control_owner(state) and idle_guard.reduce_quality and not self.idle_profile_active:
                     until_low_fps = max(0.0, IDLE_PROFILE_AFTER_SECONDS - idle_guard.idle_for())
                     if until_low_fps <= 0:
                         await self.set_idle_profile(True)
@@ -1143,9 +1210,20 @@ class StreamServer:
                         state.media_bridge = True
                         self._enqueue_json(state, {"type": "bridge_ready", "clientId": state.client_id})
                         continue
+                    if msg_type == "audio_heartbeat":
+                        if state.media_bridge and self._is_control_owner(state) and state.audio_mode != "off":
+                            state.audio_deadline = time.monotonic()+8
+                        continue
+                    if msg_type == "audio_mode":
+                        await self.set_audio_mode(state, data.get("mode"))
+                        continue
                     if msg_type == "bridge_keepalive" and state.media_bridge:
                         continue
                     if msg_type == "session_settings":
+                        if isinstance(data.get("idleQualityReduction"), bool):
+                            idle_guard.reduce_quality = data["idleQualityReduction"]
+                            if not idle_guard.reduce_quality and self._is_control_owner(state):
+                                await self.set_idle_profile(False)
                         idle_guard.set_timeout(clamp_idle_timeout_seconds(data.get("idleTimeoutSeconds"), idle_guard.timeout_seconds))
                         if bool(data.get("resetIdle", False)):
                             idle_guard.mark_activity()
@@ -1269,6 +1347,9 @@ class StreamServer:
                 except Exception as err:
                     logger.warning("Error processing client input: %s", err)
         finally:
+            if state.audio_task and not state.audio_task.done():
+                state.audio_task.cancel()
+                await asyncio.gather(state.audio_task, return_exceptions=True)
             self._release_client_input(state)
             self.clients.pop(websocket, None)
             if state.sender_task:

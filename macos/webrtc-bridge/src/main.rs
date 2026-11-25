@@ -118,6 +118,8 @@ struct Frame {
 struct PeerMedia {
     pc: Arc<RTCPeerConnection>,
     frame_tx: mpsc::Sender<Frame>,
+    audio_tx: Option<mpsc::Sender<(Bytes, Instant, u32)>>,
+    audio_enabled: Arc<AtomicBool>,
     reliable: RwLock<Option<Arc<RTCDataChannel>>>,
     waiting_for_keyframe: AtomicBool,
     generation: Arc<AtomicU64>,
@@ -156,7 +158,10 @@ impl Hub {
     }
 
     async fn remove_peer(&self, id: &str) {
-        self.peers.write().await.remove(id);
+        let removed = self.peers.write().await.remove(id);
+        if removed.as_ref().map(|p| p.audio_enabled.load(Ordering::Relaxed)).unwrap_or(false) {
+            self.send_source(json!({"type":"audio_mode","mode":"off"}).to_string()).await;
+        }
         let mut owner = self.control_owner.write().await;
         if owner.as_deref() == Some(id) {
             *owner = self.peers.read().await.keys().next().cloned();
@@ -174,6 +179,8 @@ impl Hub {
         if !self.peers.read().await.contains_key(id) {
             return;
         }
+        self.send_source(json!({"type":"audio_mode","mode":"off"}).to_string()).await;
+        for peer in self.peers.read().await.values() { peer.audio_enabled.store(false, Ordering::Relaxed); }
         *self.control_owner.write().await = Some(id.to_owned());
         self.send_source(json!({"type":"claim_control"}).to_string())
             .await;
@@ -237,6 +244,18 @@ impl Hub {
         if !self.is_owner(id).await {
             return;
         }
+        if value.get("type").and_then(Value::as_str) == Some("audio_mode") {
+            let mode = value["mode"].as_str().unwrap_or("off");
+            if !matches!(mode, "off" | "client" | "both") || label != "input-reliable" { return; }
+            if let Some(peer) = self.peers.read().await.get(id) {
+                if peer.audio_tx.is_none() { return; }
+                peer.audio_enabled.store(mode != "off", Ordering::Relaxed);
+            }
+        }
+        if value.get("type").and_then(Value::as_str) == Some("audio_heartbeat") {
+            let enabled = self.peers.read().await.get(id).map(|p| p.audio_enabled.load(Ordering::Relaxed) && p.pc.connection_state() == RTCPeerConnectionState::Connected).unwrap_or(false);
+            if !enabled { return; }
+        }
         if let Value::Object(ref mut map) = value {
             map.insert(
                 "delivery".to_owned(),
@@ -256,6 +275,7 @@ impl Hub {
     async fn broadcast_source_text(&self, text: &str) {
         if let Ok(value) = serde_json::from_str::<Value>(text) {
             if let Some(kind) = value.get("type").and_then(Value::as_str) {
+                if kind == "control" { return; }
                 if matches!(kind, "init" | "display" | "status" | "codec") {
                     self.source_snapshots
                         .write()
@@ -321,6 +341,19 @@ impl Hub {
         }
         if need_keyframe {
             self.request_keyframe("webrtc_peer_queue_overload").await;
+        }
+    }
+
+    async fn broadcast_audio(&self, packet: &[u8]) {
+        if packet.len() <= 4 || packet.len() > 1279 { return; }
+        let timestamp = u32::from_be_bytes(packet[..4].try_into().unwrap());
+        let payload = &packet[4..];
+        for peer in self.peers.read().await.values() {
+            if peer.audio_enabled.load(Ordering::Relaxed) && peer.pc.connection_state() == RTCPeerConnectionState::Connected {
+                if let Some(tx) = &peer.audio_tx {
+                    let _ = tx.try_send((Bytes::copy_from_slice(payload), Instant::now(), timestamp));
+                }
+            }
         }
     }
 
@@ -414,7 +447,7 @@ struct OfferResponse {
     session_id: String,
     sdp: RTCSessionDescription,
 }
-async fn build_peer(hub: Arc<Hub>, session_id: String) -> Result<Arc<PeerMedia>> {
+async fn build_peer(hub: Arc<Hub>, session_id: String, wants_audio: bool) -> Result<Arc<PeerMedia>> {
     let mut media_engine = MediaEngine::default();
     media_engine.register_default_codecs()?;
     let registry = register_default_interceptors(Registry::new(), &mut media_engine)?;
@@ -444,6 +477,41 @@ async fn build_peer(hub: Arc<Hub>, session_id: String) -> Result<Arc<PeerMedia>>
     let sender = pc
         .add_track(Arc::clone(&track) as Arc<dyn TrackLocal + Send + Sync>)
         .await?;
+
+    let audio_enabled = Arc::new(AtomicBool::new(false));
+    let audio_tx = if wants_audio {
+        let audio_track = Arc::new(TrackLocalStaticRTP::new(
+            RTCRtpCodecCapability {
+                mime_type: "audio/opus".into(), clock_rate: 48_000, channels: 2,
+                sdp_fmtp_line: "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1".into(),
+                ..Default::default()
+            }, "audio".into(), "fly-terminal".into(),
+        ));
+        let audio_sender = pc.add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>).await?;
+        tokio::spawn(async move { while audio_sender.read_rtcp().await.is_ok() {} });
+        let (tx, mut rx) = mpsc::channel::<(Bytes, Instant, u32)>(8);
+        let enabled = Arc::clone(&audio_enabled);
+        tokio::spawn(async move {
+            let mut sequence = 0u16;
+            let mut last_source: Option<u32> = None;
+            let mut timestamp = 0u32;
+            while let Some((payload, queued, source_timestamp)) = rx.recv().await {
+                if !enabled.load(Ordering::Relaxed) || queued.elapsed() > Duration::from_millis(160) { continue; }
+                let mut packet = Packet { payload, ..Default::default() };
+                packet.header.version = 2;
+                packet.header.sequence_number = sequence;
+                sequence = sequence.wrapping_add(1);
+                if let Some(previous) = last_source {
+                    let delta = source_timestamp.wrapping_sub(previous);
+                    timestamp = timestamp.wrapping_add(if (960..=480_000).contains(&delta) { delta } else { 960 });
+                }
+                last_source = Some(source_timestamp);
+                packet.header.timestamp = timestamp;
+                let _ = tokio::time::timeout(Duration::from_millis(150), audio_track.write_rtp(&packet)).await;
+            }
+        });
+        Some(tx)
+    } else { None };
 
     let (frame_tx, mut frame_rx) = mpsc::channel::<Frame>(FRAME_QUEUE);
     let track_writer = Arc::clone(&track);
@@ -497,6 +565,8 @@ async fn build_peer(hub: Arc<Hub>, session_id: String) -> Result<Arc<PeerMedia>>
     let peer = Arc::new(PeerMedia {
         pc: Arc::clone(&pc),
         frame_tx,
+        audio_tx,
+        audio_enabled,
         reliable: RwLock::new(None),
         waiting_for_keyframe: AtomicBool::new(true),
         generation,
@@ -562,6 +632,13 @@ async fn build_peer(hub: Arc<Hub>, session_id: String) -> Result<Arc<PeerMedia>>
         let session = state_session.clone();
         let pc = Arc::clone(&state_peer.pc);
         Box::pin(async move {
+            if matches!(state, RTCPeerConnectionState::Disconnected | RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed) {
+                let was_enabled = hub.peers.read().await.get(&session)
+                    .map(|p| p.audio_enabled.swap(false, Ordering::Relaxed)).unwrap_or(false);
+                if was_enabled {
+                    hub.send_source(json!({"type":"audio_mode","mode":"off"}).to_string()).await;
+                }
+            }
             if state == RTCPeerConnectionState::Closed {
                 hub.remove_peer(&session).await;
             } else if state == RTCPeerConnectionState::Failed {
@@ -629,7 +706,7 @@ async fn create_offer_answer(
     Json(request): Json<OfferRequest>,
 ) -> Result<Json<OfferResponse>, ApiError> {
     let session_id = Uuid::new_v4().to_string();
-    let peer = build_peer(Arc::clone(&hub), session_id.clone())
+    let peer = build_peer(Arc::clone(&hub), session_id.clone(), request.sdp.sdp.lines().any(|line| line.starts_with("m=audio ")))
         .await
         .map_err(internal_error)?;
     hub.add_peer(session_id.clone(), Arc::clone(&peer)).await;
@@ -766,7 +843,9 @@ async fn source_loop(hub: Arc<Hub>) {
                             hub.broadcast_source_text(&text).await;
                         }
                         Some(Ok(Message::Binary(data))) => {
-                            if let Some((h264, is_key, capture_us)) = h264_from_stream_packet(&data) {
+                            if data.first() == Some(&0x40) {
+                                hub.broadcast_audio(&data[1..]).await;
+                            } else if let Some((h264, is_key, capture_us)) = h264_from_stream_packet(&data) {
                                 hub.broadcast_frame(h264, is_key, capture_us).await;
                             }
                         }
@@ -784,6 +863,8 @@ async fn source_loop(hub: Arc<Hub>) {
 
         *hub.source_tx.write().await = None;
         writer.abort();
+        for peer in hub.peers.read().await.values() { peer.audio_enabled.store(false, Ordering::Relaxed); }
+        hub.broadcast_source_text(&json!({"type":"audio_status","mode":"off","error":"audio_source_disconnected"}).to_string()).await;
         for peer in hub.peers.read().await.values() {
             peer.waiting_for_keyframe.store(true, Ordering::Relaxed);
         }

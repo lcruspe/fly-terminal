@@ -208,6 +208,7 @@ chmod +x "${SCRIPT_DIR}/launch-ttyd.sh" "${SCRIPT_DIR}/launch-caddy.sh" "${SCRIP
 # WebRTC bridge собирается на этапе установки/обновления. LaunchAgent только запускает
 # готовый бинарник с WD и никогда не блокируется на Cargo/lock во время старта сервиса.
 "${SCRIPT_DIR}/build-webrtc-bridge.sh" >/dev/null
+if ! "${SCRIPT_DIR}/build-audio-tap.sh"; then echo "Optional Native audio build unavailable" >&2; fi
 
 cat >"${TTYD_PLIST}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

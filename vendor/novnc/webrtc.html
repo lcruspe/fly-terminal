@@ -62,7 +62,7 @@
     }
 
     #screenVideo { display: none; background: #000; }
-    #zoomResetBtn[hidden] { display: none; }
+    #zoomResetBtn[hidden], #audioStatusBtn[hidden] { display: none; }
 
     #inputLayer {
       position: absolute;
@@ -338,6 +338,7 @@
     #fpsLimit,
     #streamResolution,
     #captureDisplay,
+    #audioMode,
     #idleTimeout {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -371,6 +372,7 @@
 <body>
   <div id="viewport">
     <video id="screenVideo" autoplay playsinline muted></video>
+    <audio id="remoteAudio" playsinline></audio>
     <canvas id="screenCanvas"></canvas>
     <div id="inputLayer" tabindex="0" aria-label="Удалённый экран"></div>
     <input id="mobileKeyboardInput" type="password" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-label="Ввод с клавиатуры iOS">
@@ -388,6 +390,8 @@
         <select id="fpsLimit" title="Ограничение FPS" aria-label="Ограничение FPS">
           <option value="15">≤15 FPS</option><option value="30">≤30 FPS</option><option value="45">≤45 FPS</option><option value="60">≤60 FPS</option>
         </select>
+        <select id="audioMode" title="Системный звук Mac" aria-label="Системный звук Mac" disabled><option value="off">Звук: выкл.</option><option value="client">Только клиент</option><option value="both">Клиент + Mac</option></select>
+        <button type="button" class="hud-btn" id="audioStatusBtn" title="Состояние звука" hidden>Звук</button>
         <select id="captureDisplay" title="Экран Mac" aria-label="Экран Mac"><option value="">Основной экран</option><option value="Fly Remote">Fly Remote</option><option value="Fly Browser">Fly Browser</option></select>
         <select id="streamResolution" title="Разрешение потока" aria-label="Разрешение потока">
           <option value="sync" disabled>По экрану (Sync)</option><option value="1280x720">1280×720</option><option value="1600x900">1600×900</option><option value="1920x1080">1920×1080</option><option value="2560x1440">2560×1440</option>
@@ -569,6 +573,8 @@
       // Keep the browser cache as an offline fallback, not as the authority.
       const nativePreferencePrefix = isBrowserClient ? "nativeBrowser" : "nativeDesktop";
       const nativeQualityKey = nativePreferencePrefix + "QualityMode";
+      const nativeAudioKey = nativePreferencePrefix + "AudioMode";
+      let preferredAudioMode = ["off","client","both"].includes(safeStorageGet(nativeAudioKey)) ? safeStorageGet(nativeAudioKey) : "off";
       const nativeTimeoutKey = nativePreferencePrefix + "IdleTimeoutSeconds";
       const nativePinKey = nativePreferencePrefix + "HudPinned";
       const nativePositionKey = nativePreferencePrefix + "HudPosition";
@@ -700,6 +706,8 @@
         const validFps = value => VALID_FPS_LIMITS.includes(value);
         const validScale = value => ["contain", "fill", "sync"].includes(value);
 
+        preferredAudioMode = choose(nativeAudioKey, value => ["off","client","both"].includes(value), preferredAudioMode);
+        safeStorageSet(nativeAudioKey, preferredAudioMode);
         currentQualityMode = choose(nativeQualityKey, validQuality, currentQualityMode);
         safeStorageSet("flyRemoteQualityMode", currentQualityMode);
         qualityModeSelect.value = currentQualityMode;
@@ -989,6 +997,7 @@
         return sendTransportMessage({
           type: "session_settings",
           idleTimeoutSeconds: sessionIdleTimeoutSeconds,
+          idleQualityReduction: !(navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches),
           resetIdle,
         });
       }
@@ -1011,6 +1020,10 @@
         if (!connected || sessionTimedOut) return;
         if (performance.now() - lastSessionActivityAt >= sessionIdleTimeoutSeconds * 1000) disconnectForIdle();
       }, 1000);
+      // Reapply policy after a bridge/source reconnect without counting it as input.
+      setInterval(() => {
+        if (!sessionTimedOut && (dataChannelOpen(reliableChannel) || socket?.readyState === WebSocket.OPEN)) sendSessionSettings(false);
+      }, 5000);
       const webrtcApiBase = wsPath.includes("native-browser")
         ? "/native-browser-webrtc-api"
         : "/desktop-webrtc-api";
@@ -1877,7 +1890,23 @@
             action.afterFrameId = Number(msg.afterFrameId || 0);
             action.ackedAt = performance.now();
           }
+        } else if (msg.type === "audio_status") {
+          if (!audioOwner || audioLeaseMode === "off") return;
+          if (msg.requestedMode && msg.requestedMode !== audioLeaseMode) return;
+          if (msg.error || msg.mode === "off") {
+            stopAudioLease("Звук недоступен");
+            showAudioStatus("Звук недоступен", msg.error || "Захват завершён. Нажмите для повтора.");
+          } else {
+            audioActualMode = msg.mode;
+            showAudioStatus(msg.mode === "client" ? "Звук: клиент" : "Звук: оба");
+          }
         } else if (msg.type === "control") {
+          const wasOwner = audioOwner;
+          audioOwner = !!msg.owner;
+          if (!audioOwner && audioLeaseMode !== "off") stopAudioLease("Звук недоступен");
+          refreshAudioControl();
+          if (!wasOwner && audioOwner) sendSessionSettings(false);
+          if (!wasOwner && audioOwner && preferredAudioMode !== "off" && audioTrackAvailable && usingWebRtc) activatePreferredAudio();
           if (!msg.owner && decodedFrameSeen) {
             statusBadge.textContent = "Только просмотр";
             statusBadge.className = "hud-badge badge-status warn";
@@ -2049,7 +2078,94 @@
         }
       }
 
+      // Native system audio: preference is distinct from the active lease.
+      const remoteAudio = document.getElementById("remoteAudio");
+      const audioModeSelect = document.getElementById("audioMode");
+      const audioStatusBtn = document.getElementById("audioStatusBtn");
+      let audioLeaseMode = "off", audioActualMode = "off", audioOwner = false, audioEpoch = 0;
+      let audioTrackAvailable = false, audioActivationPending = false;
+      function showAudioStatus(text, title = "") {
+        audioStatusBtn.hidden = !text;
+        audioStatusBtn.textContent = text || "Звук";
+        audioStatusBtn.title = title || text;
+      }
+      function stopAudioLease(reason = "") {
+        ++audioEpoch;
+        if (audioLeaseMode !== "off") sendTransportMessage({type:"audio_mode",mode:"off"});
+        audioLeaseMode = audioActualMode = "off";
+        audioActivationPending = false;
+        remoteAudio.pause();
+        showAudioStatus(reason, reason ? "Нажмите, чтобы повторить включение звука" : "");
+      }
+      function requestAudioLease(mode) {
+        if (!sendTransportMessage({type:"audio_mode",mode})) return false;
+        audioLeaseMode = mode;
+        return true;
+      }
+      function activatePreferredAudio() {
+        if (preferredAudioMode === "off") { stopAudioLease(); return; }
+        if (!usingWebRtc || !audioTrackAvailable || !audioOwner || !dataChannelOpen(reliableChannel)) {
+          showAudioStatus("Звук недоступен", "Нужен WebRTC и право управления");
+          return;
+        }
+        if (document.visibilityState === "hidden" || audioActivationPending || audioLeaseMode !== "off") return;
+        const epoch = ++audioEpoch;
+        audioActivationPending = true;
+        showAudioStatus("Подключение звука");
+        // Start unmuted locally until client playback is actually authorized.
+        // play() is invoked synchronously from the HUD gesture on iOS.
+        let playback;
+        try { playback = remoteAudio.play(); }
+        catch (_) { stopAudioLease("Включить звук"); return; }
+        if (!requestAudioLease("both")) { stopAudioLease("Включить звук"); return; }
+        Promise.resolve(playback).then(() => {
+          if (epoch !== audioEpoch) return;
+          audioActivationPending = false;
+          if (preferredAudioMode === "client") {
+            if (!requestAudioLease("client")) stopAudioLease("Включить звук");
+          }
+        }).catch(() => {
+          if (epoch === audioEpoch) stopAudioLease("Включить звук");
+        });
+        setTimeout(() => {
+          if (epoch === audioEpoch && audioActivationPending) stopAudioLease("Включить звук");
+        }, 12000);
+      }
+      function refreshAudioControl() {
+        audioModeSelect.value = preferredAudioMode;
+        audioModeSelect.disabled = !usingWebRtc || !audioTrackAvailable || !audioOwner;
+      }
+      audioModeSelect.addEventListener("change", () => {
+        const mode = audioModeSelect.value;
+        if (!["off","client","both"].includes(mode)) return;
+        preferredAudioMode = mode;
+        safeStorageSet(nativeAudioKey, mode);
+        queueNativePreferences({[nativeAudioKey]:mode});
+        stopAudioLease();
+        activatePreferredAudio();
+      });
+      audioStatusBtn.addEventListener("click", activatePreferredAudio);
+      remoteAudio.addEventListener("error", () => stopAudioLease("Ошибка звука"));
+      remoteAudio.addEventListener("pause", () => {
+        if (remoteAudio.paused && audioLeaseMode !== "off" && !audioActivationPending) stopAudioLease("Включить звук");
+      });
+      setInterval(() => {
+        if (audioLeaseMode !== "off") {
+          if (!usingWebRtc || !audioOwner || !dataChannelOpen(reliableChannel) || document.visibilityState === "hidden" ||
+              peerConnection?.connectionState !== "connected" || (remoteAudio.paused && !audioActivationPending)) stopAudioLease("Включить звук");
+          else sendTransportMessage({type:"audio_heartbeat"});
+        }
+      }, 2000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") stopAudioLease(preferredAudioMode === "off" ? "" : "Включить звук");
+        else if (preferredAudioMode !== "off") activatePreferredAudio();
+      });
+      window.addEventListener("pagehide", () => stopAudioLease());
+
       async function closeWebRtc(notifyServer = true) {
+        stopAudioLease();
+        audioOwner = audioTrackAvailable = false;
+        remoteAudio.srcObject = null;
         clearInterval(webRtcStatsTimer);
         webRtcStatsTimer = null;
         const sessionId = webRtcSessionId;
@@ -2059,6 +2175,7 @@
         reliableChannel = null;
         motionChannel = null;
         setVideoTransportActive(false);
+        refreshAudioControl();
         previousInboundStats = null;
         lastPresentedAt = lastSourceFrameAt = lastFreezeRecoveryAt = frozenSince = 0;
         baselineRttMs = null;
@@ -2085,6 +2202,7 @@
         reliableChannel = pc.createDataChannel("input-reliable", { ordered: true });
         motionChannel = pc.createDataChannel("input-motion", { ordered: false, maxRetransmits: 0 });
         pc.addTransceiver("video", { direction: "recvonly" });
+        pc.addTransceiver("audio", { direction: "recvonly" });
 
         reliableChannel.onmessage = (event) => handleServerText(event.data);
         reliableChannel.onopen = () => {
@@ -2100,8 +2218,14 @@
         let firstFrameResolve;
         const firstFrame = new Promise((resolve) => { firstFrameResolve = resolve; });
         pc.ontrack = (event) => {
+          if (event.track.kind === "audio") {
+            remoteAudio.srcObject = new MediaStream([event.track]);
+            audioTrackAvailable = true;
+            refreshAudioControl();
+            return;
+          }
           if (event.track.kind !== "video") return;
-          screenVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
+          screenVideo.srcObject = new MediaStream([event.track]);
           screenVideo.onloadedmetadata = () => {
             streamWidth = screenVideo.videoWidth || streamWidth;
             streamHeight = screenVideo.videoHeight || streamHeight;
@@ -2117,6 +2241,7 @@
         pc.onconnectionstatechange = () => {
           if (pc !== peerConnection) return;
           if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+            stopAudioLease(preferredAudioMode === "off" ? "" : "Включить звук");
             setTimeout(() => {
               if (pc === peerConnection && (pc.connectionState === "failed" || pc.connectionState === "disconnected")) restartWebRtcIce();
             }, 700);
@@ -2130,6 +2255,7 @@
         webRtcSessionId = answer.session_id;
         await pc.setRemoteDescription(answer.sdp);
         setVideoTransportActive(true);
+        refreshAudioControl();
         await waitForDataChannel(reliableChannel);
         await Promise.race([
           firstFrame,
@@ -2144,6 +2270,8 @@
         startVideoFrameObserver();
         startWebRtcStats();
         sendProbe();
+        refreshAudioControl();
+        if (preferredAudioMode !== "off") activatePreferredAudio();
         return true;
       }
 
@@ -2754,6 +2882,7 @@
       // Start with the canonical server settings, including after clearing browser data.
       loadNativePreferences().finally(async () => {
         applyFitMode();
+        refreshAudioControl();
         await syncSelectedDisplayResolution();
         connect();
       });
