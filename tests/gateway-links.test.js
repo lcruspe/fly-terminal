@@ -22,3 +22,14 @@ test('Oracle and local port mappings stay intact',()=>{
   assert.equal(links('129-158-49-130.sslip.io','')[0], 'https://129-158-49-130.sslip.io:8443/');
   assert.equal(links('localhost','8080','http:')[0], 'http://localhost:8081/');
 });
+
+test('Browser actions include the existing main desktop VNC route',()=>{
+  const html=fs.readFileSync(require('node:path').join(__dirname,'../macos/gateway/admin.html'),'utf8');
+  const menu=html.slice(html.indexOf('id="actions-browser"'),html.indexOf('</article>',html.indexOf('id="actions-browser"')));
+  const match=menu.match(/data-path="([^"]+)" href="#">Открыть RDC VNC<\/a>/);
+  assert.ok(match);
+  const url=new URL(match[1].replaceAll('&amp;','&'),'https://example.test:8443');
+  assert.equal(url.pathname,'/desktop/vnc.html');
+  assert.equal(url.searchParams.get('path'),'desktop-ws');
+  assert.equal(url.searchParams.get('autoconnect'),'true');
+});

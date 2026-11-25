@@ -407,3 +407,5 @@ HUD содержит режимы «Звук: выкл.», «Только кли
 На устройствах с touch input режим снижения качества после простоя отключён; адаптация к реальным сетевым проблемам и таймер полного отключения сессии сохраняются.
 
 Native RDC capture (5905) is supervised exclusively by its dedicated macOS streamer LaunchAgent. The ttyd stack must not start a duplicate capture process; its optional streamer script is opt-in only outside the macOS launcher.
+
+В Gateway → Браузер → меню действий доступен отдельный пункт «Открыть RDC VNC»: штатный noVNC-маршрут основного рабочего стола Mac, независимый от Native Browser и Browser Fallback.
