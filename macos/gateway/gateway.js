@@ -37,6 +37,19 @@
   const storageKey = "fly-gateway-view-v1";
   const themeStorageKey = "fly-gateway-theme-v1";
   const themeToggle = dashboard.querySelector("#gatewayThemeToggle");
+  const styleStorageKey = "fly-gateway-style-v1";
+  const styleToggle = dashboard.querySelector("#gatewayStyleToggle");
+  function applyStyle(mode, persist = false) {
+    const retro = mode === "retro";
+    document.documentElement.dataset.gatewayStyle = retro ? "retro" : "classic";
+    styleToggle?.setAttribute("aria-pressed", String(retro));
+    styleToggle?.setAttribute("aria-label", retro ? "Включить классический стиль" : "Включить стиль Retro Pixel");
+    if (styleToggle) styleToggle.title = retro ? "Классический стиль" : "Retro Pixel";
+    if (persist) {
+      try { localStorage.setItem(styleStorageKey, retro ? "retro" : "classic"); } catch {}
+    }
+    applyTheme(document.documentElement.dataset.gatewayTheme);
+  }
   function applyTheme(mode, persist = false) {
     const light = mode === "light";
     document.documentElement.dataset.gatewayTheme = light ? "light" : "dark";
@@ -44,12 +57,16 @@
     themeToggle.setAttribute("aria-label", light ? "Включить тёмную тему" : "Включить светлую тему");
     themeToggle.title = light ? "Тёмная тема" : "Светлая тема";
     const color = document.querySelector('meta[name="theme-color"]');
-    if (color) color.content = light ? "#f5f7fb" : "#0d1118";
+    if (color) color.content = document.documentElement.dataset.gatewayStyle === "retro"
+      ? (light ? "#f8d69a" : "#171d31") : (light ? "#f5f7fb" : "#0d1118");
     if (persist) {
       try { localStorage.setItem(themeStorageKey, light ? "light" : "dark"); } catch {}
     }
   }
-  applyTheme(document.documentElement.dataset.gatewayTheme);
+  applyStyle(document.documentElement.dataset.gatewayStyle);
+  styleToggle?.addEventListener("click", () => {
+    applyStyle(document.documentElement.dataset.gatewayStyle === "retro" ? "classic" : "retro", true);
+  });
   themeToggle.addEventListener("click", () => {
     applyTheme(document.documentElement.dataset.gatewayTheme === "light" ? "dark" : "light", true);
   });

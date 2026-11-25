@@ -9,9 +9,12 @@
     try {
       document.documentElement.dataset.gatewayTheme =
         localStorage.getItem("fly-gateway-theme-v1") === "light" ? "light" : "dark";
+      document.documentElement.dataset.gatewayStyle = localStorage.getItem("fly-gateway-style-v1") === "retro" ? "retro" : "classic";
       if (document.documentElement.dataset.gatewayTheme === "light")
         document.querySelector('meta[name="theme-color"]').content = "#f5f7fb";
-    } catch { document.documentElement.dataset.gatewayTheme = "dark"; }
+      if (document.documentElement.dataset.gatewayStyle === "retro")
+        document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.gatewayTheme === "light" ? "#f8d69a" : "#171d31";
+    } catch { document.documentElement.dataset.gatewayTheme = "dark"; document.documentElement.dataset.gatewayStyle = "classic"; }
   </script>
   <title>Fly Gateway · Сервисы Mac mini</title>
   <link rel="stylesheet" href="/gateway.css">
@@ -45,6 +48,7 @@
           <button type="button" data-view-mode="tiles" aria-pressed="true">Плитки</button>
           <button type="button" data-view-mode="table" aria-pressed="false">Таблица</button>
         </div>
+        <button type="button" class="theme-toggle style-toggle" id="gatewayStyleToggle" aria-label="Включить стиль Retro Pixel" aria-pressed="false" title="Retro Pixel">8-bit</button>
         <button type="button" class="theme-toggle" id="gatewayThemeToggle"
                 aria-label="Включить светлую тему" title="Светлая тема" aria-pressed="false">
           <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

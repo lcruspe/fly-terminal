@@ -78,3 +78,12 @@ test('mobile table status chips and indicator dots align to the left of the midd
   assert.match(css, /body\.dashboard-page \.service-table \.service-status > \[data-health\] \{[^}]*flex-direction: row;[^}]*justify-content: flex-start;[^}]*text-align: left;/s);
   assert.match(css, /body\.dashboard-page \.service-table \.service-health \{ order: -1; \}/);
 });
+
+test('Retro Pixel is independent of the existing light/dark setting', () => {
+  assert.match(html, /id="gatewayStyleToggle"/);
+  assert.match(html, /localStorage.getItem\("fly-gateway-style-v1"\)/);
+  assert.match(js, /localStorage.setItem\(styleStorageKey/);
+  assert.match(js, /styleToggle\?\.addEventListener\("click"/);
+  assert.match(css, /html\[data-gateway-style="retro"\]\[data-gateway-theme="light"\]/);
+  assert.match(css, /html\[data-gateway-style="retro"\] body.dashboard-page/);
+});
