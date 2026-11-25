@@ -458,6 +458,7 @@ class ClientState:
     media_bridge: bool = False
     last_reliable_seq: int = 0
     clipboard_transfer: Optional[dict] = None
+    audio_pcm: bool = False
     audio_mode: str = "off"
     audio_deadline: float = 0
     audio_timestamp: int = 0
@@ -501,7 +502,8 @@ class StreamServer:
         error = None
         try:
             binary = Path.home() / "Applications/FlyAudioCapture.app/Contents/MacOS/FlyAudioCapture"
-            proc = await asyncio.create_subprocess_exec(str(binary), mode, stdin=asyncio.subprocess.PIPE,
+            args = [str(binary), mode] + (["pcm"] if state.audio_pcm else [])
+            proc = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE,
                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             ready = await asyncio.wait_for(proc.stderr.readline(), 8)
             if ready.strip() != b"audio_ready":
@@ -515,14 +517,14 @@ class StreamServer:
                 except asyncio.TimeoutError:
                     continue
                 size = int.from_bytes(header, "big")
-                if not 0 < size <= 1275:
+                if (state.audio_pcm and size != 3840) or (not state.audio_pcm and not 0 < size <= 1275):
                     raise RuntimeError("invalid_audio_packet")
                 packet = await asyncio.wait_for(proc.stdout.readexactly(size), 1)
                 # 20 ms of 48 kHz PCM per packet; RTP clock does not depend on pipe jitter.
                 timestamp = state.audio_timestamp
                 state.audio_timestamp = (timestamp + 960) & 0xffffffff
                 if sum(item.kind == "audio" for item in state.queue) < 8:
-                    state.queue.append(OutboundMessage("audio", b"\x40"+struct.pack(">I", timestamp)+packet, time.monotonic_ns()))
+                    state.queue.append(OutboundMessage("audio", (b"\x41" if state.audio_pcm else b"\x40")+struct.pack(">I", timestamp)+packet, time.monotonic_ns()))
                     state.queue_event.set()
         except asyncio.CancelledError:
             raise
@@ -541,8 +543,8 @@ class StreamServer:
             state.audio_mode = "off"
             self._enqueue_json(state, {"type":"audio_status", "mode":"off", "requestedMode":mode, "error":error})
 
-    async def set_audio_mode(self, state, mode):
-        if mode not in {"off","client","both"} or not state.media_bridge or not self._is_control_owner(state):
+    async def set_audio_mode(self, state, mode, pcm=False):
+        if mode not in {"off","client","both"} or not self._is_control_owner(state) or (mode != "off" and not state.media_bridge and not pcm):
             return
         state.audio_deadline = time.monotonic()+8
         if state.audio_task and not state.audio_task.done() and mode == state.audio_mode:
@@ -551,6 +553,7 @@ class StreamServer:
             state.audio_task.cancel()
             await asyncio.gather(state.audio_task, return_exceptions=True)
         state.queue = deque(item for item in state.queue if item.kind != "audio")
+        state.audio_pcm = bool(pcm and not state.media_bridge)
         state.audio_mode = mode
         if mode != "off":
             state.audio_task = asyncio.create_task(self.audio_capture(state, mode))
@@ -1156,6 +1159,7 @@ class StreamServer:
             "requestedBitrate": self.requested_bitrate,
             "clientId": state.client_id,
             "canControl": self._is_control_owner(state),
+            "audioPcm": True,
         })
         # Старый keyframe намеренно не отправляется: новому клиенту нужна свежая точка входа.
         self.request_keyframe("new_client")
@@ -1211,11 +1215,11 @@ class StreamServer:
                         self._enqueue_json(state, {"type": "bridge_ready", "clientId": state.client_id})
                         continue
                     if msg_type == "audio_heartbeat":
-                        if state.media_bridge and self._is_control_owner(state) and state.audio_mode != "off":
+                        if self._is_control_owner(state) and state.audio_mode != "off":
                             state.audio_deadline = time.monotonic()+8
                         continue
                     if msg_type == "audio_mode":
-                        await self.set_audio_mode(state, data.get("mode"))
+                        await self.set_audio_mode(state, data.get("mode"), data.get("format") == "pcm16")
                         continue
                     if msg_type == "bridge_keepalive" and state.media_bridge:
                         continue

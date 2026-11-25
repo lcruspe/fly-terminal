@@ -20,7 +20,8 @@ static void check(NSString *where, OSStatus status) {
 }
 int main(int argc, const char **argv) {
     @autoreleasepool {
-        if (argc != 2 || (strcmp(argv[1], "client") && strcmp(argv[1], "both"))) return 2;
+        if ((argc != 2 && argc != 3) || (strcmp(argv[1], "client") && strcmp(argv[1], "both"))) return 2;
+        BOOL pcmMode = argc == 3 && strcmp(argv[2], "pcm") == 0;
         // Only one system-audio capture across the two independent Native services.
         NSString *lock = [NSHomeDirectory() stringByAppendingPathComponent:@".local/share/fly-terminal/audio.lock"];
         int fd = open(lock.fileSystemRepresentation, O_CREAT|O_RDWR|O_NOFOLLOW, 0600);
@@ -86,8 +87,17 @@ int main(int argc, const char **argv) {
                 [pending appendBytes:pcm.audioBufferList->mBuffers[0].mData length:pcm.frameLength*2*sizeof(float)];
                 const NSUInteger frameBytes = 960*2*sizeof(float);
                 while (pending.length >= frameBytes) {
-                    unsigned char encoded[1275];
-                    int n = opus_encode_float(encoder, pending.bytes, 960, encoded, sizeof(encoded));
+                    unsigned char encoded[3840];
+                    int n;
+                    if (pcmMode) {
+                        const float *samples = pending.bytes;
+                        for (int i=0;i<1920;i++) {
+                            float value = isfinite(samples[i]) ? fmaxf(-1, fminf(1, samples[i])) : 0;
+                            uint16_t v = (uint16_t)(int16_t)lrintf(value * 32767);
+                            encoded[2*i] = v & 255; encoded[2*i+1] = v >> 8;
+                        }
+                        n = 3840;
+                    } else n = opus_encode_float(encoder, pending.bytes, 960, encoded, 1275);
                     [pending replaceBytesInRange:NSMakeRange(0,frameBytes) withBytes:NULL length:0];
                     if (n <= 0) continue;
                     uint16_t length = htons((uint16_t)n);

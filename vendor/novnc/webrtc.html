@@ -1834,6 +1834,11 @@
           statusBadge.textContent = "Буфер: " + Number(msg.count || 0) + " файл(а)";
           statusBadge.className = "hud-badge badge-status";
         } else if (msg.type === "init") {
+          if (!usingWebRtc && msg.audioPcm === true) {
+            audioPcmAvailable = true;
+            refreshAudioControl();
+            if (audioOwner && preferredAudioMode !== "off") activatePreferredAudio();
+          }
           if (!usingWebRtc && !await initVideoDecoder(msg.codec || activeCodec)) return;
           streamWidth = msg.width || streamWidth;
           streamHeight = msg.height || streamHeight;
@@ -1906,7 +1911,7 @@
           if (!audioOwner && audioLeaseMode !== "off") stopAudioLease("Звук недоступен");
           refreshAudioControl();
           if (!wasOwner && audioOwner) sendSessionSettings(false);
-          if (!wasOwner && audioOwner && preferredAudioMode !== "off" && audioTrackAvailable && usingWebRtc) activatePreferredAudio();
+          if (!wasOwner && audioOwner && preferredAudioMode !== "off" && audioTransportAvailable()) activatePreferredAudio();
           if (!msg.owner && decodedFrameSeen) {
             statusBadge.textContent = "Только просмотр";
             statusBadge.className = "hud-badge badge-status warn";
@@ -2084,6 +2089,61 @@
       const audioStatusBtn = document.getElementById("audioStatusBtn");
       let audioLeaseMode = "off", audioActualMode = "off", audioOwner = false, audioEpoch = 0;
       let audioTrackAvailable = false, audioActivationPending = false;
+      let audioPcmAvailable = false, pcmContext = null, pcmNextTime = 0;
+      let pcmFirstPacket = null, pcmLastAt = 0;
+      const pcmSources = new Set();
+      function pcmTransportAvailable() {
+        return !usingWebRtc && audioPcmAvailable && !!(window.AudioContext || window.webkitAudioContext) &&
+          socket?.readyState === WebSocket.OPEN;
+      }
+      function audioTransportAvailable() {
+        return usingWebRtc ? audioTrackAvailable && dataChannelOpen(reliableChannel) : pcmTransportAvailable();
+      }
+      function clearPcmPlayback() {
+        pcmFirstPacket = null;
+        pcmNextTime = pcmLastAt = 0;
+        for (const source of pcmSources) { try { source.stop(); } catch (_) {} }
+        pcmSources.clear();
+        if (pcmContext?.state === "running") pcmContext.suspend().catch(() => {});
+      }
+      function startPcmPlayback() {
+        if (!pcmContext || pcmContext.state === "closed") {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          pcmContext = new AudioContextClass({latencyHint:"interactive"});
+        }
+        // Resume must begin synchronously inside the user gesture on iOS.
+        const resumed = pcmContext.resume();
+        const received = new Promise(resolve => { pcmFirstPacket = resolve; });
+        return Promise.all([resumed, received]);
+      }
+      function receivePcmPacket(buffer) {
+        if (buffer.byteLength !== 3845 || usingWebRtc || audioLeaseMode === "off" ||
+            !pcmContext || pcmContext.state !== "running") return;
+        const now = pcmContext.currentTime;
+        if (pcmNextTime < now || pcmNextTime > now + 0.24) {
+          if (pcmNextTime > now + 0.24) {
+            for (const source of pcmSources) { try { source.stop(); } catch (_) {} }
+            pcmSources.clear();
+          }
+          pcmNextTime = now + 0.04;
+        }
+        const packet = new DataView(buffer);
+        const samples = pcmContext.createBuffer(2,960,48000);
+        const left = samples.getChannelData(0), right = samples.getChannelData(1);
+        for (let i=0;i<960;i++) {
+          left[i] = packet.getInt16(5+i*4,true)/32768;
+          right[i] = packet.getInt16(7+i*4,true)/32768;
+        }
+        const source = pcmContext.createBufferSource();
+        source.buffer = samples;
+        source.connect(pcmContext.destination);
+        pcmSources.add(source);
+        source.onended = () => pcmSources.delete(source);
+        source.start(pcmNextTime);
+        pcmNextTime += 0.02;
+        pcmLastAt = performance.now();
+        if (pcmFirstPacket) { const resolve = pcmFirstPacket; pcmFirstPacket = null; resolve(); }
+      }
       function showAudioStatus(text, title = "") {
         audioStatusBtn.hidden = !text;
         audioStatusBtn.textContent = text || "Звук";
@@ -2095,17 +2155,18 @@
         audioLeaseMode = audioActualMode = "off";
         audioActivationPending = false;
         remoteAudio.pause();
+        clearPcmPlayback();
         showAudioStatus(reason, reason ? "Нажмите, чтобы повторить включение звука" : "");
       }
       function requestAudioLease(mode) {
-        if (!sendTransportMessage({type:"audio_mode",mode})) return false;
+        if (!sendTransportMessage(usingWebRtc ? {type:"audio_mode",mode} : {type:"audio_mode",mode,format:"pcm16"})) return false;
         audioLeaseMode = mode;
         return true;
       }
       function activatePreferredAudio() {
         if (preferredAudioMode === "off") { stopAudioLease(); return; }
-        if (!usingWebRtc || !audioTrackAvailable || !audioOwner || !dataChannelOpen(reliableChannel)) {
-          showAudioStatus("Звук недоступен", "Нужен WebRTC и право управления");
+        if (!audioTransportAvailable() || !audioOwner) {
+          showAudioStatus("Звук недоступен", "Нужно подключение с поддержкой аудио и право управления");
           return;
         }
         if (document.visibilityState === "hidden" || audioActivationPending || audioLeaseMode !== "off") return;
@@ -2115,7 +2176,7 @@
         // Start unmuted locally until client playback is actually authorized.
         // play() is invoked synchronously from the HUD gesture on iOS.
         let playback;
-        try { playback = remoteAudio.play(); }
+        try { playback = usingWebRtc ? remoteAudio.play() : startPcmPlayback(); }
         catch (_) { stopAudioLease("Включить звук"); return; }
         if (!requestAudioLease("both")) { stopAudioLease("Включить звук"); return; }
         Promise.resolve(playback).then(() => {
@@ -2133,7 +2194,7 @@
       }
       function refreshAudioControl() {
         audioModeSelect.value = preferredAudioMode;
-        audioModeSelect.disabled = !usingWebRtc || !audioTrackAvailable || !audioOwner;
+        audioModeSelect.disabled = !audioTransportAvailable() || !audioOwner;
       }
       audioModeSelect.addEventListener("change", () => {
         const mode = audioModeSelect.value;
@@ -2147,12 +2208,14 @@
       audioStatusBtn.addEventListener("click", activatePreferredAudio);
       remoteAudio.addEventListener("error", () => stopAudioLease("Ошибка звука"));
       remoteAudio.addEventListener("pause", () => {
-        if (remoteAudio.paused && audioLeaseMode !== "off" && !audioActivationPending) stopAudioLease("Включить звук");
+        if (usingWebRtc && remoteAudio.paused && audioLeaseMode !== "off" && !audioActivationPending) stopAudioLease("Включить звук");
       });
       setInterval(() => {
         if (audioLeaseMode !== "off") {
-          if (!usingWebRtc || !audioOwner || !dataChannelOpen(reliableChannel) || document.visibilityState === "hidden" ||
-              peerConnection?.connectionState !== "connected" || (remoteAudio.paused && !audioActivationPending)) stopAudioLease("Включить звук");
+          const playbackLost = usingWebRtc
+            ? peerConnection?.connectionState !== "connected" || (remoteAudio.paused && !audioActivationPending)
+            : !audioActivationPending && (pcmContext?.state !== "running" || performance.now()-pcmLastAt > 6000);
+          if (!audioTransportAvailable() || !audioOwner || document.visibilityState === "hidden" || playbackLost) stopAudioLease("Включить звук");
           else sendTransportMessage({type:"audio_heartbeat"});
         }
       }, 2000);
@@ -2164,7 +2227,7 @@
 
       async function closeWebRtc(notifyServer = true) {
         stopAudioLease();
-        audioOwner = audioTrackAvailable = false;
+        audioOwner = audioTrackAvailable = audioPcmAvailable = false;
         remoteAudio.srcObject = null;
         clearInterval(webRtcStatsTimer);
         webRtcStatsTimer = null;
@@ -2296,6 +2359,8 @@
         statusBadge.className = "hud-badge badge-status warn";
 
         try {
+          audioOwner = audioPcmAvailable = false;
+          refreshAudioControl();
           socket = new WebSocket(wsUrl);
           socket.binaryType = "arraybuffer";
 
@@ -2327,6 +2392,9 @@
             }
 
             if (event.data instanceof ArrayBuffer) {
+              const kind = new Uint8Array(event.data,0,Math.min(1,event.data.byteLength))[0];
+              if (kind === 0x41) { receivePcmPacket(event.data); return; }
+              if (kind === 0x40) return;
               if (!isDecoderReady) {
                 if (pendingVideoPackets.length >= 8) pendingVideoPackets.shift();
                 pendingVideoPackets.push(event.data);
@@ -2337,6 +2405,9 @@
           };
 
           socket.onclose = (event) => {
+            stopAudioLease();
+            audioOwner = audioPcmAvailable = false;
+            refreshAudioControl();
             clearTimeout(decoderWatchdog);
             if (decoderFallbackTriggered) return;
             statusBadge.textContent = "Отключено";
