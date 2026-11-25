@@ -31,4 +31,6 @@ ulimit -n 8192
 
 mkdir -p "${FLY_TERMINAL_HISTORY_DIR}"
 
+# Native capture is supervised exclusively by its own LaunchAgent.
+unset FLY_TERMINAL_STREAMER_SCRIPT
 exec "${REPO_ROOT}/run-ttyd-stack.sh"
