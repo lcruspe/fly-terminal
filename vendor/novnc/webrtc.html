@@ -324,6 +324,7 @@
     #qualityMode,
     #fpsLimit,
     #streamResolution,
+    #captureDisplay,
     #idleTimeout {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -2249,6 +2250,35 @@
         }
       }
 
+      let displayResolutionQueue = Promise.resolve();
+      function syncSelectedDisplayResolution() {
+        // Window auto-resize owns the display geometry; Sync reads it.
+        if (autoResizeEnabled || fitMode === "sync" || requestedDisplayName === "Fly Browser") return Promise.resolve();
+        const target = requestedDisplayName === "Fly Remote" ? "virtual" : "main";
+        const resolution = requestedResolution;
+        displayResolutionQueue = displayResolutionQueue.then(async () => {
+          // Ignore superseded requests before touching the physical display.
+          if (autoResizeEnabled || fitMode === "sync" || requestedDisplayName === "Fly Browser" ||
+              target !== (requestedDisplayName === "Fly Remote" ? "virtual" : "main") || resolution !== requestedResolution) return;
+          try {
+            const response = await fetch("/api/desktop/display-resolution", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ target, resolution, automatic: false })
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || "HTTP " + response.status);
+            configureStream(true);
+            requestFreshKeyframe("display_resolution_applied");
+          } catch (error) {
+            statusBadge.textContent = error.message === "resolution_not_supported" ? "Режим экрана недоступен" : "Ошибка разрешения экрана";
+            statusBadge.className = "hud-badge badge-status error";
+            statusBadge.title = String(error.message || error);
+            console.warn("Unable to apply selected display resolution", error);
+          }
+        });
+        return displayResolutionQueue;
+      }
+
       function applyCaptureDisplay(value) {
         if (!["", isBrowserClient ? "Fly Browser" : "Fly Remote"].includes(value)) return;
         requestedDisplayName = value;
@@ -2260,6 +2290,7 @@
         resetClientIdleClock();
         sendTransportMessage({ type: "session_activity" });
         configureStream(true);
+        syncSelectedDisplayResolution();
         if (!isBrowserClient && window.parent !== window) {
           window.parent.postMessage({ type: "fly-desktop-display", display: value }, window.location.origin);
         }
@@ -2271,7 +2302,9 @@
       autoResizeBtn.addEventListener("click", () => setAutoResizeEnabled(!autoResizeEnabled));
       idleTimeoutSelect.value = String(sessionIdleTimeoutSeconds);
       fpsLimitSelect.addEventListener("change", () => applyFpsLimit(fpsLimitSelect.value));
-      streamResolutionSelect.addEventListener("change", () => applyStreamResolution(streamResolutionSelect.value));
+      streamResolutionSelect.addEventListener("change", () => {
+        if (applyStreamResolution(streamResolutionSelect.value)) syncSelectedDisplayResolution();
+      });
       idleTimeoutSelect.addEventListener("change", () => {
         const timeout = Number(idleTimeoutSelect.value);
         if (!IDLE_TIMEOUT_OPTIONS.includes(timeout)) return;
@@ -2285,7 +2318,7 @@
       window.addEventListener("message", (event) => {
         if (event.origin !== window.location.origin) return;
         if (event.data?.type === "fly-desktop-set-fps") applyFpsLimit(event.data.fps, false);
-        if (event.data?.type === "fly-desktop-set-resolution") applyStreamResolution(event.data.resolution, false);
+        if (event.data?.type === "fly-desktop-set-resolution" && applyStreamResolution(event.data.resolution, false)) syncSelectedDisplayResolution();
         if (event.data?.type === "fly-desktop-set-auto-resize" && !isBrowserClient) {
           setAutoResizeEnabled(event.data.enabled, false);
         }
@@ -2543,8 +2576,9 @@
       };
 
       // Start with the canonical server settings, including after clearing browser data.
-      loadNativePreferences().finally(() => {
+      loadNativePreferences().finally(async () => {
         applyFitMode();
+        await syncSelectedDisplayResolution();
         connect();
       });
     })();

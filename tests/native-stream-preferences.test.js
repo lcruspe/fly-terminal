@@ -76,7 +76,7 @@ test('HUD exposes capture display selection and labels Sync resolution explicitl
     isBrowserClient: false, requestedDisplayName: 'Fly Remote', autoResizeEnabled: true,
     URL, window: { location: { href: 'https://example.test/desktop/webrtc.html?display=Fly%20Remote', origin: 'https://example.test' } },
     history: { replaceState: (_, __, url) => calls.push(url.search) },
-    setAutoResizeEnabled: value => calls.push(value), resetClientIdleClock() {},
+    setAutoResizeEnabled: value => calls.push(value), resetClientIdleClock() {}, syncSelectedDisplayResolution() {},
     sendTransportMessage: message => calls.push(message), configureStream: force => calls.push(force),
   };
   ctx.window.parent = ctx.window;
@@ -87,4 +87,30 @@ test('HUD exposes capture display selection and labels Sync resolution explicitl
   assert.deepEqual(calls.slice(0, 2), [false, '']);
   ctx.applyCaptureDisplay('Fly Browser');
   assert.equal(ctx.requestedDisplayName, '');
+});
+
+test('manual resolution updates only the captured display, not Sync or window auto resize', async () => {
+  const code = html.slice(html.indexOf('      let displayResolutionQueue ='), html.indexOf('      function applyCaptureDisplay('));
+  const calls = [];
+  const ctx = {
+    autoResizeEnabled: false, fitMode: 'contain', requestedDisplayName: '', requestedResolution: '1600x900',
+    fetch: async (url, opts) => {
+      calls.push(JSON.parse(opts.body));
+      return {ok: true, json: async () => ({ok: true})};
+    },
+    configureStream() {}, requestFreshKeyframe() {}, statusBadge: {}, console,
+  };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  await ctx.syncSelectedDisplayResolution();
+  assert.deepEqual(calls[0], {target: 'main', resolution: '1600x900', automatic: false});
+  ctx.requestedDisplayName = 'Fly Remote';
+  await ctx.syncSelectedDisplayResolution();
+  assert.equal(calls[1].target, 'virtual');
+  ctx.autoResizeEnabled = true;
+  await ctx.syncSelectedDisplayResolution();
+  ctx.autoResizeEnabled = false;
+  ctx.fitMode = 'sync';
+  await ctx.syncSelectedDisplayResolution();
+  assert.equal(calls.length, 2);
 });
