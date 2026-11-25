@@ -44,6 +44,7 @@
       align-items: center;
       justify-content: center;
       position: relative;
+      overflow: hidden;
       background: #000;
       cursor: default;
     }
@@ -61,6 +62,7 @@
     }
 
     #screenVideo { display: none; background: #000; }
+    #zoomResetBtn[hidden] { display: none; }
 
     #inputLayer {
       position: absolute;
@@ -408,6 +410,7 @@
         </select>
         <button type="button" class="hud-btn" id="diagnosticsBtn" title="Диагностика задержек и потока">Диагностика</button>
         <button type="button" class="hud-btn" id="scaleModeBtn" title="Режим масштабирования">Fit</button>
+        <button type="button" class="hud-btn" id="zoomResetBtn" title="Сбросить локальный масштаб" aria-label="Сбросить масштаб" hidden>100%</button>
         <button type="button" class="hud-btn hud-icon-btn" id="fullscreenBtn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
         <button type="button" class="hud-btn hud-icon-btn" id="hudPinBtn" title="Закрепить панель" aria-label="Закрепить панель" aria-pressed="false">📌</button>
         <button type="button" class="hud-btn hud-icon-btn" id="hudCollapseBtn" title="Свернуть панель" aria-label="Свернуть панель">⌃</button>
@@ -2450,7 +2453,101 @@
         return { x: normX, y: normY };
       }
 
+      // Touch gestures are isolated from mouse events. A second finger never
+      // creates a second remote mouse press.
+      const touchPoints = new Map();
+      let touchGesture = null;
+      let viewZoom = 1, viewX = 0, viewY = 0;
+      function setTouchZoom(zoom, x, y) {
+        viewZoom = Math.max(1, Math.min(5, zoom));
+        const maxX = viewport.clientWidth * (viewZoom - 1) / 2;
+        const maxY = viewport.clientHeight * (viewZoom - 1) / 2;
+        viewX = Math.max(-maxX, Math.min(maxX, x));
+        viewY = Math.max(-maxY, Math.min(maxY, y));
+        const transform = `translate(${viewX}px, ${viewY}px) scale(${viewZoom})`;
+        canvas.style.transform = screenVideo.style.transform = transform;
+        zoomResetBtn.textContent = Math.round(viewZoom * 100) + "%";
+        zoomResetBtn.hidden = viewZoom === 1;
+      }
+      const zoomResetBtn = document.getElementById("zoomResetBtn");
+      zoomResetBtn.onclick = () => setTouchZoom(1, 0, 0);
+      window.addEventListener("resize", () => setTouchZoom(viewZoom, viewX, viewY));
+      function touchPair() {
+        const [a,b] = [...touchPoints.values()];
+        return { x: (a.x+b.x)/2, y: (a.y+b.y)/2, distance: Math.max(1, Math.hypot(a.x-b.x,a.y-b.y)) };
+      }
+      function touchDown(e) {
+        e.preventDefault();
+        focusRemoteInput();
+        try { inputLayer.setPointerCapture(e.pointerId); } catch (_) {}
+        touchPoints.set(e.pointerId, {x:e.clientX,y:e.clientY});
+        if (touchPoints.size === 1) {
+          touchGesture = { mode:"tap", startX:e.clientX, startY:e.clientY, lastX:e.clientX, lastY:e.clientY };
+        } else if (touchPoints.size === 2) {
+          if (touchGesture?.pressed) {
+            registerInput({type:"mouseup",button:0,...getNormalizedCoords({clientX:touchGesture.lastX,clientY:touchGesture.lastY})});
+          }
+          const pair = touchPair();
+          touchGesture = { mode:"pending", start:pair, last:pair, zoom:viewZoom, x:viewX, y:viewY };
+        } else if (touchGesture) touchGesture.mode = "blocked";
+      }
+      function touchMove(e) {
+        if (!touchPoints.has(e.pointerId)) return;
+        e.preventDefault();
+        touchPoints.set(e.pointerId, {x:e.clientX,y:e.clientY});
+        const g = touchGesture;
+        if (!g || g.mode === "blocked") return;
+        if (touchPoints.size === 2) {
+          const pair = touchPair();
+          if (g.mode === "pending") {
+            const spread = Math.abs(pair.distance-g.start.distance);
+            const travel = Math.hypot(pair.x-g.start.x,pair.y-g.start.y);
+            if (spread >= 8 && spread >= travel * 0.65) g.mode = "pinch";
+            else if (travel >= 10) g.mode = "scroll";
+            else return;
+          }
+          if (g.mode === "pinch") {
+            const rect = viewport.getBoundingClientRect();
+            const cx = rect.left+rect.width/2, cy = rect.top+rect.height/2;
+            const zoom = Math.max(1,Math.min(5,g.zoom*pair.distance/g.start.distance));
+            const ratio = zoom/g.zoom;
+            setTouchZoom(zoom, pair.x-cx-(g.start.x-cx-g.x)*ratio, pair.y-cy-(g.start.y-cy-g.y)*ratio);
+          } else if (g.mode === "scroll") {
+            registerInput({type:"mousemove", ...getNormalizedCoords({clientX:pair.x,clientY:pair.y})},false);
+            registerInput({type:"wheel",dx:pair.x-g.last.x,dy:pair.y-g.last.y},false);
+          }
+          g.last = pair;
+        } else if (touchPoints.size === 1) {
+          if (g.mode === "tap" && Math.hypot(e.clientX-g.startX,e.clientY-g.startY)>8) g.mode = viewZoom>1 ? "pan" : "drag";
+          if (g.mode === "pan") setTouchZoom(viewZoom,viewX+e.clientX-g.lastX,viewY+e.clientY-g.lastY);
+          else if (g.mode === "drag") {
+            if (!g.pressed) {
+              registerInput({type:"mousedown",button:0,...getNormalizedCoords({clientX:g.startX,clientY:g.startY})});
+              g.pressed = true;
+            }
+            registerInput({type:"mousemove",...getNormalizedCoords(e)},false);
+          }
+          g.lastX=e.clientX; g.lastY=e.clientY;
+        }
+      }
+      function touchEnd(e,cancelled=false) {
+        e.preventDefault();
+        if (!touchPoints.has(e.pointerId)) return;
+        const g=touchGesture;
+        if (g?.pressed) registerInput({type:"mouseup",button:0,...getNormalizedCoords(e)});
+        if (!cancelled && g?.mode==="tap" && touchPoints.size===1) {
+          const coords=getNormalizedCoords(e);
+          registerInput({type:"mousedown",button:0,...coords});
+          registerInput({type:"mouseup",button:0,...coords});
+        }
+        touchPoints.delete(e.pointerId);
+        try { inputLayer.releasePointerCapture(e.pointerId); } catch (_) {}
+        touchGesture=touchPoints.size ? {mode:"blocked"} : null;
+        if (cancelled) sendTransportMessage({type:"reset_input"});
+      }
+
       inputLayer.addEventListener("pointermove", (e) => {
+        if (e.pointerType === "touch") return touchMove(e);
         const coords = getNormalizedCoords(e);
         lastPendingMousePos = coords;
         if (!mouseMoveRaf) {
@@ -2468,6 +2565,7 @@
       });
 
       inputLayer.addEventListener("pointerdown", (e) => {
+        if (e.pointerType === "touch") return touchDown(e);
         if (document.activeElement === mobileKeyboardInput) e.preventDefault();
         focusRemoteInput();
         e.preventDefault();
@@ -2479,6 +2577,7 @@
       });
 
       function finishPointer(e, cancelled = false) {
+        if (e.pointerType === "touch") return touchEnd(e,cancelled);
         e.preventDefault();
         const button = activePointerButtons.get(e.pointerId);
         if (button == null) return;
@@ -2572,6 +2671,8 @@
       }, true);
 
       function resetRemoteInput() {
+        touchPoints.clear();
+        touchGesture = null;
         activePointerButtons.clear();
         remoteModifiersDown.clear();
         sendTransportMessage({ type: "reset_input" });

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const html = fs.readFileSync(new URL('../vendor/novnc/webrtc.html', import.meta.url), 'utf8');
-const functions = html.slice(html.indexOf('      function getRenderedScreenRect()'), html.indexOf('      inputLayer.addEventListener("pointermove"'));
+const functions = html.slice(html.indexOf('      function getRenderedScreenRect()'), html.indexOf('      // Touch gestures are isolated'));
 
 for (const usingWebRtc of [false, true]) {
   for (const mode of ['contain', 'fill', 'sync']) {
