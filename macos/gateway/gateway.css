@@ -965,3 +965,48 @@ html[data-gateway-style="retro"] body.dashboard-page :is(.service-table th,.serv
 @media (max-width: 650px) {
   html[data-gateway-style="retro"] body.dashboard-page :is(.service,.service-table-scroll,.gateway-overview) { box-shadow: 2px 2px 0 var(--retro-shadow); }
 }
+
+/* Page-wide session menu: same control for admin and restricted catalogue. */
+.session-actions:empty { display: none; }
+.session-actions .session-menu-trigger { min-height: 44px; white-space: nowrap; cursor: pointer; font: inherit; }
+.session-menu[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: min(248px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #4c6079;
+  border-radius: 12px;
+  background: #1b2532;
+  color: #e5ebf6;
+  box-shadow: 0 12px 32px #0007;
+}
+.session-menu:popover-open { display: grid; gap: 3px; }
+.session-menu .session-expiration { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid currentColor; opacity: .8; }
+.session-actions .session-menu button {
+  width: 100%; min-height: 44px; padding: 9px 12px;
+  border: 0; border-radius: 6px; background: transparent;
+  box-shadow: none; color: inherit; text-align: left; font: inherit; cursor: pointer;
+}
+.session-menu .session-error { color: #ffb0b5; padding: 4px 12px; }
+.session-menu .session-error:empty { display: none; }
+.session-actions .session-menu .session-revoke { color: #f0b5bf; }
+html[data-gateway-theme="light"] .session-menu { background: #fff; color: #253954; border-color: #d4dfeb; }
+html[data-gateway-theme="light"] .session-menu .session-revoke,
+html[data-gateway-theme="light"] .session-menu .session-error { color: #a42f47; }
+html[data-gateway-style="retro"] .session-menu {
+  background: var(--retro-panel); color: var(--retro-ink); border: 2px solid var(--retro-edge);
+  border-radius: 2px; box-shadow: 3px 3px var(--retro-shadow);
+}
+html[data-gateway-style="retro"] body.dashboard-page .session-actions .session-menu button {
+  background: transparent; color: var(--retro-ink) !important; border: 0; box-shadow: none; border-radius: 0;
+}
+html[data-gateway-style="retro"] body.dashboard-page .session-actions .session-menu button:hover { background: var(--retro-hover); }
+html[data-gateway-style="retro"] body.dashboard-page .session-actions .session-menu .session-revoke,
+html[data-gateway-style="retro"] .session-menu .session-error { color: var(--retro-down) !important; }
+@media (max-width: 650px) {
+  body.dashboard-page .session-actions .session-menu-trigger { min-height: 44px; padding: 6px 8px; }
+  body:not(.dashboard-page) .session-actions { margin-top: 12px; }
+}
