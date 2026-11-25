@@ -63,3 +63,18 @@ test('Tools section controller exposes one operation panel at a time', () => {
   assert.match(html, /function activateToolsSection\(section\)/);
   assert.match(html, /toolsPanels\.forEach\(panel => panel\.hidden = panel\.dataset\.toolsPanel !== section\)/);
 });
+
+test('Native default display routes new sessions without overriding explicit targets or VNC', () => {
+  const source = html.slice(html.indexOf('    function resolveDesktopDisplay('), html.indexOf('    function viewModeSwitchMarkup('));
+  const preferences = { desktopMode: 'webrtc', desktopDefaultDisplay: 'virtual', desktopResolution: '1920x1080', desktopFps: 30 };
+  const build = new Function('preferences', 'desktopConfig', source + '\nreturn buildDesktopUrl;')(preferences, {});
+  assert.equal(new URL(build(), 'https://localhost').searchParams.get('display'), 'Fly Remote');
+  assert.equal(new URL(build('main'), 'https://localhost').searchParams.get('display'), null);
+  preferences.desktopDefaultDisplay = 'main';
+  assert.equal(new URL(build(), 'https://localhost').searchParams.get('display'), null);
+  assert.equal(new URL(build('Fly Remote'), 'https://localhost').searchParams.get('display'), 'Fly Remote');
+  preferences.desktopMode = 'vnc';
+  preferences.desktopDefaultDisplay = 'virtual';
+  assert.match(build(), /vnc\.html/);
+  assert.equal(new URL(build(), 'https://localhost').searchParams.get('display'), null);
+});

@@ -13,6 +13,12 @@ spec.loader.exec_module(module)
 
 
 class NativePreferencesTests(unittest.TestCase):
+    def test_default_display_validation(self):
+        for value in ("main", "virtual"):
+            self.assertEqual(module.normalize_ui_preferences({"desktopDefaultDisplay": value}), {"desktopDefaultDisplay": value})
+        for value in ("unknown", None, [], 1):
+            self.assertEqual(module.normalize_ui_preferences({"desktopDefaultDisplay": value}), {})
+
     def test_native_profiles_are_validated_independently(self):
         normalized = module.normalize_ui_preferences({
             "nativeDesktopQualityMode": "text",

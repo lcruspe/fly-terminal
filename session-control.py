@@ -2128,6 +2128,10 @@ def normalize_ui_preferences(payload):
     if desktop_mode in VALID_DESKTOP_MODES:
         preferences["desktopMode"] = desktop_mode
 
+    desktop_display = payload.get("desktopDefaultDisplay")
+    if isinstance(desktop_display, str) and desktop_display in {"main", "virtual"}:
+        preferences["desktopDefaultDisplay"] = desktop_display
+
     desktop_scale_mode = str(payload.get("desktopScaleMode") or "").strip().lower()
     if desktop_scale_mode in VALID_DESKTOP_SCALE_MODES:
         preferences["desktopScaleMode"] = desktop_scale_mode
