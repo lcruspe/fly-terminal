@@ -117,10 +117,11 @@ test('stale or misrouted RDC URLs cannot enter the native-browser backend', () =
   assert.match(caddy, /Cache-Control "no-store, no-cache, must-revalidate, max-age=0"/);
 });
 
-test('native RDC falls back to VNC instead of showing black frames while macOS is locked', () => {
-  assert.match(webrtc, /if \(msg\.screenLocked\)[\s\S]*fallbackFromH264\("host_locked"\)/);
-  assert.match(webrtc, /msg\.state === "host_locked"[\s\S]*fallbackFromH264\("host_locked"\)/);
-  assert.match(webrtc, /reason === "host_locked"[\s\S]*RDC VNC/);
+test('Native lock events preserve video and normal failure recovery', () => {
+  assert.doesNotMatch(webrtc, /showBrowserLocked|browserHostLocked|fallbackFromH264\("host_locked"\)|Mac заблокирован/);
+  assert.match(webrtc, /msg\.state === "host_locked" \|\| msg\.state === "host_unlocked"/);
+  assert.match(webrtc, /if \(msg\.state !== "capturing"\) requestFreshKeyframe\(msg\.state\)/);
+  assert.match(webrtc, /if \(!decodedFrameSeen\) fallbackFromH264\("no_decoded_frames"\)/);
 });
 
 test('remote desktop HUD stays compact until explicitly opened', () => {
