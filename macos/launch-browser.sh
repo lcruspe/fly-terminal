@@ -29,6 +29,8 @@ FLY_TERMINAL_DOCUMENTS_DIR="${FLY_TERMINAL_DOCUMENTS_DIR:-${HOME}/Documents}"
 FLY_BROWSER_PASSWORD="${FLY_BROWSER_PASSWORD:-${TERMINAL_PASSWORD:-password}}"
 FLY_BROWSER_CHROME_PROFILE_DIR="${FLY_BROWSER_CHROME_PROFILE_DIR:-/config/.config/chromium}"
 FLY_BROWSER_CHROME_CLI="${FLY_BROWSER_CHROME_CLI:-${FLY_BROWSER_CHROME_PROFILE_DIR} --no-default-browser-check --disable-dev-shm-usage --disable-field-trial-config --password-store=basic}"
+# CDP is accessible only inside the container; sequential downloads can be relayed safely.
+FLY_BROWSER_CHROME_CLI="${FLY_BROWSER_CHROME_CLI} --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --disable-features=ParallelDownloading"
 
 wait_for_docker() {
   local timeout="${FLY_BROWSER_DOCKER_WAIT_SECONDS:-180}"
@@ -319,6 +321,9 @@ exec /usr/bin/chromium \
   --disable-dev-shm-usage \
   --disable-field-trial-config \
   --password-store=basic \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=9222 \
+  --disable-features=ParallelDownloading \
   --start-maximized \
   >/tmp/fly-terminal-chromium.log 2>&1
 '
@@ -332,6 +337,25 @@ mkdir -p /config/Downloads
 chown abc:dialout /config/Downloads
 chmod u+rwx,go+rx /config/Downloads
 '
+}
+
+install_fallback_download_bridge() {
+  docker exec "${FLY_BROWSER_CONTAINER_NAME}" test -f /usr/share/selkies/web/index.html || return 0
+  local source="${SCRIPT_DIR}/fallback-downloads"
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" mkdir -p /opt/fly-terminal-downloads /custom-cont-init.d
+  for file in bridge.py client.js install.py start.sh boot.sh; do
+    docker cp "${source}/${file}" "${FLY_BROWSER_CONTAINER_NAME}:/opt/fly-terminal-downloads/${file}"
+  done
+  docker exec -u root "${FLY_BROWSER_CONTAINER_NAME}" sh -lc '
+    install -m 755 /opt/fly-terminal-downloads/boot.sh /custom-cont-init.d/90-fly-downloads
+    /bin/bash /opt/fly-terminal-downloads/start.sh
+    nginx -t || exit 1
+    for _ in $(seq 1 20); do
+      nginx -s reload 2>/dev/null && exit 0
+      sleep .5
+    done
+    exit 1
+  '
 }
 
 sync_linuxserver_document_files() {
@@ -399,6 +423,7 @@ if docker ps --format '{{.Names}}' | grep -qx "${FLY_BROWSER_CONTAINER_NAME}"; t
     patch_selkies_nginx_websocket_port
     patch_selkies_input
     ensure_linuxserver_download_directory
+    install_fallback_download_bridge
     sync_linuxserver_document_files
     start_kasm_chrome
     start_linuxserver_chromium
@@ -456,6 +481,7 @@ patch_selkies_browser_prefix
 patch_selkies_nginx_websocket_port
 patch_selkies_input
 ensure_linuxserver_download_directory
+install_fallback_download_bridge
 sync_linuxserver_document_files
 start_kasm_chrome
 start_linuxserver_chromium
