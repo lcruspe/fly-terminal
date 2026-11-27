@@ -139,10 +139,14 @@ verify(){
  [[ "$chromium" == 200 && "$quasar" == 404 ]]
  docker --context colima ps --format '{{.Names}}' | sort > "$check/actual-running"
  diff -u "$check/running" "$check/actual-running"
- docker --context colima exec quasar-bridge-alice sh -c 'test -d /auth && test -d /bridge && test -r /auth && test -r /bridge'
+ stamp "verify Quasar bind directory and executable"
+ docker --context colima exec quasar-bridge-alice sh -ec 'test -d /auth; test -r /auth; test -f /bridge; test -r /bridge; test -x /bridge'
+ echo "Quasar bind mounts verified"
+ stamp "verify Gateway"
  gateway=$(curl -ksS -o /dev/null -w '%{http_code}' --max-time 15 https://commander-hub.tail1c55c5.ts.net/)
  [[ "$gateway" == 200 ]]
  echo "Gateway=$gateway"
+ stamp "verify independent VPN processes"
  ps -p 80308,23539 -o pid=,command= > "$check/after-vpn"
  diff -u "$check/independent-vpn" "$check/after-vpn"
  launchctl print "$domain/$label" | grep -E 'state =|pid =|program ='
