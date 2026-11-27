@@ -1,0 +1,53 @@
+diff --git a/pkg/cidata/cidata.go b/pkg/cidata/cidata.go
+index 009c5d6..7149f48 100644
+--- a/pkg/cidata/cidata.go
++++ b/pkg/cidata/cidata.go
+@@ -263,7 +263,7 @@ func templateArgs(ctx context.Context, bootScripts bool, instDir, name string, i
+ 		}
+ 		args.Disks = append(args.Disks, Disk{
+ 			Name:   d.Name,
+-			Device: diskDeviceNameFromOrder(i),
++			Device: diskDeviceNameFromOrder(i, *instConfig.VMType),
+ 			Format: format,
+ 			FSType: fstype,
+ 			FSArgs: d.FSArgs,
+@@ -537,7 +537,12 @@ func getBootCmds(p []limatype.Provision) []BootCmds {
+ 	return bootCmds
+ }
+ 
+-func diskDeviceNameFromOrder(order int) string {
++func diskDeviceNameFromOrder(order int, vmType limatype.VMType) string {
++	// Krunkit attaches the boot disk first and cloud-init ISO second as
++	// virtio-blk devices, before the additional disks (vda, vdb, vdc...).
++	if vmType == "krunkit" {
++		order++
++	}
+ 	return fmt.Sprintf("vd%c", int('b')+order)
+ }
+ 
+diff --git a/pkg/cidata/disk_order_test.go b/pkg/cidata/disk_order_test.go
+new file mode 100644
+index 0000000..d051826
+--- /dev/null
++++ b/pkg/cidata/disk_order_test.go
+@@ -0,0 +1,20 @@
++package cidata
++
++import (
++	"github.com/lima-vm/lima/v2/pkg/limatype"
++	"testing"
++)
++
++func TestDiskDeviceNameFromOrder(t *testing.T) {
++	for _, tc := range []struct {
++		vm    limatype.VMType
++		order int
++		want  string
++	}{
++		{"krunkit", 0, "vdc"}, {"krunkit", 1, "vdd"}, {limatype.VZ, 0, "vdb"}, {limatype.QEMU, 0, "vdb"},
++	} {
++		if got := diskDeviceNameFromOrder(tc.order, tc.vm); got != tc.want {
++			t.Errorf("%s disk %d = %s; want %s", tc.vm, tc.order, got, tc.want)
++		}
++	}
++}

@@ -63,6 +63,14 @@ VZ не гарантирует возврат страниц Linux в общее
 - https://github.com/abiosoft/colima/issues/1614
 - https://man7.org/linux/man-pages/man8/findmnt.8.html
 
+## Исправления и повторный тест (27.11.2026, 10:47–11:08 МСК)
+
+- Отдельно собраны Colima 0.10.2-krunkit-fix.2 и Lima v2.1.2 с локальным исправлением. Исходные теги, патчи, проверка сборки, wrapper и сценарии миграции/проверки разрешения сохранены в `macos/colima-krunkit/`. Homebrew Lima, Colima, Tailscale, Amnezia не заменялись.
+- Исправлена семантика findmnt --mountpoint, VirtioFS для Krunkit, защита systemd Docker/containerd и bind mount по точной метке диска/подкаталогу. При штатном stop Colima останавливает runtime, выполняет sync и чисто размонтирует bind mounts и persistent disk до SIGTERM Krunkit.
+- Обнаружена вторая причина в Lima 2.1.2: cidata ошибочно вычисляла vdb для первого дополнительного диска, хотя Krunkit подключает root как vda, ISO как vdb и data disk как vdc. Исправлен расчёт только для Krunkit; тесты VZ, QEMU и Krunkit прошли. До исправления Lima Colima уже восстановила данные и прошла три stop/start, однако cloud-final оставался failed; после исправления Lima два полных цикла изолированной VM прошли с docker/containerd/cloud-final=active, UUID 0eb7dd38-5cad-4a0d-a26b-d88c29cc7c3b, всеми исходными контейнерами, volumes и образами. Негативный тест защиты на отсутствующем Docker bind mount успешно отказал. Штатное размонтирование зафиксировано.
+- Рабочий диск повторно клонирован после штатной остановки VZ; production-кандидат использует проверенный root с защитой и свежую копию реального data disk. Автозапуск не дошёл до загрузки VM: macOS TCC отказала выполнению программы непосредственно с внешнего SSD (Operation not permitted). Исполняемые файлы размещены в небольшом локальном префиксе `~/Library/Application Support/FlyTerminal/colima-krunkit`; штатный TCC запрос для colima-fixed-v2 на Removable Volumes блокирует запуск до подтверждения пользователя. TCC не изменялся. Весь root/data и исходники сборки остаются на внешнем SSD.
+- Сценарий отката восстановил исходные VZ root/data/config; новый кандидат сохранён отдельно (`failed-fixed-krunkit-20261127-110220`), ничего не удалено. При возврате Homebrew LaunchAgent также застрял в TCC; рабочий VZ запущен из уже авторизованного сеанса. Не считать production-миграцию завершённой. Перед новым окном обслуживания обязательна безостановочная проверка `permission-check.sh`: пользователь подтверждает штатный запрос macOS, статус из launchd должен вернуть 0. После этого `cutover.sh` проверит результат preflight до остановки VZ.
+
 ## Порядок проверки (окно обслуживания)
 
 1. Согласовать краткий перерыв fallback Chromium и Quasar Bridge. Не запускать вторую VM на перегруженном хосте одновременно с рабочей. Не выполнять обновление Lima, если оно затрагивает Tailscale.

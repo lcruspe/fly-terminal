@@ -1,0 +1,156 @@
+diff --git a/environment/vm/lima/disk.go b/environment/vm/lima/disk.go
+index 22dd764..34a9564 100644
+--- a/environment/vm/lima/disk.go
++++ b/environment/vm/lima/disk.go
+@@ -109,7 +109,38 @@ func diskMountScript(format bool) string {
+ 	return string(b)
+ }
+ 
++//go:embed docker-disk-guard.sh
++var dockerDiskGuardScript string
++
++//go:embed docker-disk-stop.sh
++var dockerDiskStopScript string
++
++func (l *limaVM) unmountDockerRuntimeDisk() error {
++	conf, err := configmanager.LoadInstance()
++	if err != nil || conf.VMType != limaconfig.Krunkit || conf.Runtime != docker.Name || !limautil.HasDisk() {
++		return nil
++	}
++	script, err := util.ParseTemplate(dockerDiskStopScript, struct{ InstanceId string }{config.CurrentProfile().ID})
++	if err != nil {
++		return err
++	}
++	if err := l.Run("sudo", "sh", "-ec", string(script)); err != nil {
++		return fmt.Errorf("cannot cleanly detach Krunkit Docker data disk: %w", err)
++	}
++	return nil
++}
++
+ func (l *limaVM) mountRuntimeDisk(conf config.Config, format bool) {
++	guardDocker := l.limaConf.VMType == limaconfig.Krunkit && conf.Runtime == docker.Name
++	if guardDocker {
++		script, err := util.ParseTemplate(dockerDiskGuardScript, struct{ InstanceId string }{config.CurrentProfile().ID})
++		if err != nil {
++			panic(fmt.Sprintf("error parsing disk guard template: %v", err))
++		}
++		l.limaConf.Provision = append(l.limaConf.Provision, limaconfig.Provision{
++			Mode: "dependency", Script: string(script),
++		})
++	}
+ 	// provision script to prepare disk
+ 	l.limaConf.Provision = append(l.limaConf.Provision, limaconfig.Provision{
+ 		Mode:   "dependency",
+@@ -135,6 +166,10 @@ func (l *limaVM) mountRuntimeDisk(conf config.Config, format bool) {
+ 			"{data_path}", dir.Path,
+ 		).Replace("[ -d {mount_point} ] && mkdir -p {mount_point}/{name} {data_path} && mount --bind {mount_point}/{name} {data_path}")
+ 
++		if guardDocker {
++			// Do not create or bind a runtime directory on the root filesystem.
++			script = fmt.Sprintf("findmnt -n --mountpoint %s --source LABEL=lima-%s >/dev/null && %s", mountPoint, config.CurrentProfile().ID, script)
++		}
+ 		l.limaConf.Provision = append(l.limaConf.Provision, limaconfig.Provision{
+ 			Mode:   "dependency",
+ 			Script: script,
+diff --git a/environment/vm/lima/disk.sh b/environment/vm/lima/disk.sh
+index c02df5d..992321f 100644
+--- a/environment/vm/lima/disk.sh
++++ b/environment/vm/lima/disk.sh
+@@ -18,12 +18,12 @@ fi
+ DISK_PART="${DISK}1"
+ 
+ # Check current mount state before touching the disk.
+-if findmnt --noheadings --source "$DISK_PART" --target "$MOUNT_POINT" >/dev/null 2>&1; then
++if findmnt --noheadings --source "$DISK_PART" --mountpoint "$MOUNT_POINT" >/dev/null 2>&1; then
+ 	echo "Disk already mounted, skipping setup."
+ 	exit 0
+ fi
+ 
+-if findmnt --noheadings --target "$MOUNT_POINT" >/dev/null 2>&1; then
++if findmnt --noheadings --mountpoint "$MOUNT_POINT" >/dev/null 2>&1; then
+ 	echo "Unexpected disk at mount point."
+ 	exit 1
+ fi
+diff --git a/environment/vm/lima/docker-disk-guard.sh b/environment/vm/lima/docker-disk-guard.sh
+new file mode 100644
+index 0000000..912df74
+--- /dev/null
++++ b/environment/vm/lima/docker-disk-guard.sh
+@@ -0,0 +1,22 @@
++#!/usr/bin/env sh
++set -eu
++# Stop socket activation and both services before mounting runtime storage.
++systemctl stop docker.socket docker.service containerd.service
++install -d /usr/local/sbin
++cat > /usr/local/sbin/colima-check-runtime-disk <<'GUARD'
++#!/usr/bin/env sh
++set -eu
++case "$1" in docker|containerd) ;; *) exit 2 ;; esac
++label="lima-{{ .InstanceId }}"
++root="/mnt/$label"
++# Check the exact mount point, the disk identity and the bound subdirectory.
++test "$(findmnt -n --mountpoint "$root" --source "LABEL=$label" -o FSROOT)" = /
++test "$(findmnt -n --mountpoint "/var/lib/$1" --source "LABEL=$label" -o FSROOT)" = "/$1"
++GUARD
++chmod 0755 /usr/local/sbin/colima-check-runtime-disk
++for service in docker containerd; do
++    directory="/etc/systemd/system/$service.service.d"
++    install -d "$directory"
++    printf '[Service]\nExecStartPre=/usr/local/sbin/colima-check-runtime-disk %s\n' "$service" > "$directory/colima-data-disk.conf"
++done
++systemctl daemon-reload
+diff --git a/environment/vm/lima/docker-disk-stop.sh b/environment/vm/lima/docker-disk-stop.sh
+new file mode 100644
+index 0000000..346b06c
+--- /dev/null
++++ b/environment/vm/lima/docker-disk-stop.sh
+@@ -0,0 +1,19 @@
++#!/usr/bin/env sh
++set -eu
++label="lima-{{ .InstanceId }}"
++root="/mnt/$label"
++systemctl stop docker.socket docker.service containerd.service
++sync
++for name in ramalama cni rancher containerd docker; do
++    path="/var/lib/$name"
++    if findmnt -n --mountpoint "$path" >/dev/null; then
++        test "$(findmnt -n --mountpoint "$path" --source "LABEL=$label" -o FSROOT)" = "/$name"
++        umount "$path"
++    fi
++done
++if findmnt -n --mountpoint "$root" >/dev/null; then
++    test "$(findmnt -n --mountpoint "$root" --source "LABEL=$label" -o FSROOT)" = /
++    umount "$root"
++fi
++sync
++echo "Krunkit persistent Docker disk cleanly detached"
+diff --git a/environment/vm/lima/lima.go b/environment/vm/lima/lima.go
+index 5e20c78..4d06bbb 100644
+--- a/environment/vm/lima/lima.go
++++ b/environment/vm/lima/lima.go
+@@ -208,6 +208,12 @@ func (l limaVM) Stop(ctx context.Context, force bool) error {
+ 
+ 	a.Stage("stopping")
+ 
++	// Krunkit currently terminates the VM process rather than waiting for
++	// an orderly guest shutdown. Flush and detach the persistent Docker disk.
++	if !force {
++		a.Add(l.unmountDockerRuntimeDisk)
++	}
++
+ 	if util.MacOS() {
+ 		conf, _ := configmanager.LoadInstance()
+ 		a.Retry("", time.Second*1, 10, func(retryCount int) error {
+diff --git a/environment/vm/lima/yaml.go b/environment/vm/lima/yaml.go
+index 98b4048..a944036 100644
+--- a/environment/vm/lima/yaml.go
++++ b/environment/vm/lima/yaml.go
+@@ -343,7 +343,7 @@ func newConf(ctx context.Context, conf config.Config) (l limaconfig.Config, err
+ 	case "ssh", "sshfs", "reversessh", "reverse-ssh", "reversesshfs", limaconfig.REVSSHFS:
+ 		l.MountType = limaconfig.REVSSHFS
+ 	default:
+-		if l.VMType == limaconfig.VZ {
++		if l.VMType == limaconfig.VZ || l.VMType == limaconfig.Krunkit {
+ 			l.MountType = limaconfig.VIRTIOFS
+ 		} else { // qemu
+ 			l.MountType = limaconfig.NINEP
