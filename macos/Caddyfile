@@ -44,7 +44,7 @@
 	}
 	@mailMcp443 path /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health
 	# RoomAudio authenticates requests with its own Basic Auth realm.
-	@gatewayProtected not path /roomaudio /roomaudio/* /archive/* /segment/* /clip/* /live.mp3 /live.m3u8 /yt-transcriber /yt-transcriber/* /yt-transcriber/apple-touch-icon.png /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health /auth/login /auth/login.js /auth/login.css /auth/session-ui.js /auth/issue /auth/logout /auth/revoke-all /auth/session
+	@gatewayProtected not path /gateway-icon.svg /gateway-icon-180.png /gateway-icon-192.png /gateway-icon-512.png /favicon.ico /gateway.webmanifest /roomaudio /roomaudio/* /archive/* /segment/* /clip/* /live.mp3 /live.m3u8 /yt-transcriber /yt-transcriber/* /yt-transcriber/apple-touch-icon.png /yandex-mail /yandex-mail/* /.well-known/* /authorize* /token* /register* /revoke* /interaction/* /session/* /userinfo* /upstream/* /jwks* /livez /health /auth/login /auth/login.js /auth/login.css /auth/session-ui.js /auth/issue /auth/logout /auth/revoke-all /auth/session
 	forward_auth @gatewayProtected 127.0.0.1:{$FLY_SESSION_AUTH_PORT:7685} {
 		uri /auth/check/any
 		copy_headers X-Fly-Auth-User
@@ -72,7 +72,7 @@
 		reverse_proxy 127.0.0.1:7799
 	}
 
-	@assets path /gateway.css /gateway.js
+	@assets path /gateway.css /gateway.js /gateway-icon.svg /gateway-icon-180.png /gateway-icon-192.png /gateway-icon-512.png /favicon.ico /gateway.webmanifest
 	@gatewayUi path / /admin.html /gateway.js /gateway.css
 	header @gatewayUi {
 		Cache-Control "no-store, no-cache, must-revalidate, max-age=0"

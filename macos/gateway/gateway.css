@@ -1010,3 +1010,7 @@ html[data-gateway-style="retro"] .session-menu .session-error { color: var(--ret
   body.dashboard-page .session-actions .session-menu-trigger { min-height: 44px; padding: 6px 8px; }
   body:not(.dashboard-page) .session-actions { margin-top: 12px; }
 }
+
+/* Brand mark stays identical in all gateway themes. */
+.gateway-mark { overflow: hidden; }
+.gateway-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }

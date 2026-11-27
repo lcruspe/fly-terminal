@@ -6,6 +6,10 @@ The selector is role-aware: the main `TERMINAL_USER` sees Fly Terminal (`:8443`)
 
 Do not expose the browser upstream (`7690`) or Sprut.Hub LAN address directly through Funnel. Public ports must terminate at Caddy so authentication is always applied first.
 
+### Gateway identity (2026-11-27)
+
+The catalog uses a flat black nested-bracket mark on warm ivory. The canonical vector is macos/gateway/gateway-icon.svg; matching ICO and 180/192/512 px PNG resources serve browser and home-screen icons. The dedicated gateway.webmanifest is separate from the terminal manifest. Caddy permits only these exact static branding paths without a session so browser icon retrieval also works before login; catalog HTML and all operational routes retain their existing authentication. The Commander Hub MCP service on port 443 is a separate application; the visual catalog is on port 8443.
+
 # UI behavior
 
 ## Responsive toolbar
