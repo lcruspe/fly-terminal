@@ -930,7 +930,7 @@ html[data-gateway-style="retro"] body.dashboard-page :is(.service,.gateway-overv
 }
 html[data-gateway-style="retro"] body.dashboard-page :is(.service:hover,.service-table tbody tr:hover) { background: var(--retro-hover); border-color: var(--retro-edge); }
 html[data-gateway-style="retro"] body.dashboard-page .service-table tbody tr { background: var(--retro-panel); }
-html[data-gateway-style="retro"] body.dashboard-page :is(.gateway-mark,.service-icon,.service-table .service-icon,.theme-toggle,.action-menu-trigger,.view-switch,.session-actions button) {
+html[data-gateway-style="retro"] body.dashboard-page :is(.service-icon,.service-table .service-icon,.theme-toggle,.action-menu-trigger,.view-switch,.session-actions button) {
   border: 2px solid var(--retro-edge);
   border-radius: 2px;
   background: var(--retro-button);
@@ -1011,6 +1011,20 @@ html[data-gateway-style="retro"] .session-menu .session-error { color: var(--ret
   body:not(.dashboard-page) .session-actions { margin-top: 12px; }
 }
 
-/* Brand mark stays identical in all gateway themes. */
-.gateway-mark { overflow: hidden; }
-.gateway-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* The logo derives its palette from the same semantic tokens as the UI. */
+html[data-gateway-style] body.dashboard-page .gateway-mark {
+  overflow: hidden;
+  background: var(--surface);
+}
+html[data-gateway-style] body.dashboard-page .gateway-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: var(--accent);
+}
+
+html[data-gateway-style="retro"] body.dashboard-page .gateway-mark {
+  border: 2px solid var(--retro-edge);
+  border-radius: 2px;
+  box-shadow: inset 0 2px #ffffff26, 2px 2px 0 var(--retro-shadow);
+}

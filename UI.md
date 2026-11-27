@@ -8,7 +8,7 @@ Do not expose the browser upstream (`7690`) or Sprut.Hub LAN address directly th
 
 ### Gateway identity (2026-11-27)
 
-The catalog uses a flat black nested-bracket mark on warm ivory. The canonical vector is macos/gateway/gateway-icon.svg; matching ICO and 180/192/512 px PNG resources serve browser and home-screen icons. The dedicated gateway.webmanifest is separate from the terminal manifest. Caddy permits only these exact static branding paths without a session so browser icon retrieval also works before login; catalog HTML and all operational routes retain their existing authentication. The Commander Hub MCP service on port 443 is a separate application; the visual catalog is on port 8443.
+The catalog uses the nested-bracket silhouette with colors inherited from the active theme (surface and accent tokens). The header SVG and dynamically generated browser favicon follow both light/dark and Classic/Retro Pixel; the standalone SVG favicon follows the system color scheme before JavaScript runs. The ICO and 180/192/512 px PNG resources remain fixed fallback/install assets: once installed, home-screen icon appearance is controlled by the operating system. The dedicated gateway.webmanifest is separate from the terminal manifest. Caddy permits only these exact static branding paths without a session so browser icon retrieval also works before login; catalog HTML and all operational routes retain their existing authentication. The Commander Hub MCP service on port 443 is a separate application; the visual catalog is on port 8443.
 
 # UI behavior
 

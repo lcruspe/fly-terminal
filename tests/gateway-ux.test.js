@@ -87,3 +87,33 @@ test('Retro Pixel is independent of the existing light/dark setting', () => {
   assert.match(css, /html\[data-gateway-style="retro"\]\[data-gateway-theme="light"\]/);
   assert.match(css, /html\[data-gateway-style="retro"\] body.dashboard-page/);
 });
+
+test('Gateway brand uses semantic theme tokens and identical bracket geometry', () => {
+  const icon = fs.readFileSync(path.join(dir, 'gateway-icon.svg'), 'utf8');
+  const glyph = html.match(/<g data-gateway-glyph>(.*?)<\/g>/s)[1];
+  assert.ok(icon.includes(glyph));
+  assert.match(icon, /prefers-color-scheme:dark/);
+  assert.match(css, /\.gateway-mark\s*\{[^}]*background: var\(--surface\)/s);
+  assert.match(css, /\.gateway-mark svg\s*\{[^}]*fill: var\(--accent\)/s);
+  assert.match(js, /syncGatewayIcon\(\);/);
+  assert.match(html, /id="gatewayFavicon"/);
+});
+
+test('favicon derives actual background and foreground without changing bracket paths', () => {
+  const vm = require('node:vm');
+  const glyph = {innerHTML: html.match(/<g data-gateway-glyph>(.*?)<\/g>/s)[1]};
+  const mark = {querySelector: () => glyph};
+  const favicon = {};
+  const fn = js.slice(js.indexOf('  function syncGatewayIcon()'), js.indexOf('  function applyTheme('));
+  for (const [backgroundColor, fill] of [['rgb(22, 29, 39)','rgb(169, 198, 255)'],['rgb(255, 255, 255)','rgb(22, 89, 166)'],['rgb(255, 232, 187)','rgb(139, 24, 40)'],['rgb(41, 51, 76)','rgb(255, 203, 101)']]) {
+    vm.runInNewContext(fn + '\nsyncGatewayIcon();', {
+      dashboard: {querySelector: () => mark},
+      document: {querySelector: () => favicon},
+      window: {getComputedStyle: el => el === mark ? {backgroundColor} : {fill}}
+    });
+    const decoded = decodeURIComponent(favicon.href);
+    assert.ok(decoded.includes('fill="' + backgroundColor + '"'));
+    assert.ok(decoded.includes('fill="' + fill + '"'));
+    assert.ok(decoded.includes(glyph.innerHTML));
+  }
+});

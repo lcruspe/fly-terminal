@@ -50,6 +50,19 @@
     }
     applyTheme(document.documentElement.dataset.gatewayTheme);
   }
+  function syncGatewayIcon() {
+    const mark = dashboard.querySelector(".gateway-mark");
+    const glyph = mark?.querySelector("[data-gateway-glyph]");
+    const favicon = document.querySelector("#gatewayFavicon");
+    if (!glyph || !favicon) return;
+    const background = window.getComputedStyle(mark).backgroundColor;
+    const foreground = window.getComputedStyle(glyph).fill;
+    // Reuse the actual theme tokens and the header geometry for the browser tab.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">'
+      + '<rect width="1000" height="1000" fill="' + background + '"/>'
+      + '<g fill="' + foreground + '">' + glyph.innerHTML + '</g></svg>';
+    favicon.href = "data:image/svg+xml," + encodeURIComponent(svg);
+  }
   function applyTheme(mode, persist = false) {
     const light = mode === "light";
     document.documentElement.dataset.gatewayTheme = light ? "light" : "dark";
@@ -59,6 +72,7 @@
     const color = document.querySelector('meta[name="theme-color"]');
     if (color) color.content = document.documentElement.dataset.gatewayStyle === "retro"
       ? (light ? "#f8d69a" : "#171d31") : (light ? "#f5f7fb" : "#0d1118");
+    syncGatewayIcon();
     if (persist) {
       try { localStorage.setItem(themeStorageKey, light ? "light" : "dark"); } catch {}
     }
