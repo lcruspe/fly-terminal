@@ -116,9 +116,64 @@ class GatewayControlTests(unittest.TestCase):
             lock.release()
 
     def test_stop_uses_bootout_without_disabling_next_boot(self):
-        with patch.object(module.Path, 'is_file', return_value=True), patch.object(module, 'loaded', return_value=True), patch.object(module, 'run') as run:
+        with patch.object(module.Path, 'is_file', return_value=True), patch.object(module, 'loaded', side_effect=[True, False]), patch.object(module, 'run') as run:
             module.execute('yt','stop')
         run.assert_called_once_with(['/bin/launchctl','bootout',module.DOMAIN+'/com.kruspe.yttranscriber'])
+
+    def test_restart_waits_for_launchd_removal_before_bootstrap(self):
+        label = module.GROUPS['yt'][0]
+        plist = str(module.HOME / 'Library/LaunchAgents' / f'{label}.plist')
+        # bootout returns success while print still sees the old registration.
+        with patch.object(module.Path, 'is_file', return_value=True), \
+                patch.object(module, 'loaded', side_effect=[True, True, True, False, False, True]), \
+                patch.object(module, 'run') as run, patch.object(module.time, 'sleep'), \
+                patch.object(module, 'wait_service_ready') as ready:
+            module.execute('yt', 'restart')
+        self.assertEqual([c.args[0] for c in run.call_args_list], [
+            ['/bin/launchctl', 'bootout', f'{module.DOMAIN}/{label}'],
+            ['/bin/launchctl', 'bootstrap', module.DOMAIN, plist],
+        ])
+        ready.assert_called_once_with('yt')
+
+    def test_unload_timeout_does_not_attempt_start(self):
+        with patch.object(module.Path, 'is_file', return_value=True), \
+                patch.object(module, 'loaded', return_value=True), \
+                patch.object(module, 'run') as run, \
+                patch.object(module.time, 'monotonic', side_effect=[0, 26]):
+            with self.assertRaises(module.ServiceTransitionError):
+                module.execute('yt', 'restart')
+        run.assert_called_once_with(['/bin/launchctl', 'bootout', module.DOMAIN + '/com.kruspe.yttranscriber'])
+
+    def test_start_unregistered_yt_checks_readiness(self):
+        label = module.GROUPS['yt'][0]
+        with patch.object(module.Path, 'is_file', return_value=True), \
+                patch.object(module, 'loaded', side_effect=[False, True]), \
+                patch.object(module, 'run') as run, \
+                patch.object(module, 'service_ready', side_effect=[False, True]) as health, \
+                patch.object(module.time, 'sleep'):
+            module.execute('yt', 'start')
+        run.assert_called_once_with(['/bin/launchctl', 'bootstrap', module.DOMAIN,
+                                     str(module.HOME / 'Library/LaunchAgents' / f'{label}.plist')])
+        self.assertEqual(health.call_count, 2)
+
+    def test_yt_health_requires_correct_json(self):
+        for payload, expected in (({'ok': True, 'service': 'yt-transcript-local'}, True),
+                                  ({'ok': True, 'service': 'unexpected'}, False),
+                                  ({'ok': False}, False)):
+            response = MagicMock()
+            response.__enter__.return_value.read.return_value = json.dumps(payload).encode()
+            with patch.object(module, 'urlopen', return_value=response) as request:
+                self.assertEqual(module.service_ready('yt'), expected)
+                self.assertTrue(request.call_args.args[0].endswith('/health'))
+
+    def test_readiness_timeout_is_not_reported_as_success(self):
+        with patch.object(module, 'agent'), \
+                patch.object(module, 'service_ready', return_value=False), \
+                patch.object(module.time, 'monotonic', side_effect=[0, 31]):
+            code, data = self.post({'service': 'yt', 'action': 'start'})
+        self.assertEqual(code, 502)
+        self.assertFalse(data['ok'])
+        self.assertIn('не подтвердил готовность', data['error'])
 
     def test_native_shutdown_order(self):
         with patch.object(module, 'agent') as agent:

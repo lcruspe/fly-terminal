@@ -42,6 +42,21 @@ def loaded(label):
     return run(["/bin/launchctl", "print", f"{DOMAIN}/{label}"], check=False).returncode == 0
 
 
+class ServiceTransitionError(RuntimeError):
+    """An expected transition failed; the message is safe for the admin UI."""
+
+
+def wait_until(predicate, timeout, message):
+    deadline = time.monotonic() + timeout
+    while True:
+        if predicate():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ServiceTransitionError(message)
+        time.sleep(min(0.25, remaining))
+
+
 def agent(label, action):
     plist = HOME / "Library/LaunchAgents" / f"{label}.plist"
     if not plist.is_file():
@@ -49,10 +64,16 @@ def agent(label, action):
     if action == "stop":
         if loaded(label):
             run(["/bin/launchctl", "bootout", f"{DOMAIN}/{label}"])
-    elif loaded(label):
-        run(["/bin/launchctl", "kickstart", f"{DOMAIN}/{label}"])
+            # bootout returns before the process exits and launchd removes it.
+            # kickstart during that interval can succeed without restarting it.
+            wait_until(lambda: not loaded(label), 25,
+                       f"Служба {label} не завершила остановку. Запуск не выполнен.")
     else:
-        run(["/bin/launchctl", "bootstrap", DOMAIN, str(plist)])
+        if loaded(label):
+            run(["/bin/launchctl", "kickstart", f"{DOMAIN}/{label}"])
+        else:
+            run(["/bin/launchctl", "bootstrap", DOMAIN, str(plist)])
+        wait_until(lambda: loaded(label), 5, f"Служба {label} не зарегистрировалась в launchd.")
 
 
 def router(command):
@@ -79,6 +100,7 @@ def execute(service, action):
         if action in ("start", "restart"):
             run(["docker", "start", container])
             agent(label, "start")
+            wait_service_ready(service)
         return
     labels = GROUPS[service]
     if action in ("stop", "restart"):
@@ -87,6 +109,7 @@ def execute(service, action):
     if action in ("start", "restart"):
         for label in labels:
             agent(label, "start")
+        wait_service_ready(service)
 
 
 def local_status():
@@ -96,6 +119,23 @@ def local_status():
             return json.load(response).get("services", {})
     except (OSError, ValueError):
         return {}
+
+
+def service_ready(service):
+    if service == "yt":
+        try:
+            port = int(os.environ.get("FLY_YT_TRANSCRIBER_PORT", "8787"))
+            with urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:
+                data = json.load(response)
+                return data.get("ok") is True and data.get("service") == "yt-transcript-local"
+        except (OSError, ValueError, TypeError, AttributeError):
+            return False
+    return local_status().get(service) == "up"
+
+
+def wait_service_ready(service):
+    wait_until(lambda: service_ready(service), 30,
+               "Команда запуска выполнена, но сервис не подтвердил готовность. Проверьте журнал сервиса.")
 
 
 def roomaudio_status():
@@ -206,7 +246,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             execute(service, action)
             logging.info("Action completed: %s %s", service, action)
-            self.reply(200, {"ok": True, "message": "Команда выполнена. Доступность сервиса проверяется отдельно."})
+            message = ("Сервис запущен. Проверка доступности пройдена."
+                       if service != "openwrt" and action in ("start", "restart")
+                       else "Команда выполнена.")
+            self.reply(200, {"ok": True, "message": message})
+        except ServiceTransitionError as error:
+            logging.warning("Action incomplete: %s %s: %s", service, action, error)
+            self.reply(502, {"ok": False, "error": str(error)})
         except (RuntimeError, OSError, subprocess.SubprocessError, ValueError):
             logging.exception("Action failed: %s %s", service, action)
             self.reply(502, {"ok": False, "error": "Команда не выполнена. Проверьте сервис или повторите позже."})
