@@ -180,6 +180,43 @@ class GatewayControlTests(unittest.TestCase):
             module.execute('native','stop')
         self.assertEqual([call.args[0] for call in agent.call_args_list], list(reversed(module.GROUPS['native'])))
 
+    def test_router_prefers_dedicated_ssh_config(self):
+        with patch.dict(os.environ, {'FLY_OPENWRT_SSH_HOST': 'openwrt-pi', 'FLY_OPENWRT_SSH_CONFIG': ''}), \
+                patch.object(module.Path, 'is_file', return_value=True), \
+                patch.object(module, 'run') as run:
+            module.router('status')
+        args = run.call_args.args[0]
+        self.assertEqual(args[:3], ['/usr/bin/ssh', '-F',
+                                    str(module.HOME / '.config/fly-terminal-mac/openwrt-ssh.conf')])
+        self.assertIn('StrictHostKeyChecking=yes', args)
+        self.assertIn('BatchMode=yes', args)
+        self.assertEqual(args[-2:], ['openwrt-pi', '/usr/libexec/amnezia-vpn status'])
+
+    def test_router_custom_config_and_host(self):
+        with patch.dict(os.environ, {'FLY_OPENWRT_SSH_HOST': 'router-custom',
+                                     'FLY_OPENWRT_SSH_CONFIG': '/tmp/custom.conf'}), \
+                patch.object(module.Path, 'is_file', return_value=True), \
+                patch.object(module, 'run') as run:
+            module.router('connect')
+        self.assertEqual(run.call_args.args[0][:3], ['/usr/bin/ssh', '-F', '/tmp/custom.conf'])
+        self.assertEqual(run.call_args.args[0][-2:], ['router-custom', '/usr/libexec/amnezia-vpn connect'])
+        self.assertEqual(run.call_args.kwargs['timeout'], 65)
+
+    def test_router_missing_explicit_config_does_not_fall_back(self):
+        with patch.dict(os.environ, {'FLY_OPENWRT_SSH_CONFIG': '/missing.conf'}), \
+                patch.object(module.Path, 'is_file', return_value=False), \
+                patch.object(module, 'run') as run:
+            with self.assertRaises(RuntimeError):
+                module.router('status')
+        run.assert_not_called()
+
+    def test_router_legacy_default_without_dedicated_config(self):
+        with patch.dict(os.environ, {'FLY_OPENWRT_SSH_CONFIG': ''}), \
+                patch.object(module.Path, 'is_file', return_value=False), \
+                patch.object(module, 'run') as run:
+            module.router('status')
+        self.assertNotIn('-F', run.call_args.args[0])
+
     def test_router_controls_only_vpn(self):
         with patch.object(module, 'router', return_value=type('Result', (), {'stdout':'{}'})()) as router:
             module.execute('openwrt','vpn-disconnect')

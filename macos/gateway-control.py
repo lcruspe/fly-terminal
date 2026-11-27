@@ -78,8 +78,18 @@ def agent(label, action):
 
 def router(command):
     host = os.environ.get("FLY_OPENWRT_SSH_HOST", "openwrt-pi")
-    return run(["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=4", "-o", "StrictHostKeyChecking=yes", host,
-                f"/usr/libexec/amnezia-vpn {command}"], timeout=65 if command == "connect" else 10)
+    explicit_config = os.environ.get("FLY_OPENWRT_SSH_CONFIG")
+    config = (Path(explicit_config).expanduser() if explicit_config else
+              HOME / ".config/fly-terminal-mac/openwrt-ssh.conf")
+    args = ["/usr/bin/ssh"]
+    if config.is_file():
+        # OpenWrt must not depend on unrelated Includes (e.g. Colima on a removable disk).
+        args.extend(["-F", str(config)])
+    elif explicit_config:
+        raise RuntimeError("Выделенный SSH-конфиг OpenWrt не найден.")
+    args.extend(["-o", "BatchMode=yes", "-o", "ConnectTimeout=4", "-o", "StrictHostKeyChecking=yes",
+                 host, f"/usr/libexec/amnezia-vpn {command}"])
+    return run(args, timeout=65 if command == "connect" else 10)
 
 
 def execute(service, action):
@@ -162,7 +172,8 @@ def router_status():
         data = json.loads(result.stdout)
         return {"reachable": True, "connected": bool(data.get("runtime", {}).get("connected")),
                 "location": data.get("state", {}).get("name", "")}
-    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as error:
+        logging.warning("OpenWrt status check failed: %s", type(error).__name__)
         return {"reachable": False, "connected": False, "location": ""}
 
 
