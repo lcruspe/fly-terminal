@@ -72,6 +72,8 @@
 		reverse_proxy 127.0.0.1:7799
 	}
 
+	@gatewayManifest path /gateway.webmanifest
+	header @gatewayManifest Content-Type "application/manifest+json"
 	@assets path /gateway.css /gateway.js /gateway-icon.svg /gateway-icon-180.png /gateway-icon-192.png /gateway-icon-512.png /favicon.ico /gateway.webmanifest
 	@gatewayUi path / /admin.html /gateway.js /gateway.css
 	header @gatewayUi {
